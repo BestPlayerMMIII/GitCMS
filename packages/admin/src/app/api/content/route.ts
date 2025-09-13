@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
-import { GitHubApiClient } from '@gitcms/core';
+import { GitHubApiClient, getGitCMSConfig } from '@gitcms/core';
 
 // Content item interface
 interface ContentItem {
@@ -40,13 +40,13 @@ export async function GET(request: NextRequest) {
 
     switch (action) {
       case 'list':
-        return await listContent(github, schemaId);
+        return await listContent(github, schemaId, owner!, repo!, session.accessToken);
 
       case 'get':
         if (!contentId) {
           return NextResponse.json({ error: 'Content ID is required' }, { status: 400 });
         }
-        return await getContent(github, schemaId, contentId);
+        return await getContent(github, schemaId, contentId, owner!, repo!, session.accessToken);
 
       default:
         return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
@@ -90,10 +90,24 @@ export async function POST(request: NextRequest) {
 
     switch (action) {
       case 'create':
-        return await createContent(github, body, session.user?.name || undefined);
+        return await createContent(
+          github,
+          body,
+          session.user?.name || undefined,
+          owner!,
+          repo!,
+          session.accessToken
+        );
 
       case 'update':
-        return await updateContent(github, body, session.user?.name || undefined);
+        return await updateContent(
+          github,
+          body,
+          session.user?.name || undefined,
+          owner!,
+          repo!,
+          session.accessToken
+        );
 
       default:
         console.log('Content POST - Invalid action:', action);
@@ -126,7 +140,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     const github = new GitHubApiClient(session.accessToken, owner, repo);
-    return await deleteContent(github, schemaId, contentId);
+    return await deleteContent(github, schemaId, contentId, owner, repo, session.accessToken);
   } catch (error) {
     console.error('Content DELETE error:', error);
     return NextResponse.json({ error: 'Failed to delete content' }, { status: 500 });
@@ -137,14 +151,18 @@ export async function DELETE(request: NextRequest) {
 
 async function listContent(
   github: GitHubApiClient,
-  schemaId?: string | null
+  schemaId?: string | null,
+  owner?: string,
+  repo?: string,
+  accessToken?: string
 ): Promise<NextResponse> {
   try {
+    const contentPath = await getContentPath(github, owner!, repo!, accessToken!);
     const contentItems: ContentItem[] = [];
 
     // If schema ID is provided, list only that schema's content
     if (schemaId) {
-      const schemaPath = `.gitcms/content/${schemaId}`;
+      const schemaPath = `${contentPath}/${schemaId}`;
       try {
         const files = await github.getDirectory(schemaPath);
 
@@ -180,7 +198,7 @@ async function listContent(
     } else {
       // List all content across schemas
       try {
-        const contentDir = await github.getDirectory('.gitcms/content');
+        const contentDir = await github.getDirectory(contentPath);
 
         for (const item of contentDir) {
           if (item.type === 'dir') {
@@ -243,10 +261,14 @@ async function listContent(
 async function getContent(
   github: GitHubApiClient,
   schemaId: string | null,
-  contentId: string
+  contentId: string,
+  owner: string,
+  repo: string,
+  accessToken: string
 ): Promise<NextResponse> {
   try {
-    let filePath = `.gitcms/content/${schemaId}/${contentId}.json`;
+    const contentPath = await getContentPath(github, owner, repo, accessToken);
+    let filePath = `${contentPath}/${schemaId}/${contentId}.json`;
 
     const content = await github.getFileContent(filePath);
     const contentData = JSON.parse(content);
@@ -269,7 +291,10 @@ async function getContent(
 async function createContent(
   github: GitHubApiClient,
   body: any,
-  author?: string
+  author?: string,
+  owner?: string,
+  repo?: string,
+  accessToken?: string
 ): Promise<NextResponse> {
   try {
     console.log('Create content - Input:', { body, author });
@@ -283,6 +308,8 @@ async function createContent(
       });
       return NextResponse.json({ error: 'Schema ID and data are required' }, { status: 400 });
     }
+
+    const contentPath = await getContentPath(github, owner!, repo!, accessToken!);
 
     // Generate content ID
     const contentId = metadata.id || generateContentId(data, schemaId);
@@ -305,7 +332,7 @@ async function createContent(
     console.log('Create content - Content item:', contentItem);
 
     // Save to GitHub using createMultipleFiles (which handles directory creation)
-    const filePath = `.gitcms/content/${schemaId}/${contentId}.json`;
+    const filePath = `${contentPath}/${schemaId}/${contentId}.json`;
     const fileContent = JSON.stringify(contentItem, null, 2);
 
     console.log('Create content - File path:', filePath);
@@ -341,7 +368,10 @@ async function createContent(
 async function updateContent(
   github: GitHubApiClient,
   body: any,
-  author?: string
+  author?: string,
+  owner?: string,
+  repo?: string,
+  accessToken?: string
 ): Promise<NextResponse> {
   try {
     const { contentId, schemaId, data, metadata = {} } = body;
@@ -353,9 +383,11 @@ async function updateContent(
       );
     }
 
+    const contentPath = await getContentPath(github, owner!, repo!, accessToken!);
+
     // Get existing content to preserve metadata
     let existingContent: any = {};
-    const filePath = `.gitcms/content/${schemaId}/${contentId}.json`;
+    const filePath = `${contentPath}/${schemaId}/${contentId}.json`;
 
     try {
       const existing = await github.getFileContent(filePath);
@@ -427,10 +459,14 @@ async function updateContent(
 async function deleteContent(
   github: GitHubApiClient,
   schemaId: string,
-  contentId: string
+  contentId: string,
+  owner: string,
+  repo: string,
+  accessToken: string
 ): Promise<NextResponse> {
   try {
-    const filePath = `.gitcms/content/${schemaId}/${contentId}.json`;
+    const contentPath = await getContentPath(github, owner, repo, accessToken);
+    const filePath = `${contentPath}/${schemaId}/${contentId}.json`;
 
     // Get the file to get its SHA for deletion
     const file = await github.getFile(filePath);
@@ -449,6 +485,29 @@ async function deleteContent(
 }
 
 // Helper functions
+
+async function getContentPath(
+  github: GitHubApiClient,
+  owner: string,
+  repo: string,
+  accessToken: string
+): Promise<string> {
+  try {
+    const config = await getGitCMSConfig(accessToken, owner, repo);
+    // Ensure contentPath is a relative path and doesn't contain '.gitcms'
+    const configPath = config?.contentPath || 'content';
+
+    // If for some reason the config has .gitcms prefix, remove it to fix legacy configs
+    if (configPath.startsWith('.gitcms/')) {
+      return configPath.replace('.gitcms/', '');
+    }
+
+    return configPath;
+  } catch (error) {
+    console.warn('Failed to read GitCMS config, using default contentPath:', error);
+    return 'content';
+  }
+}
 
 function generateContentId(data: any, schemaId: string): string {
   // Try to generate from title, name, or other identifying fields
