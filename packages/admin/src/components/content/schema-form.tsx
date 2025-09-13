@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { type GitCMSSchema, type FieldDefinition, defaultValidationEngine } from '@gitcms/core';
 import { FieldRenderer } from './field-components';
 
@@ -16,6 +16,7 @@ export interface SchemaFormProps {
   showValidation?: boolean;
   submitLabel?: string;
   saveLabel?: string;
+  onSaveSuccess?: () => void; // Callback when save is successful
 }
 
 export interface ValidationError {
@@ -35,12 +36,57 @@ export function SchemaForm({
   showValidation = true,
   submitLabel = 'Submit',
   saveLabel = 'Save',
+  onSaveSuccess,
 }: SchemaFormProps) {
   const [formData, setFormData] = useState<Record<string, any>>(initialData);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Auto-save related state
+  const lastSavedData = useRef<Record<string, any>>(initialData);
+  const autoSaveTimeout = useRef<NodeJS.Timeout | null>(null);
+
+  // Helper function to check if data has changed
+  const hasDataChanged = useCallback((newData: Record<string, any>) => {
+    return JSON.stringify(newData) !== JSON.stringify(lastSavedData.current);
+  }, []);
+
+  // Function to mark data as saved (called after successful save)
+  const markAsSaved = useCallback(() => {
+    lastSavedData.current = { ...formData };
+    if (onSaveSuccess) {
+      onSaveSuccess();
+    }
+  }, [formData, onSaveSuccess]);
+
+  // Auto-save effect - separate from the main update effect
+  useEffect(() => {
+    if (!autoSave || !onSave || !hasDataChanged(formData)) {
+      return;
+    }
+
+    // Clear any existing timeout
+    if (autoSaveTimeout.current) {
+      clearTimeout(autoSaveTimeout.current);
+    }
+
+    // Set new timeout for auto-save
+    autoSaveTimeout.current = setTimeout(() => {
+      setIsSaving(true);
+      lastSavedData.current = { ...formData };
+      onSave(formData);
+      setTimeout(() => setIsSaving(false), 500);
+    }, autoSaveDelay);
+
+    // Cleanup function
+    return () => {
+      if (autoSaveTimeout.current) {
+        clearTimeout(autoSaveTimeout.current);
+      }
+    };
+  }, [formData, autoSave, onSave, autoSaveDelay, hasDataChanged]);
 
   // Group fields by group property
   const fieldGroups = useMemo(() => {
@@ -108,19 +154,8 @@ export function SchemaForm({
 
       // Call onChange if provided
       onChange?.(newData);
-
-      // Auto-save if enabled
-      if (autoSave && onSave) {
-        const timeoutId = setTimeout(() => {
-          setIsSaving(true);
-          onSave(newData);
-          setTimeout(() => setIsSaving(false), 500);
-        }, autoSaveDelay);
-
-        return () => clearTimeout(timeoutId);
-      }
     },
-    [formData, errors, onChange, autoSave, onSave, autoSaveDelay]
+    [formData, errors, onChange]
   );
 
   // Handle form submission
@@ -164,6 +199,21 @@ export function SchemaForm({
       setIsSaving(false);
     }
   }, [disabled, isSaving, onSave, formData]);
+
+  // Add keyboard shortcut for manual save (Ctrl+S / Cmd+S)
+  useEffect(() => {
+    if (!autoSave && onSave) {
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+          e.preventDefault();
+          handleSave();
+        }
+      };
+
+      document.addEventListener('keydown', handleKeyDown);
+      return () => document.removeEventListener('keydown', handleKeyDown);
+    }
+  }, [autoSave, onSave, handleSave]);
 
   // Get default value for a field
   const getDefaultValue = useCallback((field: FieldDefinition) => {
@@ -251,7 +301,11 @@ export function SchemaForm({
                   Saving...
                 </span>
               )}
-              {autoSave && <span className="text-xs text-gray-500">Auto-save enabled</span>}
+              {autoSave ? (
+                <span className="text-xs text-gray-500">Auto-save enabled</span>
+              ) : (
+                <span className="text-xs text-gray-500">Manual save • Press Ctrl+S to save</span>
+              )}
             </div>
           </div>
         </div>
@@ -312,12 +366,16 @@ export function SchemaForm({
                   type="button"
                   onClick={handleSave}
                   disabled={disabled || isSaving}
-                  className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className={`px-4 py-2 border rounded-md text-sm font-medium focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed ${
+                    !autoSave
+                      ? 'border-blue-600 text-white bg-blue-600 hover:bg-blue-700'
+                      : 'border-gray-300 text-gray-700 bg-white hover:bg-gray-50'
+                  }`}
                 >
                   {isSaving ? (
                     <>
                       <svg
-                        className="animate-spin -ml-1 mr-2 h-4 w-4 text-gray-600"
+                        className={`animate-spin -ml-1 mr-2 h-4 w-4 ${!autoSave ? 'text-white' : 'text-gray-600'}`}
                         xmlns="http://www.w3.org/2000/svg"
                         fill="none"
                         viewBox="0 0 24 24"

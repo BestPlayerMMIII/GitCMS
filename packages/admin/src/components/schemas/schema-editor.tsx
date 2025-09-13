@@ -21,7 +21,6 @@ const FIELD_TYPES = [
   'media',
   'reference',
   'rich-text',
-  'markdown',
   'select',
 ] as const;
 

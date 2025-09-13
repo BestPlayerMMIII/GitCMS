@@ -60,7 +60,14 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
+    console.log('Content POST - Session:', {
+      hasSession: !!session,
+      hasAccessToken: !!session?.accessToken,
+      user: session?.user?.name,
+    });
+
     if (!session?.accessToken) {
+      console.log('Content POST - No access token');
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -69,11 +76,16 @@ export async function POST(request: NextRequest) {
     const owner = searchParams.get('owner');
     const repo = searchParams.get('repo');
 
+    console.log('Content POST - Params:', { action, owner, repo });
+
     if (!owner || !repo) {
+      console.log('Content POST - Missing owner or repo');
       return NextResponse.json({ error: 'Owner and repo are required' }, { status: 400 });
     }
 
     const body = await request.json();
+    console.log('Content POST - Body:', body);
+
     const github = new GitHubApiClient(session.accessToken, owner, repo);
 
     switch (action) {
@@ -84,6 +96,7 @@ export async function POST(request: NextRequest) {
         return await updateContent(github, body, session.user?.name || undefined);
 
       default:
+        console.log('Content POST - Invalid action:', action);
         return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
     }
   } catch (error) {
@@ -259,14 +272,21 @@ async function createContent(
   author?: string
 ): Promise<NextResponse> {
   try {
+    console.log('Create content - Input:', { body, author });
+
     const { schemaId, data, metadata = {} } = body;
 
     if (!schemaId || !data) {
+      console.log('Create content - Missing required fields:', {
+        schemaId: !!schemaId,
+        data: !!data,
+      });
       return NextResponse.json({ error: 'Schema ID and data are required' }, { status: 400 });
     }
 
     // Generate content ID
     const contentId = metadata.id || generateContentId(data, schemaId);
+    console.log('Create content - Generated ID:', contentId);
 
     // Create content object
     const contentItem = {
@@ -282,9 +302,13 @@ async function createContent(
       },
     };
 
+    console.log('Create content - Content item:', contentItem);
+
     // Save to GitHub using createMultipleFiles (which handles directory creation)
     const filePath = `.gitcms/content/${schemaId}/${contentId}.json`;
     const fileContent = JSON.stringify(contentItem, null, 2);
+
+    console.log('Create content - File path:', filePath);
 
     // Use the createMultipleFiles method for atomic operation
     await github.createMultipleFiles(
@@ -296,6 +320,8 @@ async function createContent(
       ],
       `Create ${schemaId} content: ${contentId}`
     );
+
+    console.log('Create content - Success');
 
     return NextResponse.json({
       success: true,
@@ -357,14 +383,19 @@ async function updateContent(
 
     // Get the current file to get its SHA for updating
     try {
+      console.log('Update content - Getting current file:', filePath);
       const currentFile = await github.getFile(filePath);
+      console.log('Update content - Current file SHA:', currentFile.sha);
+
       await github.updateFile(
         filePath,
         fileContent,
         `Update ${schemaId} content: ${contentId}`,
         currentFile.sha
       );
-    } catch {
+      console.log('Update content - File updated successfully');
+    } catch (fileError) {
+      console.log('Update content - File not found, creating new:', fileError);
       // File doesn't exist, create it
       await github.createMultipleFiles(
         [
@@ -375,6 +406,7 @@ async function updateContent(
         ],
         `Create ${schemaId} content: ${contentId}`
       );
+      console.log('Update content - File created successfully');
     }
 
     return NextResponse.json({

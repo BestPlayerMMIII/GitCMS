@@ -52,6 +52,24 @@ export function Navigation() {
             <Link
               href="/content/edit"
               className="bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-md text-sm font-medium transition-colors"
+              onClick={e => {
+                // Check if we have a connected repository and include it in the URL
+                const connectedRepo = localStorage.getItem('gitcms-connected-repo');
+                if (connectedRepo) {
+                  try {
+                    const repoData = JSON.parse(connectedRepo);
+                    const params = new URLSearchParams({
+                      owner: repoData.owner,
+                      repo: repoData.name,
+                      schemaId: 'blog-post', // Default schema
+                    });
+                    e.preventDefault();
+                    window.location.href = `/content/edit?${params}`;
+                  } catch (error) {
+                    // Fall back to default behavior
+                  }
+                }
+              }}
             >
               New Content
             </Link>
@@ -93,6 +111,24 @@ export function Navigation() {
             <Link
               href="/content/edit"
               className="block mx-3 mb-2 bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-md text-sm font-medium text-center"
+              onClick={e => {
+                // Check if we have a connected repository and include it in the URL
+                const connectedRepo = localStorage.getItem('gitcms-connected-repo');
+                if (connectedRepo) {
+                  try {
+                    const repoData = JSON.parse(connectedRepo);
+                    const params = new URLSearchParams({
+                      owner: repoData.owner,
+                      repo: repoData.name,
+                      schemaId: 'blog-post', // Default schema
+                    });
+                    e.preventDefault();
+                    window.location.href = `/content/edit?${params}`;
+                  } catch (error) {
+                    // Fall back to default behavior
+                  }
+                }
+              }}
             >
               New Content
             </Link>

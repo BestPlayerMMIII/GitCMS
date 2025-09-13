@@ -23,7 +23,6 @@ export type FieldType =
   | 'media'
   | 'reference'
   | 'rich-text'
-  | 'markdown'
   | 'select'
   | 'multi-select'
   | 'color'
@@ -120,7 +119,7 @@ export interface ReferenceField extends BaseField {
 
 // Rich text field for WYSIWYG content
 export interface RichTextField extends BaseField {
-  type: 'rich-text' | 'markdown';
+  type: 'rich-text';
   toolbar?: string[];
   maxLength?: number;
   allowHtml?: boolean;
@@ -227,10 +226,10 @@ export const blogPostSchema: GitCMSSchema = {
       maxLength: 500,
     },
     content: {
-      type: 'markdown',
+      type: 'rich-text',
       label: 'Content',
       required: true,
-      description: 'Post content in Markdown',
+      description: 'Post content with rich text and markdown support',
     },
     featuredImage: {
       type: 'media',
@@ -321,9 +320,9 @@ export const projectSchema: GitCMSSchema = {
       maxLength: 500,
     },
     content: {
-      type: 'markdown',
+      type: 'rich-text',
       label: 'Content',
-      description: 'Detailed project information',
+      description: 'Detailed project information with rich text and markdown support',
     },
     featuredImage: {
       type: 'media',
@@ -420,9 +419,9 @@ export const productSchema: GitCMSSchema = {
       maxLength: 1000,
     },
     content: {
-      type: 'markdown',
+      type: 'rich-text',
       label: 'Content',
-      description: 'Detailed product information',
+      description: 'Detailed product information with rich text and markdown support',
     },
     price: {
       type: 'number',
@@ -518,10 +517,10 @@ export const pageSchema: GitCMSSchema = {
       pattern: '^[a-z0-9-]+$',
     },
     content: {
-      type: 'markdown',
+      type: 'rich-text',
       label: 'Content',
       required: true,
-      description: 'Page content in Markdown',
+      description: 'Page content with rich text and markdown support',
     },
     excerpt: {
       type: 'text',
@@ -862,7 +861,6 @@ export class SchemaUtils {
       case 'url':
       case 'color':
       case 'rich-text':
-      case 'markdown':
         return 'string';
       case 'number':
         return 'number';

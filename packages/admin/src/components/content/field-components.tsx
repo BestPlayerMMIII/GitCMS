@@ -180,7 +180,7 @@ export function SelectField({ field, value, onChange, error, disabled }: BaseFie
       </label>
       {field.description && <p className="text-sm text-gray-500">{field.description}</p>}
       <select
-        value={isMultiple ? undefined : value || ''}
+        value={isMultiple ? (Array.isArray(value) ? value : []) : value || ''}
         multiple={isMultiple}
         onChange={handleChange}
         disabled={disabled}
@@ -190,11 +190,7 @@ export function SelectField({ field, value, onChange, error, disabled }: BaseFie
       >
         {!isMultiple && !field.required && <option value="">Select an option...</option>}
         {selectField.options?.map((option: FieldOption) => (
-          <option
-            key={option.value}
-            value={option.value}
-            selected={isMultiple ? value?.includes(option.value) : false}
-          >
+          <option key={option.value} value={option.value}>
             {option.label}
           </option>
         ))}
@@ -402,24 +398,54 @@ export function ReferenceField({ field, value, onChange, error, disabled }: Base
   );
 }
 
-// Rich Text Field Component (placeholder for now)
+// Rich Text Field Component (handles both rich-text and markdown the same way)
 export function RichTextField({ field, value, onChange, error, disabled }: BaseFieldProps) {
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       <label className="block text-sm font-medium text-gray-700">
         {field.label}
         {field.required && <span className="text-red-500 ml-1">*</span>}
       </label>
-      {field.description && <p className="text-sm text-gray-500">{field.description}</p>}
-      <RichTextEditor
-        value={value || ''}
-        onChange={onChange}
-        placeholder={field.placeholder || 'Start writing...'}
-        readOnly={disabled}
-        className={error ? 'border-red-500' : ''}
-        enableMarkdown={field.type === 'markdown'}
-      />
-      {error && <p className="text-sm text-red-500">{error}</p>}
+      {field.description && (
+        <p className="text-sm text-gray-600 leading-relaxed">{field.description}</p>
+      )}
+      <div className="relative">
+        <RichTextEditor
+          value={value || ''}
+          onChange={onChange}
+          placeholder={
+            field.placeholder || 'Start writing... Use toolbar or markdown syntax like **bold**'
+          }
+          readOnly={disabled}
+          className={`transition-all duration-200 ${
+            error
+              ? 'border-red-400 shadow-sm focus-within:border-red-500 focus-within:ring-2 focus-within:ring-red-200'
+              : 'focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100'
+          }`}
+        />
+        <div className="mt-2 text-xs text-gray-500 flex items-center gap-1">
+          <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+            <path
+              fillRule="evenodd"
+              d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+              clipRule="evenodd"
+            />
+          </svg>
+          Supports both visual formatting and markdown syntax
+        </div>
+      </div>
+      {error && (
+        <p className="text-sm text-red-600 flex items-center gap-1">
+          <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+            <path
+              fillRule="evenodd"
+              d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+              clipRule="evenodd"
+            />
+          </svg>
+          {error}
+        </p>
+      )}
     </div>
   );
 }

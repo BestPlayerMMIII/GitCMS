@@ -239,12 +239,22 @@ export class GitHubApiClient {
     message: string
   ): Promise<void> {
     try {
+      console.log('GitHub createMultipleFiles - Starting:', {
+        owner: this.owner,
+        repo: this.repo,
+        branch: this.branch,
+        fileCount: files.length,
+        files: files.map(f => f.path),
+      });
+
       // Get the current commit SHA
       const { data: ref } = await this.octokit.rest.git.getRef({
         owner: this.owner,
         repo: this.repo,
         ref: `heads/${this.branch}`,
       });
+
+      console.log('GitHub createMultipleFiles - Got ref:', ref.object.sha);
 
       // Get the commit tree
       const { data: commit } = await this.octokit.rest.git.getCommit({
@@ -295,7 +305,10 @@ export class GitHubApiClient {
         ref: `heads/${this.branch}`,
         sha: newCommit.sha,
       });
+
+      console.log('GitHub createMultipleFiles - Success:', newCommit.sha);
     } catch (error) {
+      console.error('GitHub createMultipleFiles - Error:', error);
       throw this.handleError(error, 'Failed to create multiple files');
     }
   }

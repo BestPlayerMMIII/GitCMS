@@ -20,8 +20,9 @@ interface ContentItem {
 export default function ContentList() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const owner = searchParams.get('owner');
-  const repo = searchParams.get('repo');
+
+  // Get repository info from URL params or localStorage
+  const [repoInfo, setRepoInfo] = useState<{ owner: string; repo: string } | null>(null);
   const schemaId = searchParams.get('schemaId');
 
   const [content, setContent] = useState<ContentItem[]>([]);
@@ -30,24 +31,51 @@ export default function ContentList() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
+  // Initialize repository info
   useEffect(() => {
-    if (!owner || !repo) {
+    const urlOwner = searchParams.get('owner');
+    const urlRepo = searchParams.get('repo');
+
+    if (urlOwner && urlRepo) {
+      // Use URL parameters first
+      setRepoInfo({ owner: urlOwner, repo: urlRepo });
+    } else {
+      // Check localStorage for connected repository
+      const connectedRepo = localStorage.getItem('gitcms-connected-repo');
+      if (connectedRepo) {
+        try {
+          const repoData = JSON.parse(connectedRepo);
+          setRepoInfo({
+            owner: repoData.owner,
+            repo: repoData.name,
+          });
+        } catch (error) {
+          console.error('Failed to parse connected repository:', error);
+        }
+      }
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (!repoInfo) {
       setLoading(false);
       return;
     }
 
     loadContent();
-  }, [owner, repo, schemaId]);
+  }, [repoInfo, schemaId]);
 
   const loadContent = async () => {
+    if (!repoInfo) return;
+
     try {
       setLoading(true);
       setError(null);
 
       const params = new URLSearchParams({
         action: 'list',
-        owner: owner!,
-        repo: repo!,
+        owner: repoInfo.owner,
+        repo: repoInfo.repo,
       });
 
       if (schemaId) {
@@ -75,7 +103,7 @@ export default function ContentList() {
   };
 
   const handleDelete = async (contentId: string, itemSchemaId: string) => {
-    if (!owner || !repo) return;
+    if (!repoInfo) return;
 
     if (!confirm('Are you sure you want to delete this content? This action cannot be undone.')) {
       return;
@@ -83,7 +111,7 @@ export default function ContentList() {
 
     try {
       const response = await fetch(
-        `/api/content?owner=${owner}&repo=${repo}&contentId=${contentId}&schemaId=${itemSchemaId}`,
+        `/api/content?owner=${repoInfo.owner}&repo=${repoInfo.repo}&contentId=${contentId}&schemaId=${itemSchemaId}`,
         {
           method: 'DELETE',
         }
@@ -107,9 +135,10 @@ export default function ContentList() {
   };
 
   const getEditUrl = (item: ContentItem) => {
+    if (!repoInfo) return '/content';
     const params = new URLSearchParams({
-      owner: owner!,
-      repo: repo!,
+      owner: repoInfo.owner,
+      repo: repoInfo.repo,
       schemaId: item.schemaId,
       contentId: item.id,
     });
@@ -117,9 +146,10 @@ export default function ContentList() {
   };
 
   const getCreateUrl = () => {
+    if (!repoInfo) return '/content';
     const params = new URLSearchParams({
-      owner: owner!,
-      repo: repo!,
+      owner: repoInfo.owner,
+      repo: repoInfo.repo,
       schemaId: schemaId || 'blog-post', // Default to blog-post if no schema specified
     });
     return `/content/edit?${params}`;
@@ -203,7 +233,7 @@ export default function ContentList() {
   }
 
   // Empty state when no repository is connected
-  if (!owner || !repo) {
+  if (!repoInfo) {
     return (
       <div className="min-h-screen bg-gray-50">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
@@ -303,7 +333,7 @@ export default function ContentList() {
                   Content {schemaId ? `• ${schemaId}` : ''}
                 </h1>
                 <p className="text-sm text-gray-500">
-                  {owner}/{repo}
+                  {repoInfo?.owner}/{repoInfo?.repo}
                 </p>
               </div>
             </div>

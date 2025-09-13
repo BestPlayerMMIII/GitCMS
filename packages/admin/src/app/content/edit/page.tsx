@@ -27,8 +27,9 @@ interface ContentData {
 
 export default function ContentEditor() {
   const searchParams = useSearchParams();
-  const owner = searchParams.get('owner');
-  const repo = searchParams.get('repo');
+
+  // Get repository info from URL params or localStorage
+  const [repoInfo, setRepoInfo] = useState<{ owner: string; repo: string } | null>(null);
   const schemaId = searchParams.get('schemaId');
   const contentId = searchParams.get('contentId'); // Optional - if editing existing content
 
@@ -39,16 +40,41 @@ export default function ContentEditor() {
   const [error, setError] = useState<string | null>(null);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
 
+  // Initialize repository info
+  useEffect(() => {
+    const urlOwner = searchParams.get('owner');
+    const urlRepo = searchParams.get('repo');
+
+    if (urlOwner && urlRepo) {
+      // Use URL parameters first
+      setRepoInfo({ owner: urlOwner, repo: urlRepo });
+    } else {
+      // Check localStorage for connected repository
+      const connectedRepo = localStorage.getItem('gitcms-connected-repo');
+      if (connectedRepo) {
+        try {
+          const repoData = JSON.parse(connectedRepo);
+          setRepoInfo({
+            owner: repoData.owner,
+            repo: repoData.name,
+          });
+        } catch (error) {
+          console.error('Failed to parse connected repository:', error);
+        }
+      }
+    }
+  }, [searchParams]);
+
   // Load schema and content
   useEffect(() => {
-    if (!owner || !repo || !schemaId) {
+    if (!repoInfo || !schemaId) {
       setError('Missing required parameters');
       setLoading(false);
       return;
     }
 
     loadData();
-  }, [owner, repo, schemaId, contentId]);
+  }, [repoInfo, schemaId, contentId]);
 
   const loadData = async () => {
     try {
@@ -67,9 +93,9 @@ export default function ContentEditor() {
       setSchema(schemaData);
 
       // Load content if editing existing
-      if (contentId) {
+      if (contentId && repoInfo) {
         const response = await fetch(
-          `/api/content?action=get&owner=${owner}&repo=${repo}&schemaId=${schemaId}&contentId=${contentId}`
+          `/api/content?action=get&owner=${repoInfo.owner}&repo=${repoInfo.repo}&schemaId=${schemaId}&contentId=${contentId}`
         );
 
         if (!response.ok) {
@@ -95,7 +121,9 @@ export default function ContentEditor() {
   };
 
   const handleSave = async (formData: Record<string, any>) => {
-    if (!owner || !repo || !schemaId) return;
+    if (!repoInfo || !schemaId) {
+      return;
+    }
 
     try {
       setSaving(true);
@@ -112,16 +140,27 @@ export default function ContentEditor() {
         },
       };
 
-      const response = await fetch(`/api/content?action=${action}&owner=${owner}&repo=${repo}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
+      const response = await fetch(
+        `/api/content?action=${action}&owner=${repoInfo.owner}&repo=${repoInfo.repo}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+        }
+      );
 
       if (!response.ok) {
-        throw new Error('Failed to save content');
+        let errorMessage = 'Failed to save content';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorMessage;
+        } catch {
+          // Use status text if JSON parsing fails
+          errorMessage = response.statusText || errorMessage;
+        }
+        throw new Error(errorMessage);
       }
 
       const result = await response.json();
@@ -130,7 +169,7 @@ export default function ContentEditor() {
         setSavedMessage('Content saved successfully!');
         setTimeout(() => setSavedMessage(null), 3000);
 
-        // If creating new content, update URL
+        // Update URL with contentId if creating new content
         if (!contentId && result.content.id) {
           const newUrl = new URL(window.location.href);
           newUrl.searchParams.set('contentId', result.content.id);
@@ -148,7 +187,7 @@ export default function ContentEditor() {
   };
 
   const handleSubmit = async (formData: Record<string, any>) => {
-    if (!owner || !repo || !schemaId) return;
+    if (!repoInfo?.owner || !repoInfo?.repo || !schemaId) return;
 
     try {
       setSaving(true);
@@ -170,13 +209,16 @@ export default function ContentEditor() {
         },
       };
 
-      const response = await fetch(`/api/content?action=update&owner=${owner}&repo=${repo}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(publishPayload),
-      });
+      const response = await fetch(
+        `/api/content?action=update&owner=${repoInfo.owner}&repo=${repoInfo.repo}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(publishPayload),
+        }
+      );
 
       if (!response.ok) {
         throw new Error('Failed to publish content');
@@ -274,7 +316,7 @@ export default function ContentEditor() {
                   {contentId ? 'Edit' : 'Create'} {schema.metadata.name}
                 </h1>
                 <p className="text-sm text-gray-500">
-                  {owner}/{repo} • {schema.id}
+                  {repoInfo?.owner}/{repoInfo?.repo} • {schema.id}
                 </p>
               </div>
             </div>
@@ -324,8 +366,7 @@ export default function ContentEditor() {
           onSave={handleSave}
           onSubmit={handleSubmit}
           disabled={saving}
-          autoSave={true}
-          autoSaveDelay={2000}
+          autoSave={false}
           saveLabel={saving ? 'Saving...' : 'Save Draft'}
           submitLabel={saving ? 'Publishing...' : 'Publish'}
         />

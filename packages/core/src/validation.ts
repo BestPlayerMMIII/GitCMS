@@ -120,7 +120,6 @@ export const FieldTypeSchema = z.enum([
   'boolean',
   'date',
   'datetime',
-  'markdown',
   'media',
   'array',
   'object',
@@ -296,7 +295,6 @@ export class ValidationEngine {
         break;
 
       case 'rich-text':
-      case 'markdown':
         errors.push(...this.validateRichTextField(value, field, fieldName, path));
         break;
     }
@@ -843,11 +841,6 @@ export function validateContent(
       switch (field.type) {
         case 'string':
         case 'text':
-        case 'markdown':
-          if (typeof value !== 'string') {
-            errors.push(`Field '${field.name}' must be a string`);
-          }
-          break;
         case 'number':
           if (typeof value !== 'number') {
             errors.push(`Field '${field.name}' must be a number`);
