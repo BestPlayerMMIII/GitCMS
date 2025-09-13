@@ -4,3 +4,4 @@ export * from './utils';
 export * from './validation';
 export * from './github';
 export * from './github-utils';
+export * from './content-parser';

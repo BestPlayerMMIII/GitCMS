@@ -74,9 +74,12 @@ export default function HomePage() {
                   </div>
                 </div>
                 <div className="mt-4">
-                  <button className="w-full bg-gray-800 text-white py-2 px-4 rounded-md hover:bg-gray-700 transition-colors">
+                  <a
+                    href="/repositories/connect"
+                    className="block w-full bg-gray-800 text-white py-2 px-4 rounded-md hover:bg-gray-700 transition-colors text-center"
+                  >
                     Choose Repository
-                  </button>
+                  </a>
                 </div>
               </div>
             </div>

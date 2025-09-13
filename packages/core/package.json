@@ -21,7 +21,9 @@
   },
   "dependencies": {
     "@octokit/auth-token": "^6.0.0",
-    "@octokit/rest": "^22.0.0"
+    "@octokit/rest": "^22.0.0",
+    "gray-matter": "^4.0.3",
+    "yaml": "^2.8.1"
   },
   "devDependencies": {
     "@types/node": "^20.10.4",
