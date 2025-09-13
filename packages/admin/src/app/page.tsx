@@ -1,7 +1,7 @@
 'use client';
 
 import { useSession, signOut } from 'next-auth/react';
-import { LogOut, Github, Users } from 'lucide-react';
+import { LogOut, Github, Settings, FileText } from 'lucide-react';
 import { PageHeader } from '@/components/page-header';
 
 export default function HomePage() {
@@ -83,21 +83,21 @@ export default function HomePage() {
             <div className="bg-white overflow-hidden shadow rounded-lg">
               <div className="p-6">
                 <div className="flex items-center">
-                  <Users className="h-8 w-8 text-gray-400" />
+                  <Settings className="h-8 w-8 text-gray-400" />
                   <div className="ml-4">
                     <h3 className="text-lg font-medium text-gray-900">Manage Content</h3>
                     <p className="text-sm text-gray-500">
-                      Create and edit content with our visual editor
+                      Define content schemas and manage your content types
                     </p>
                   </div>
                 </div>
                 <div className="mt-4">
-                  <button
-                    disabled
-                    className="w-full bg-gray-300 text-gray-500 py-2 px-4 rounded-md cursor-not-allowed"
+                  <a
+                    href="/schemas"
+                    className="block w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 transition-colors text-center"
                   >
-                    Coming Soon
-                  </button>
+                    Manage Schemas
+                  </a>
                 </div>
               </div>
             </div>
@@ -105,13 +105,11 @@ export default function HomePage() {
             <div className="bg-white overflow-hidden shadow rounded-lg">
               <div className="p-6">
                 <div className="flex items-center">
-                  <div className="h-8 w-8 bg-green-100 rounded-full flex items-center justify-center">
-                    <span className="text-green-600 font-bold">✓</span>
-                  </div>
+                  <FileText className="h-8 w-8 text-gray-400" />
                   <div className="ml-4">
-                    <h3 className="text-lg font-medium text-gray-900">Auto Deploy</h3>
+                    <h3 className="text-lg font-medium text-gray-900">Create Content</h3>
                     <p className="text-sm text-gray-500">
-                      Your content is automatically versioned and deployed
+                      Write and edit content using your defined schemas
                     </p>
                   </div>
                 </div>
@@ -120,7 +118,7 @@ export default function HomePage() {
                     disabled
                     className="w-full bg-gray-300 text-gray-500 py-2 px-4 rounded-md cursor-not-allowed"
                   >
-                    Coming Soon
+                    Phase 4 - Coming Soon
                   </button>
                 </div>
               </div>

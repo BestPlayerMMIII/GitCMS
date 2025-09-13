@@ -1,7 +1,85 @@
 export * from './types';
-export * from './schemas';
 export * from './utils';
-export * from './validation';
 export * from './github';
 export * from './github-utils';
 export * from './content-parser';
+
+// Additional GitHub types export
+export type { GitHubFileContent, GitHubCommitResponse } from './github';
+
+// Schema system exports
+export {
+  // Types
+  type GitCMSSchema,
+  type FieldDefinition,
+  type FieldType as SchemaFieldType,
+  type ValidationRule as SchemaValidationRule,
+  type SchemaMetadata,
+  type SchemaConfig,
+  type StringField,
+  type NumberField,
+  type DateField,
+  type ArrayField,
+  type ObjectField,
+  type MediaField,
+  type ReferenceField,
+  type RichTextField,
+  type SelectField,
+  type BaseField,
+  type FieldOption,
+
+  // Schemas
+  blogPostSchema,
+  projectSchema,
+  productSchema,
+  pageSchema,
+  defaultSchemas,
+
+  // Utils
+  SchemaUtils,
+  gitCMSSchemaSchema,
+} from './schemas';
+
+// Validation system exports
+export {
+  // Types
+  type ValidationError,
+  type ValidationResult,
+  type ValidationContext,
+  type CustomValidator,
+
+  // Classes and functions
+  ValidationEngine,
+  defaultValidationEngine,
+  createValidationEngine,
+  customValidators,
+  validateContentAdvanced,
+
+  // Legacy exports
+  validateContent,
+  FieldTypeSchema,
+  ValidationRuleSchema,
+  SchemaFieldSchema,
+  ContentSchemaSchema,
+  GitCMSConfigSchema,
+  ContentItemSchema,
+} from './validation';
+
+// Registry system exports
+export {
+  // Types
+  type SchemaRegistrationOptions,
+  type SchemaSearchOptions,
+  type SchemaExport,
+  type InheritanceChain,
+
+  // Classes and functions
+  ContentTypeRegistry,
+  RegistryError,
+  defaultRegistry,
+  registerSchema,
+  getSchema,
+  getResolvedSchema,
+  listSchemas,
+  validateContent as validateContentWithRegistry,
+} from './registry';
