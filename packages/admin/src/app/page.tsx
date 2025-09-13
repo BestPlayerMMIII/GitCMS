@@ -2,6 +2,7 @@
 
 import { useSession, signOut } from 'next-auth/react';
 import { LogOut, Github, Users } from 'lucide-react';
+import { PageHeader } from '@/components/page-header';
 
 export default function HomePage() {
   const { data: session, status } = useSession();
@@ -19,37 +20,32 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-6">
-            <div className="flex items-center">
-              <h1 className="text-2xl font-bold text-gray-900">GitCMS Admin</h1>
-            </div>
+      <PageHeader
+        title="GitCMS Admin"
+        size="large"
+        className="shadow"
+        rightElement={
+          session?.user ? (
             <div className="flex items-center space-x-4">
-              {session?.user && (
-                <>
-                  <div className="flex items-center space-x-2">
-                    <img
-                      className="h-8 w-8 rounded-full"
-                      src={session.user.image || ''}
-                      alt={session.user.name || 'User'}
-                    />
-                    <span className="text-sm font-medium text-gray-700">{session.user.name}</span>
-                  </div>
-                  <button
-                    onClick={() => signOut()}
-                    className="flex items-center space-x-1 text-gray-500 hover:text-gray-700"
-                  >
-                    <LogOut className="h-4 w-4" />
-                    <span>Sign out</span>
-                  </button>
-                </>
-              )}
+              <div className="flex items-center space-x-2">
+                <img
+                  className="h-8 w-8 rounded-full"
+                  src={session.user.image || ''}
+                  alt={session.user.name || 'User'}
+                />
+                <span className="text-sm font-medium text-gray-700">{session.user.name}</span>
+              </div>
+              <button
+                onClick={() => signOut()}
+                className="flex items-center space-x-1 text-gray-500 hover:text-gray-700"
+              >
+                <LogOut className="h-4 w-4" />
+                <span>Sign out</span>
+              </button>
             </div>
-          </div>
-        </div>
-      </header>
+          ) : null
+        }
+      />
 
       {/* Main content */}
       <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
