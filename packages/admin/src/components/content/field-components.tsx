@@ -570,7 +570,6 @@ export function FieldRenderer({ field, value, onChange, error, disabled }: BaseF
       );
 
     case 'rich-text':
-    case 'markdown':
       return (
         <RichTextField
           field={field}
@@ -607,7 +606,6 @@ function getDefaultValue(field: FieldDefinition): any {
     case 'url':
     case 'color':
     case 'rich-text':
-    case 'markdown':
       return '';
     case 'number':
       return 0;

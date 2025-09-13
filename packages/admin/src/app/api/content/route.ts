@@ -311,9 +311,41 @@ async function createContent(
 
     const contentPath = await getContentPath(github, owner!, repo!, accessToken!);
 
-    // Generate content ID
-    const contentId = metadata.id || generateContentId(data, schemaId);
-    console.log('Create content - Generated ID:', contentId);
+    // Handle content ID - either custom or generated
+    let contentId: string;
+
+    if (metadata.id) {
+      // User provided a custom ID - validate it
+      console.log('Create content - Using custom ID:', metadata.id);
+      const validation = await validateContentId(github, metadata.id, schemaId, contentPath);
+
+      if (!validation.isValid) {
+        console.log('Create content - Custom ID validation failed:', validation.error);
+        return NextResponse.json(
+          {
+            error: validation.error,
+            field: 'id',
+            type: 'validation_error',
+          },
+          { status: 400 }
+        );
+      }
+
+      contentId = metadata.id;
+    } else {
+      // Generate content ID from data
+      contentId = generateContentId(data, schemaId);
+      console.log('Create content - Generated ID:', contentId);
+
+      // Validate the generated ID too (in case of conflicts)
+      const validation = await validateContentId(github, contentId, schemaId, contentPath);
+
+      if (!validation.isValid) {
+        // If generated ID conflicts, add timestamp to make it unique
+        contentId = `${contentId}-${Date.now()}`;
+        console.log('Create content - ID conflict resolved, new ID:', contentId);
+      }
+    }
 
     // Create content object
     const contentItem = {
@@ -485,6 +517,46 @@ async function deleteContent(
 }
 
 // Helper functions
+
+async function validateContentId(
+  github: GitHubApiClient,
+  contentId: string,
+  schemaId: string,
+  contentPath: string
+): Promise<{ isValid: boolean; error?: string }> {
+  // Validate ID format
+  if (!contentId || typeof contentId !== 'string') {
+    return { isValid: false, error: 'Content ID must be a non-empty string' };
+  }
+
+  // Check for valid characters (letters, numbers, hyphens, underscores)
+  if (!/^[a-zA-Z0-9_-]+$/.test(contentId)) {
+    return {
+      isValid: false,
+      error: 'Content ID can only contain letters, numbers, hyphens, and underscores',
+    };
+  }
+
+  // Check length constraints
+  if (contentId.length < 1 || contentId.length > 100) {
+    return { isValid: false, error: 'Content ID must be between 1 and 100 characters long' };
+  }
+
+  // Check if ID already exists
+  try {
+    const filePath = `${contentPath}/${schemaId}/${contentId}.json`;
+    await github.getFileContent(filePath);
+    return { isValid: false, error: `Content with ID "${contentId}" already exists` };
+  } catch (error: any) {
+    // If file doesn't exist (404), that's good - ID is available
+    if (error.status === 404) {
+      return { isValid: true };
+    }
+    // For other errors, we can't be sure, so we'll allow it
+    console.warn('Error checking content ID existence:', error);
+    return { isValid: true };
+  }
+}
 
 async function getContentPath(
   github: GitHubApiClient,

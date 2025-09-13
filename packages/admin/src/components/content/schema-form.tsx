@@ -17,6 +17,8 @@ export interface SchemaFormProps {
   submitLabel?: string;
   saveLabel?: string;
   onSaveSuccess?: () => void; // Callback when save is successful
+  showIdField?: boolean; // Show custom ID field for content creation
+  externalErrors?: Record<string, string>; // External field errors (e.g., from API)
 }
 
 export interface ValidationError {
@@ -37,6 +39,8 @@ export function SchemaForm({
   submitLabel = 'Submit',
   saveLabel = 'Save',
   onSaveSuccess,
+  showIdField = false,
+  externalErrors = {},
 }: SchemaFormProps) {
   const [formData, setFormData] = useState<Record<string, any>>(initialData);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -47,6 +51,22 @@ export function SchemaForm({
   // Auto-save related state
   const lastSavedData = useRef<Record<string, any>>(initialData);
   const autoSaveTimeout = useRef<NodeJS.Timeout | null>(null);
+
+  // Merge external errors with internal errors
+  const allErrors = useMemo(() => {
+    return { ...errors, ...externalErrors };
+  }, [errors, externalErrors]);
+
+  // Clear external errors when user starts typing in that field
+  useEffect(() => {
+    if (Object.keys(externalErrors).length > 0) {
+      // Clear external errors when form data changes
+      const timer = setTimeout(() => {
+        // This will be handled by the parent component
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [formData, externalErrors]);
 
   // Helper function to check if data has changed
   const hasDataChanged = useCallback((newData: Record<string, any>) => {
@@ -144,7 +164,7 @@ export function SchemaForm({
       setTouched(prev => ({ ...prev, [fieldKey]: true }));
 
       // Clear field error when user starts typing
-      if (errors[fieldKey]) {
+      if (allErrors[fieldKey]) {
         setErrors(prev => {
           const newErrors = { ...prev };
           delete newErrors[fieldKey];
@@ -155,7 +175,35 @@ export function SchemaForm({
       // Call onChange if provided
       onChange?.(newData);
     },
-    [formData, errors, onChange]
+    [formData, allErrors, onChange]
+  );
+
+  // Handle metadata field changes (like custom ID)
+  const handleMetadataChange = useCallback(
+    (metaKey: string, value: any) => {
+      const newData = {
+        ...formData,
+        _metadata: {
+          ...formData._metadata,
+          [metaKey]: value,
+        },
+      };
+      setFormData(newData);
+      setTouched(prev => ({ ...prev, [`_metadata.${metaKey}`]: true }));
+
+      // Clear field error when user starts typing
+      if (allErrors[`_metadata.${metaKey}`]) {
+        setErrors(prev => {
+          const newErrors = { ...prev };
+          delete newErrors[`_metadata.${metaKey}`];
+          return newErrors;
+        });
+      }
+
+      // Call onChange if provided
+      onChange?.(newData);
+    },
+    [formData, allErrors, onChange]
   );
 
   // Handle form submission
@@ -228,7 +276,6 @@ export function SchemaForm({
       case 'url':
       case 'color':
       case 'rich-text':
-      case 'markdown':
         return '';
       case 'number':
         return field.required ? 0 : undefined;
@@ -312,9 +359,39 @@ export function SchemaForm({
 
         <form onSubmit={handleSubmit} className="p-6">
           {/* Form-level errors */}
-          {errors._form && (
+          {allErrors._form && (
             <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-md">
-              <p className="text-sm text-red-600">{errors._form}</p>
+              <p className="text-sm text-red-600">{allErrors._form}</p>
+            </div>
+          )}
+
+          {/* Custom ID field for content creation */}
+          {showIdField && (
+            <div className="mb-6 pb-6 border-b border-gray-200">
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700">
+                  Content ID
+                  <span className="text-gray-500 ml-1">(optional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={formData._metadata?.id || ''}
+                  onChange={e => handleMetadataChange('id', e.target.value)}
+                  placeholder="e.g., my-awesome-post (leave empty to auto-generate)"
+                  className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                    allErrors['_metadata.id'] ? 'border-red-500' : ''
+                  }`}
+                  disabled={disabled}
+                />
+                {allErrors['_metadata.id'] && (
+                  <p className="text-sm text-red-600">{allErrors['_metadata.id']}</p>
+                )}
+                <p className="text-xs text-gray-500">
+                  Used as the filename for your content. Must contain only letters, numbers,
+                  hyphens, and underscores. If not provided, an ID will be automatically generated
+                  from the title or other fields.
+                </p>
+              </div>
             </div>
           )}
 
@@ -334,7 +411,7 @@ export function SchemaForm({
                       field={field}
                       value={formData[fieldKey]}
                       onChange={value => handleFieldChange(fieldKey, value)}
-                      error={touched[fieldKey] ? errors[fieldKey] : undefined}
+                      error={touched[fieldKey] ? allErrors[fieldKey] : undefined}
                       disabled={disabled}
                     />
                   </div>

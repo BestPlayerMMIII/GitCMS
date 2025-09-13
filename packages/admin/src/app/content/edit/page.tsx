@@ -38,6 +38,7 @@ export default function ContentEditor() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
 
   // Initialize repository info
@@ -130,12 +131,17 @@ export default function ContentEditor() {
       setError(null);
 
       const action = contentId ? 'update' : 'create';
+
+      // Extract metadata from form data
+      const { _metadata, ...data } = formData;
+
       const payload = {
         ...(contentId && { contentId }),
         schemaId,
-        data: formData,
+        data,
         metadata: {
           ...content?.metadata,
+          ..._metadata, // Include custom ID and other metadata
           status: content?.metadata?.status || 'draft',
         },
       };
@@ -153,14 +159,27 @@ export default function ContentEditor() {
 
       if (!response.ok) {
         let errorMessage = 'Failed to save content';
+        let fieldError = null;
+
         try {
           const errorData = await response.json();
           errorMessage = errorData.error || errorMessage;
+
+          // Handle field-specific errors (like ID validation)
+          if (errorData.field && errorData.type === 'validation_error') {
+            fieldError = { field: errorData.field, message: errorData.error };
+          }
         } catch {
           // Use status text if JSON parsing fails
           errorMessage = response.statusText || errorMessage;
         }
-        throw new Error(errorMessage);
+
+        if (fieldError) {
+          // If it's a field-specific error, we'll need to pass it back to the form
+          throw new Error(JSON.stringify({ message: errorMessage, fieldError }));
+        } else {
+          throw new Error(errorMessage);
+        }
       }
 
       const result = await response.json();
@@ -180,7 +199,25 @@ export default function ContentEditor() {
       }
     } catch (error) {
       console.error('Save error:', error);
-      setError(error instanceof Error ? error.message : 'Failed to save content');
+
+      // Parse structured errors
+      if (error instanceof Error) {
+        try {
+          const parsedError = JSON.parse(error.message);
+          if (parsedError.fieldError) {
+            setFieldErrors({
+              [`_metadata.${parsedError.fieldError.field}`]: parsedError.fieldError.message,
+            });
+            setError(parsedError.message);
+          } else {
+            setError(error.message);
+          }
+        } catch {
+          setError(error.message);
+        }
+      } else {
+        setError('Failed to save content');
+      }
     } finally {
       setSaving(false);
     }
@@ -198,13 +235,17 @@ export default function ContentEditor() {
         await handleSave(formData);
       }
 
+      // Extract metadata from form data
+      const { _metadata, ...data } = formData;
+
       // Then publish
       const publishPayload = {
         contentId: contentId || content?.id,
         schemaId,
-        data: formData,
+        data,
         metadata: {
           ...content?.metadata,
+          ..._metadata, // Include custom ID and other metadata
           status: 'published',
         },
       };
@@ -369,6 +410,8 @@ export default function ContentEditor() {
           autoSave={false}
           saveLabel={saving ? 'Saving...' : 'Save Draft'}
           submitLabel={saving ? 'Publishing...' : 'Publish'}
+          showIdField={!contentId} // Show ID field only when creating new content
+          externalErrors={fieldErrors}
         />
       </div>
     </div>
