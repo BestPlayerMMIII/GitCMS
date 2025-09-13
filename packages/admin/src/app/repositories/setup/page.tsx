@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { SetupWizard } from '@/components/setup-wizard';
+import { PageHeader } from '@/components/page-header';
 import { ArrowLeft } from 'lucide-react';
 
 interface Repository {
@@ -80,22 +81,18 @@ export default function SetupPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between py-4">
-            <button
-              onClick={() => router.push('/repositories/connect')}
-              className="flex items-center space-x-2 text-gray-600 hover:text-gray-900"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              <span>Back to Repository Selection</span>
-            </button>
-            <h1 className="text-xl font-semibold text-gray-900">Setup Repository</h1>
-            <div></div>
-          </div>
-        </div>
-      </header>
+      <PageHeader
+        title="Setup Repository"
+        leftElement={
+          <button
+            onClick={() => router.push('/repositories/connect')}
+            className="flex items-center space-x-2 text-gray-600 hover:text-gray-900"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            <span>Back to Repository Selection</span>
+          </button>
+        }
+      />
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
