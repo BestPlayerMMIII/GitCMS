@@ -19,7 +19,10 @@
     "type-check": "tsc --noEmit",
     "clean": "rimraf dist"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@octokit/auth-token": "^6.0.0",
+    "@octokit/rest": "^22.0.0"
+  },
   "devDependencies": {
     "@types/node": "^20.10.4",
     "eslint": "^9.15.0",
