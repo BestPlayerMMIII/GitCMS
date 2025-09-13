@@ -1,0 +1,463 @@
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
+
+interface ContentItem {
+  id: string;
+  schemaId: string;
+  data: Record<string, any>;
+  metadata: {
+    createdAt: string;
+    updatedAt: string;
+    author?: string;
+    status: 'draft' | 'published' | 'archived';
+    slug?: string;
+  };
+}
+
+export default function ContentList() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const owner = searchParams.get('owner');
+  const repo = searchParams.get('repo');
+  const schemaId = searchParams.get('schemaId');
+
+  const [content, setContent] = useState<ContentItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+
+  useEffect(() => {
+    if (!owner || !repo) {
+      setLoading(false);
+      return;
+    }
+
+    loadContent();
+  }, [owner, repo, schemaId]);
+
+  const loadContent = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const params = new URLSearchParams({
+        action: 'list',
+        owner: owner!,
+        repo: repo!,
+      });
+
+      if (schemaId) {
+        params.set('schemaId', schemaId);
+      }
+
+      const response = await fetch(`/api/content?${params}`);
+
+      if (!response.ok) {
+        throw new Error('Failed to load content');
+      }
+
+      const result = await response.json();
+      if (result.success) {
+        setContent(result.items);
+      } else {
+        throw new Error(result.error || 'Failed to load content');
+      }
+    } catch (error) {
+      console.error('Error loading content:', error);
+      setError(error instanceof Error ? error.message : 'Failed to load content');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDelete = async (contentId: string, itemSchemaId: string) => {
+    if (!owner || !repo) return;
+
+    if (!confirm('Are you sure you want to delete this content? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `/api/content?owner=${owner}&repo=${repo}&contentId=${contentId}&schemaId=${itemSchemaId}`,
+        {
+          method: 'DELETE',
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to delete content');
+      }
+
+      const result = await response.json();
+      if (result.success) {
+        // Remove from local state
+        setContent(prev => prev.filter(item => item.id !== contentId));
+      } else {
+        throw new Error(result.error || 'Failed to delete content');
+      }
+    } catch (error) {
+      console.error('Delete error:', error);
+      alert(error instanceof Error ? error.message : 'Failed to delete content');
+    }
+  };
+
+  const getEditUrl = (item: ContentItem) => {
+    const params = new URLSearchParams({
+      owner: owner!,
+      repo: repo!,
+      schemaId: item.schemaId,
+      contentId: item.id,
+    });
+    return `/content/edit?${params}`;
+  };
+
+  const getCreateUrl = () => {
+    const params = new URLSearchParams({
+      owner: owner!,
+      repo: repo!,
+      schemaId: schemaId || 'blog-post', // Default to blog-post if no schema specified
+    });
+    return `/content/edit?${params}`;
+  };
+
+  const filteredContent = content.filter(item => {
+    const matchesSearch =
+      searchQuery === '' ||
+      JSON.stringify(item.data).toLowerCase().includes(searchQuery.toLowerCase()) ||
+      item.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      item.metadata.author?.toLowerCase().includes(searchQuery.toLowerCase());
+
+    const matchesStatus = statusFilter === 'all' || item.metadata.status === statusFilter;
+
+    return matchesSearch && matchesStatus;
+  });
+
+  const getDisplayTitle = (item: ContentItem): string => {
+    // Try to find a title field in the data
+    const titleFields = ['title', 'name', 'subject', 'heading'];
+    for (const field of titleFields) {
+      if (item.data[field] && typeof item.data[field] === 'string') {
+        return item.data[field];
+      }
+    }
+    return item.id;
+  };
+
+  const getDisplayDescription = (item: ContentItem): string => {
+    // Try to find a description field in the data
+    const descFields = ['description', 'excerpt', 'summary', 'content'];
+    for (const field of descFields) {
+      if (item.data[field] && typeof item.data[field] === 'string') {
+        return item.data[field].substring(0, 150) + (item.data[field].length > 150 ? '...' : '');
+      }
+    }
+    return 'No description available';
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading content...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-6 max-w-md">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                  <path
+                    fillRule="evenodd"
+                    d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <h3 className="text-sm font-medium text-red-800">Error</h3>
+                <p className="text-sm text-red-700 mt-1">{error}</p>
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={loadContent}
+            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Empty state when no repository is connected
+  if (!owner || !repo) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+          <div className="text-center">
+            <div className="mx-auto h-24 w-24 bg-gray-100 rounded-full flex items-center justify-center">
+              <svg
+                className="h-12 w-12 text-gray-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
+                />
+              </svg>
+            </div>
+            <h3 className="mt-6 text-2xl font-medium text-gray-900">No Repository Connected</h3>
+            <p className="mt-4 text-gray-500 max-w-md mx-auto">
+              To manage content, you need to first connect a GitHub repository. Once connected, you
+              can create and edit content using your defined schemas.
+            </p>
+            <div className="mt-8 flex flex-col sm:flex-row gap-4 justify-center">
+              <Link
+                href="/repositories/connect"
+                className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              >
+                <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                  <path
+                    fillRule="evenodd"
+                    d="M10 0C4.477 0 0 4.484 0 10.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0110 4.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.203 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.942.359.31.678.921.678 1.856 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0020 10.017C20 4.484 15.522 0 10 0z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+                Connect Repository
+              </Link>
+              <Link
+                href="/schemas"
+                className="inline-flex items-center px-6 py-3 border border-gray-300 text-base font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              >
+                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+                  />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                  />
+                </svg>
+                Manage Schemas
+              </Link>
+            </div>
+            <div className="mt-8 text-sm text-gray-500">
+              <p>Need help getting started?</p>
+              <Link
+                href="/demo/rich-editor"
+                className="font-medium text-blue-600 hover:text-blue-500"
+              >
+                Try the Rich Text Editor Demo
+              </Link>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <div className="bg-white shadow-sm border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
+            <div className="flex items-center space-x-4">
+              <button
+                onClick={() => router.back()}
+                className="p-2 text-gray-400 hover:text-gray-600"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M15 19l-7-7 7-7"
+                  />
+                </svg>
+              </button>
+              <div>
+                <h1 className="text-lg font-semibold text-gray-900">
+                  Content {schemaId ? `• ${schemaId}` : ''}
+                </h1>
+                <p className="text-sm text-gray-500">
+                  {owner}/{repo}
+                </p>
+              </div>
+            </div>
+
+            <Link
+              href={getCreateUrl()}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center space-x-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 4v16m8-8H4"
+                />
+              </svg>
+              <span>Create Content</span>
+            </Link>
+          </div>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0">
+          <div className="flex-1 max-w-lg">
+            <input
+              type="text"
+              placeholder="Search content..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <div className="flex items-center space-x-4">
+            <select
+              value={statusFilter}
+              onChange={e => setStatusFilter(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="all">All Status</option>
+              <option value="draft">Draft</option>
+              <option value="published">Published</option>
+              <option value="archived">Archived</option>
+            </select>
+
+            <button onClick={loadContent} className="px-3 py-2 text-gray-500 hover:text-gray-700">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Content List */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
+        {filteredContent.length === 0 ? (
+          <div className="text-center py-12">
+            <svg
+              className="mx-auto h-12 w-12 text-gray-400"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+              />
+            </svg>
+            <h3 className="mt-4 text-lg font-medium text-gray-900">No content found</h3>
+            <p className="mt-2 text-gray-500">
+              {content.length === 0
+                ? 'Get started by creating your first content item.'
+                : 'Try adjusting your search or filters.'}
+            </p>
+            {content.length === 0 && (
+              <Link
+                href={getCreateUrl()}
+                className="mt-4 inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+              >
+                Create Content
+              </Link>
+            )}
+          </div>
+        ) : (
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {filteredContent.map(item => (
+              <div
+                key={item.id}
+                className="bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow"
+              >
+                <div className="p-6">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-lg font-medium text-gray-900 truncate">
+                        {getDisplayTitle(item)}
+                      </h3>
+                      <p className="mt-1 text-sm text-gray-500">
+                        {item.schemaId} • {item.id}
+                      </p>
+                    </div>
+                    <span
+                      className={`px-2 py-1 text-xs font-medium rounded-full ${
+                        item.metadata.status === 'published'
+                          ? 'bg-green-100 text-green-800'
+                          : item.metadata.status === 'draft'
+                            ? 'bg-yellow-100 text-yellow-800'
+                            : 'bg-gray-100 text-gray-800'
+                      }`}
+                    >
+                      {item.metadata.status}
+                    </span>
+                  </div>
+
+                  <p className="mt-3 text-sm text-gray-600 line-clamp-3">
+                    {getDisplayDescription(item)}
+                  </p>
+
+                  <div className="mt-4 flex items-center justify-between text-xs text-gray-500">
+                    <span>
+                      {item.metadata.author && `By ${item.metadata.author} • `}
+                      {new Date(item.metadata.updatedAt).toLocaleDateString()}
+                    </span>
+                  </div>
+
+                  <div className="mt-4 flex items-center space-x-2">
+                    <Link
+                      href={getEditUrl(item)}
+                      className="flex-1 px-3 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 text-center"
+                    >
+                      Edit
+                    </Link>
+                    <button
+                      onClick={() => handleDelete(item.id, item.schemaId)}
+                      className="px-3 py-2 text-sm text-red-600 border border-red-200 rounded-md hover:bg-red-50"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

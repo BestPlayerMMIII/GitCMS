@@ -2,7 +2,6 @@
 
 import { useSession, signOut } from 'next-auth/react';
 import { LogOut, Github, Settings, FileText } from 'lucide-react';
-import { PageHeader } from '@/components/page-header';
 
 export default function HomePage() {
   const { data: session, status } = useSession();
@@ -20,38 +19,41 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <PageHeader
-        title="GitCMS Admin"
-        size="large"
-        className="shadow"
-        rightElement={
-          session?.user ? (
-            <div className="flex items-center space-x-4">
-              <div className="flex items-center space-x-2">
+      {/* User Info Header */}
+      {session?.user && (
+        <div className="bg-white shadow-sm border-b">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-4">
                 <img
-                  className="h-8 w-8 rounded-full"
+                  className="h-10 w-10 rounded-full"
                   src={session.user.image || ''}
                   alt={session.user.name || 'User'}
                 />
-                <span className="text-sm font-medium text-gray-700">{session.user.name}</span>
+                <div>
+                  <h2 className="text-lg font-medium text-gray-900">
+                    Welcome back, {session.user.name}
+                  </h2>
+                  <p className="text-sm text-gray-500">Connected as {session.user.email}</p>
+                </div>
               </div>
               <button
                 onClick={() => signOut()}
-                className="flex items-center space-x-1 text-gray-500 hover:text-gray-700"
+                className="flex items-center space-x-2 text-gray-500 hover:text-gray-700 px-3 py-2 rounded-md border border-gray-300 hover:border-gray-400 transition-colors"
               >
                 <LogOut className="h-4 w-4" />
                 <span>Sign out</span>
               </button>
             </div>
-          ) : null
-        }
-      />
+          </div>
+        </div>
+      )}
 
       {/* Main content */}
       <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         <div className="px-4 py-6 sm:px-0">
           <div className="text-center mb-12">
-            <h2 className="text-3xl font-extrabold text-gray-900">Welcome to GitCMS</h2>
+            <h1 className="text-3xl font-extrabold text-gray-900">GitCMS Dashboard</h1>
             <p className="mt-4 text-lg text-gray-600">
               Universal GitHub-Based Content Management System
             </p>
@@ -85,7 +87,7 @@ export default function HomePage() {
                 <div className="flex items-center">
                   <Settings className="h-8 w-8 text-gray-400" />
                   <div className="ml-4">
-                    <h3 className="text-lg font-medium text-gray-900">Manage Content</h3>
+                    <h3 className="text-lg font-medium text-gray-900">Manage Schemas</h3>
                     <p className="text-sm text-gray-500">
                       Define content schemas and manage your content types
                     </p>
@@ -113,37 +115,89 @@ export default function HomePage() {
                     </p>
                   </div>
                 </div>
-                <div className="mt-4">
-                  <button
-                    disabled
-                    className="w-full bg-gray-300 text-gray-500 py-2 px-4 rounded-md cursor-not-allowed"
+                <div className="mt-4 space-y-2">
+                  <a
+                    href="/content"
+                    className="block w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 transition-colors text-center"
                   >
-                    Phase 4 - Coming Soon
-                  </button>
+                    Manage Content
+                  </a>
+                  <a
+                    href="/demo/rich-editor"
+                    className="block w-full bg-purple-600 text-white py-2 px-4 rounded-md hover:bg-purple-700 transition-colors text-center text-sm"
+                  >
+                    Try Rich Editor Demo
+                  </a>
                 </div>
               </div>
             </div>
           </div>
 
-          {session && (
-            <div className="mt-12 bg-white shadow rounded-lg">
-              <div className="px-6 py-4 border-b border-gray-200">
-                <h3 className="text-lg font-medium text-gray-900">GitHub Connection Status</h3>
-              </div>
-              <div className="p-6">
+          {/* Quick Actions Section */}
+          <div className="mt-8">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">Quick Actions</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <a
+                href="/content/edit"
+                className="bg-white p-4 rounded-lg shadow hover:shadow-md transition-shadow border border-gray-200"
+              >
                 <div className="flex items-center space-x-3">
-                  <div className="h-3 w-3 bg-green-400 rounded-full"></div>
-                  <span className="text-sm text-gray-600">
-                    Connected as {session.user?.name} ({session.user?.email})
-                  </span>
+                  <div className="bg-green-100 p-2 rounded-lg">
+                    <FileText className="h-5 w-5 text-green-600" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-gray-900">New Content</p>
+                    <p className="text-sm text-gray-500">Create new content</p>
+                  </div>
                 </div>
-                <p className="mt-2 text-sm text-gray-500">
-                  Your GitHub account is successfully connected. You can now access your
-                  repositories.
-                </p>
-              </div>
+              </a>
+
+              <a
+                href="/schemas"
+                className="bg-white p-4 rounded-lg shadow hover:shadow-md transition-shadow border border-gray-200"
+              >
+                <div className="flex items-center space-x-3">
+                  <div className="bg-blue-100 p-2 rounded-lg">
+                    <Settings className="h-5 w-5 text-blue-600" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-gray-900">New Schema</p>
+                    <p className="text-sm text-gray-500">Define content type</p>
+                  </div>
+                </div>
+              </a>
+
+              <a
+                href="/repositories/connect"
+                className="bg-white p-4 rounded-lg shadow hover:shadow-md transition-shadow border border-gray-200"
+              >
+                <div className="flex items-center space-x-3">
+                  <div className="bg-gray-100 p-2 rounded-lg">
+                    <Github className="h-5 w-5 text-gray-600" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-gray-900">Connect Repo</p>
+                    <p className="text-sm text-gray-500">Add repository</p>
+                  </div>
+                </div>
+              </a>
+
+              <a
+                href="/demo/rich-editor"
+                className="bg-white p-4 rounded-lg shadow hover:shadow-md transition-shadow border border-gray-200"
+              >
+                <div className="flex items-center space-x-3">
+                  <div className="bg-purple-100 p-2 rounded-lg">
+                    <FileText className="h-5 w-5 text-purple-600" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-gray-900">Editor Demo</p>
+                    <p className="text-sm text-gray-500">Try rich text editor</p>
+                  </div>
+                </div>
+              </a>
             </div>
-          )}
+          </div>
         </div>
       </main>
     </div>
