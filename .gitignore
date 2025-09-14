@@ -33,3 +33,6 @@ Thumbs.db
 # Package manager locks (keep package-lock.json if using npm)
 yarn.lock
 pnpm-lock.yaml
+
+# Custom
+ignore/
