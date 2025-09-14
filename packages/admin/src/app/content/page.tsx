@@ -3,6 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { ProgressiveLoading, ContentGridSkeleton } from '@/components/ui/loading';
+import { useContentList, useRepoSchemas, useContentMutations } from '@/lib/api-hooks';
 import type { GitCMSSchema } from '@gitcms/core';
 
 interface ContentItem {
@@ -26,16 +28,30 @@ export default function ContentList() {
   const [repoInfo, setRepoInfo] = useState<{ owner: string; repo: string } | null>(null);
   const schemaId = searchParams.get('schemaId');
 
-  const [content, setContent] = useState<ContentItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
   // Schema selection modal state
   const [showSchemaModal, setShowSchemaModal] = useState(false);
-  const [availableSchemas, setAvailableSchemas] = useState<GitCMSSchema[]>([]);
-  const [loadingSchemas, setLoadingSchemas] = useState(false);
+
+  // Use cached hooks for data fetching
+  const {
+    data: content = [],
+    loading,
+    error,
+    refresh: refreshContent,
+  } = useContentList(repoInfo?.owner || null, repoInfo?.repo || null, schemaId || undefined, {
+    enabled: Boolean(repoInfo),
+  });
+
+  const { data: availableSchemas = [], loading: loadingSchemas } = useRepoSchemas(
+    repoInfo?.owner || null,
+    repoInfo?.repo || null,
+    { enabled: Boolean(repoInfo) }
+  );
+
+  // Mutations with automatic cache invalidation
+  const { deleteContent } = useContentMutations(repoInfo?.owner || null, repoInfo?.repo || null);
 
   // Initialize repository info
   useEffect(() => {
@@ -62,94 +78,19 @@ export default function ContentList() {
     }
   }, [searchParams]);
 
-  useEffect(() => {
-    if (!repoInfo) {
-      setLoading(false);
-      return;
-    }
-
-    loadContent();
-  }, [repoInfo, schemaId]);
-
-  const loadContent = async () => {
-    if (!repoInfo) return;
-
-    try {
-      setLoading(true);
-      setError(null);
-
-      const params = new URLSearchParams({
-        action: 'list',
-        owner: repoInfo.owner,
-        repo: repoInfo.repo,
-      });
-
-      if (schemaId) {
-        params.set('schemaId', schemaId);
-      }
-
-      const response = await fetch(`/api/content?${params}`);
-
-      if (!response.ok) {
-        throw new Error('Failed to load content');
-      }
-
-      const result = await response.json();
-      if (result.success) {
-        setContent(result.items);
-      } else {
-        throw new Error(result.error || 'Failed to load content');
-      }
-    } catch (error) {
-      console.error('Error loading content:', error);
-      setError(error instanceof Error ? error.message : 'Failed to load content');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadAvailableSchemas = async () => {
-    if (!repoInfo) return;
-
-    try {
-      setLoadingSchemas(true);
-
-      // Fetch user-defined schemas from the repository
-      const params = new URLSearchParams({
-        action: 'list',
-        owner: repoInfo.owner,
-        repo: repoInfo.repo,
-      });
-
-      const response = await fetch(`/api/schemas/storage?${params}`);
-
-      if (!response.ok) {
-        throw new Error('Failed to load user schemas');
-      }
-
-      const result = await response.json();
-      setAvailableSchemas(result.schemas || []);
-    } catch (error) {
-      console.error('Error loading user schemas:', error);
-      setError(
-        'Failed to load schemas from repository. Make sure your repository is set up for GitCMS.'
-      );
-      setAvailableSchemas([]);
-    } finally {
-      setLoadingSchemas(false);
-    }
-  };
+  // Ensure content and schemas are arrays
+  const contentList = content || [];
+  const schemasList = availableSchemas || [];
 
   const handleCreateContent = () => {
     if (!repoInfo) {
-      setError('No repository connected. Please connect a repository first.');
+      alert('No repository connected. Please connect a repository first.');
       return;
     }
 
-    if (availableSchemas.length === 0) {
-      loadAvailableSchemas().then(() => {
-        setShowSchemaModal(true);
-      });
+    if (schemasList.length === 0) {
+      // If no schemas available, this will trigger a fetch via the useRepoSchemas hook
+      setShowSchemaModal(true);
     } else {
       setShowSchemaModal(true);
     }
@@ -176,24 +117,8 @@ export default function ContentList() {
     }
 
     try {
-      const response = await fetch(
-        `/api/content?owner=${repoInfo.owner}&repo=${repoInfo.repo}&contentId=${contentId}&schemaId=${itemSchemaId}`,
-        {
-          method: 'DELETE',
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error('Failed to delete content');
-      }
-
-      const result = await response.json();
-      if (result.success) {
-        // Remove from local state
-        setContent(prev => prev.filter(item => item.id !== contentId));
-      } else {
-        throw new Error(result.error || 'Failed to delete content');
-      }
+      await deleteContent(itemSchemaId, contentId);
+      // Content list will be automatically refreshed via cache invalidation
     } catch (error) {
       console.error('Delete error:', error);
       alert(error instanceof Error ? error.message : 'Failed to delete content');
@@ -211,7 +136,7 @@ export default function ContentList() {
     return `/content/edit?${params}`;
   };
 
-  const filteredContent = content.filter(item => {
+  const filteredContent = contentList.filter(item => {
     const matchesSearch =
       searchQuery === '' ||
       JSON.stringify(item.data).toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -259,7 +184,7 @@ export default function ContentList() {
     return 'No description available';
   };
 
-  if (loading) {
+  if (loading && !contentList.length) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
@@ -270,7 +195,7 @@ export default function ContentList() {
     );
   }
 
-  if (error) {
+  if (error && !contentList.length) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
@@ -287,12 +212,12 @@ export default function ContentList() {
               </div>
               <div className="ml-3">
                 <h3 className="text-sm font-medium text-red-800">Error</h3>
-                <p className="text-sm text-red-700 mt-1">{error}</p>
+                <p className="text-sm text-red-700 mt-1">{error?.message}</p>
               </div>
             </div>
           </div>
           <button
-            onClick={loadContent}
+            onClick={refreshContent}
             className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
           >
             Try Again
@@ -451,7 +376,10 @@ export default function ContentList() {
               <option value="archived">Archived</option>
             </select>
 
-            <button onClick={loadContent} className="px-3 py-2 text-gray-500 hover:text-gray-700">
+            <button
+              onClick={refreshContent}
+              className="px-3 py-2 text-gray-500 hover:text-gray-700"
+            >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
                   strokeLinecap="round"
@@ -467,96 +395,104 @@ export default function ContentList() {
 
       {/* Content List */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
-        {filteredContent.length === 0 ? (
-          <div className="text-center py-12">
-            <svg
-              className="mx-auto h-12 w-12 text-gray-400"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-              />
-            </svg>
-            <h3 className="mt-4 text-lg font-medium text-gray-900">No content found</h3>
-            <p className="mt-2 text-gray-500">
-              {content.length === 0
-                ? 'Get started by creating your first content item.'
-                : 'Try adjusting your search or filters.'}
-            </p>
-            {content.length === 0 && (
-              <button
-                onClick={handleCreateContent}
-                className="mt-4 inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+        <ProgressiveLoading
+          loading={loading && !contentList.length}
+          data={contentList}
+          skeleton={<ContentGridSkeleton count={6} />}
+          error={error}
+          onRetry={refreshContent}
+        >
+          {filteredContent.length === 0 ? (
+            <div className="text-center py-12">
+              <svg
+                className="mx-auto h-12 w-12 text-gray-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
               >
-                Create Content
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {filteredContent.map(item => (
-              <div
-                key={item.id}
-                className="bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow"
-              >
-                <div className="p-6">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1 min-w-0">
-                      <h3 className="text-lg font-medium text-gray-900 truncate">
-                        {getDisplayTitle(item)}
-                      </h3>
-                      <p className="mt-1 text-sm text-gray-500">
-                        {item.schemaId} • {item.id}
-                      </p>
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                />
+              </svg>
+              <h3 className="mt-4 text-lg font-medium text-gray-900">No content found</h3>
+              <p className="mt-2 text-gray-500">
+                {contentList.length === 0
+                  ? 'Get started by creating your first content item.'
+                  : 'Try adjusting your search or filters.'}
+              </p>
+              {contentList.length === 0 && (
+                <button
+                  onClick={handleCreateContent}
+                  className="mt-4 inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                >
+                  Create Content
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {filteredContent.map(item => (
+                <div
+                  key={item.id}
+                  className="bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow"
+                >
+                  <div className="p-6">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-lg font-medium text-gray-900 truncate">
+                          {getDisplayTitle(item)}
+                        </h3>
+                        <p className="mt-1 text-sm text-gray-500">
+                          {item.schemaId} • {item.id}
+                        </p>
+                      </div>
+                      <span
+                        className={`px-2 py-1 text-xs font-medium rounded-full ${
+                          item.metadata.status === 'published'
+                            ? 'bg-green-100 text-green-800'
+                            : item.metadata.status === 'draft'
+                              ? 'bg-yellow-100 text-yellow-800'
+                              : 'bg-gray-100 text-gray-800'
+                        }`}
+                      >
+                        {item.metadata.status}
+                      </span>
                     </div>
-                    <span
-                      className={`px-2 py-1 text-xs font-medium rounded-full ${
-                        item.metadata.status === 'published'
-                          ? 'bg-green-100 text-green-800'
-                          : item.metadata.status === 'draft'
-                            ? 'bg-yellow-100 text-yellow-800'
-                            : 'bg-gray-100 text-gray-800'
-                      }`}
-                    >
-                      {item.metadata.status}
-                    </span>
-                  </div>
 
-                  <p className="mt-3 text-sm text-gray-600 line-clamp-3">
-                    {getDisplayDescription(item)}
-                  </p>
+                    <p className="mt-3 text-sm text-gray-600 line-clamp-3">
+                      {getDisplayDescription(item)}
+                    </p>
 
-                  <div className="mt-4 flex items-center justify-between text-xs text-gray-500">
-                    <span>
-                      {item.metadata.author && `By ${item.metadata.author} • `}
-                      {new Date(item.metadata.updatedAt).toLocaleDateString()}
-                    </span>
-                  </div>
+                    <div className="mt-4 flex items-center justify-between text-xs text-gray-500">
+                      <span>
+                        {item.metadata.author && `By ${item.metadata.author} • `}
+                        {new Date(item.metadata.updatedAt).toLocaleDateString()}
+                      </span>
+                    </div>
 
-                  <div className="mt-4 flex items-center space-x-2">
-                    <Link
-                      href={getEditUrl(item)}
-                      className="flex-1 px-3 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 text-center"
-                    >
-                      Edit
-                    </Link>
-                    <button
-                      onClick={() => handleDelete(item.id, item.schemaId)}
-                      className="px-3 py-2 text-sm text-red-600 border border-red-200 rounded-md hover:bg-red-50"
-                    >
-                      Delete
-                    </button>
+                    <div className="mt-4 flex items-center space-x-2">
+                      <Link
+                        href={getEditUrl(item)}
+                        className="flex-1 px-3 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 text-center"
+                      >
+                        Edit
+                      </Link>
+                      <button
+                        onClick={() => handleDelete(item.id, item.schemaId)}
+                        className="px-3 py-2 text-sm text-red-600 border border-red-200 rounded-md hover:bg-red-50"
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
+              ))}
+            </div>
+          )}
+        </ProgressiveLoading>
       </div>
 
       {/* Schema Selection Modal */}
@@ -586,7 +522,7 @@ export default function ContentList() {
                         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
                         <span className="ml-3 text-gray-600">Loading schemas...</span>
                       </div>
-                    ) : availableSchemas.length === 0 ? (
+                    ) : schemasList.length === 0 ? (
                       <div className="text-center py-8">
                         <svg
                           className="mx-auto h-12 w-12 text-gray-400"
@@ -623,7 +559,7 @@ export default function ContentList() {
                       </div>
                     ) : (
                       <div className="grid gap-3 max-h-96 overflow-y-auto">
-                        {availableSchemas.map(schema => (
+                        {schemasList.map(schema => (
                           <button
                             key={schema.id}
                             onClick={() => handleSchemaSelect(schema)}

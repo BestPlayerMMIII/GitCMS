@@ -8,6 +8,8 @@ import { PageHeader } from '@/components/page-header';
 import { SchemaList } from '@/components/schemas/schema-list';
 import { SchemaEditor } from '@/components/schemas/schema-editor';
 import { SchemaImportModal } from '@/components/schemas/schema-import-modal';
+import { ProgressiveLoading, SchemaListSkeleton } from '@/components/ui/loading';
+import { useRepoSchemas, useSchemaMutations, useCacheInvalidation } from '@/lib/api-hooks';
 import type { GitCMSSchema } from '@gitcms/core';
 
 interface SchemaPageState {
@@ -18,16 +20,31 @@ interface SchemaPageState {
 export default function SchemasPage() {
   const searchParams = useSearchParams();
   const [state, setState] = useState<SchemaPageState>({ view: 'list' });
-  const [schemas, setSchemas] = useState<GitCMSSchema[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [repoInfo, setRepoInfo] = useState<{ owner: string; repo: string } | null>(null);
   const [importModalOpen, setImportModalOpen] = useState(false);
 
-  // Load schemas when component mounts or repo info changes
-  useEffect(() => {
-    loadSchemas();
-  }, [repoInfo]);
+  // Cache invalidation utilities
+  const { invalidateRepoSchemas } = useCacheInvalidation();
+
+  // Get schemas using cached hook
+  const {
+    data: schemas,
+    loading,
+    error,
+    refresh: refreshSchemas,
+  } = useRepoSchemas(repoInfo?.owner || null, repoInfo?.repo || null, {
+    enabled: Boolean(repoInfo),
+    fallbackToRegistry: true,
+  });
+
+  // Ensure schemas is always an array
+  const schemasList = schemas || [];
+
+  // Mutations with automatic cache invalidation
+  const { saveSchema, deleteSchema } = useSchemaMutations(
+    repoInfo?.owner || null,
+    repoInfo?.repo || null
+  );
 
   // Initialize repository info
   useEffect(() => {
@@ -54,45 +71,6 @@ export default function SchemasPage() {
     }
   }, [searchParams]);
 
-  const loadSchemas = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      let response;
-
-      // Try to load from repository storage if we have repo info
-      if (repoInfo) {
-        try {
-          response = await fetch(
-            `/api/schemas/storage?action=list&owner=${repoInfo.owner}&repo=${repoInfo.repo}`
-          );
-          if (response.ok) {
-            const data = await response.json();
-            setSchemas(data.schemas || []);
-            return;
-          }
-        } catch (storageError) {
-          console.warn('Failed to load from storage, falling back to registry:', storageError);
-        }
-      }
-
-      // Fall back to registry schemas
-      response = await fetch('/api/schemas?action=list');
-      if (!response.ok) {
-        throw new Error(`Failed to load schemas: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      setSchemas(data.schemas || []);
-    } catch (error) {
-      console.error('Failed to load schemas:', error);
-      setError(error instanceof Error ? error.message : 'Failed to load schemas');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleCreateSchema = () => {
     setState({ view: 'create' });
   };
@@ -107,65 +85,26 @@ export default function SchemasPage() {
     }
 
     try {
-      let response;
-
-      // Use storage API if repository info is available
-      if (repoInfo) {
-        response = await fetch(
-          `/api/schemas/storage?owner=${repoInfo.owner}&repo=${repoInfo.repo}&schemaId=${schemaId}`,
-          {
-            method: 'DELETE',
-          }
-        );
-      } else {
-        // Fall back to registry API (if it supports deletion)
-        response = await fetch(`/api/schemas?action=delete&schemaId=${schemaId}`, {
-          method: 'DELETE',
-        });
-      }
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `Failed to delete schema: ${response.statusText}`);
-      }
-
-      // Reload schemas
-      await loadSchemas();
+      await deleteSchema(schemaId);
     } catch (error) {
       console.error('Failed to delete schema:', error);
-      setError(error instanceof Error ? error.message : 'Failed to delete schema');
+      alert(error instanceof Error ? error.message : 'Failed to delete schema');
     }
   };
 
   const handleSaveSchema = async (schema: GitCMSSchema) => {
     if (!repoInfo) {
-      setError('Repository information not available. Please connect a repository first.');
+      alert('Repository information not available. Please connect a repository first.');
       return;
     }
 
     try {
-      const response = await fetch(
-        `/api/schemas/storage?action=save&owner=${repoInfo.owner}&repo=${repoInfo.repo}`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ schema }),
-        }
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `Failed to save schema: ${response.statusText}`);
-      }
-
-      // Reload schemas and return to list view
-      await loadSchemas();
+      await saveSchema(schema);
+      // Return to list view
       setState({ view: 'list' });
     } catch (error) {
       console.error('Failed to save schema:', error);
-      setError(error instanceof Error ? error.message : 'Failed to save schema');
+      alert(error instanceof Error ? error.message : 'Failed to save schema');
     }
   };
 
@@ -177,7 +116,7 @@ export default function SchemasPage() {
     setImportModalOpen(true);
   };
 
-  const handleImport = async (schemas: GitCMSSchema[], repoUrl: string) => {
+  const handleImport = async (schemasToImport: GitCMSSchema[], repoUrl: string) => {
     if (!repoInfo) {
       throw new Error('Repository information not available. Please connect a repository first.');
     }
@@ -189,42 +128,20 @@ export default function SchemasPage() {
       errors: [] as string[],
     };
 
-    for (const schema of schemas) {
+    for (const schema of schemasToImport) {
       try {
-        const response = await fetch(
-          `/api/schemas/storage?action=save&owner=${repoInfo.owner}&repo=${repoInfo.repo}`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              schema,
-              commitMessage: `Import schema ${schema.id} from ${repoUrl}`,
-            }),
-          }
-        );
-
-        if (response.ok) {
-          results.imported++;
-        } else {
-          const errorData = await response.json();
-          if (response.status === 409) {
-            // Schema already exists - this is okay, we'll skip it
-            results.skipped++;
-          } else {
-            results.errors.push(`${schema.id}: ${errorData.error || response.statusText}`);
-          }
-        }
+        await saveSchema(schema);
+        results.imported++;
       } catch (error) {
-        results.errors.push(
-          `${schema.id}: ${error instanceof Error ? error.message : 'Unknown error'}`
-        );
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        if (errorMessage.includes('409') || errorMessage.includes('already exists')) {
+          // Schema already exists - this is okay, we'll skip it
+          results.skipped++;
+        } else {
+          results.errors.push(`${schema.id}: ${errorMessage}`);
+        }
       }
     }
-
-    // Reload schemas to show imported ones
-    await loadSchemas();
 
     // Show summary message
     let message = `Import completed: ${results.imported} imported`;
@@ -244,6 +161,11 @@ export default function SchemasPage() {
     }
   };
 
+  const handleSchemaListChange = () => {
+    // Refresh the schema list when changes occur
+    refreshSchemas();
+  };
+
   const schemasPageHeader = (
     <PageHeader
       title="Content Schemas"
@@ -257,55 +179,6 @@ export default function SchemasPage() {
     />
   );
 
-  if (loading) {
-    return (
-      <div className="container mx-auto py-8">
-        {schemasPageHeader}
-        <div className="flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="container mx-auto py-8">
-        {schemasPageHeader}
-        <div className="mb-4">
-          <p className="text-gray-600">Define and manage content types for your repository</p>
-        </div>
-        <div className="bg-red-50 border border-red-200 rounded-md p-4">
-          <div className="flex">
-            <div className="flex-shrink-0">
-              <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
-                <path
-                  fillRule="evenodd"
-                  d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-                  clipRule="evenodd"
-                />
-              </svg>
-            </div>
-            <div className="ml-3">
-              <h3 className="text-sm font-medium text-red-800">Error loading schemas</h3>
-              <div className="mt-2 text-sm text-red-700">
-                <p>{error}</p>
-              </div>
-              <div className="mt-4">
-                <button
-                  onClick={loadSchemas}
-                  className="bg-red-100 text-red-800 px-3 py-1 rounded text-sm hover:bg-red-200"
-                >
-                  Try Again
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="container mx-auto py-8">
       {state.view === 'list' && (
@@ -317,7 +190,7 @@ export default function SchemasPage() {
               <br />
               Create schemas first, then you can create content instances based on these templates.
             </p>
-            {schemas.length === 0 && (
+            {!loading && schemasList.length === 0 && !error && (
               <div className="mt-4 bg-blue-50 border border-blue-200 rounded-md p-4">
                 <div className="flex">
                   <div className="flex-shrink-0">
@@ -344,13 +217,22 @@ export default function SchemasPage() {
               </div>
             )}
           </div>
-          <SchemaList
-            schemas={schemas}
-            onCreateSchema={handleCreateSchema}
-            onEditSchema={handleEditSchema}
-            onDeleteSchema={handleDeleteSchema}
-            onImportSchemas={handleImportSchemas}
-          />
+
+          <ProgressiveLoading
+            loading={loading}
+            data={schemasList}
+            skeleton={<SchemaListSkeleton count={3} />}
+            error={error}
+            onRetry={refreshSchemas}
+          >
+            <SchemaList
+              schemas={schemasList}
+              onCreateSchema={handleCreateSchema}
+              onEditSchema={handleEditSchema}
+              onDeleteSchema={handleDeleteSchema}
+              onImportSchemas={handleImportSchemas}
+            />
+          </ProgressiveLoading>
 
           <SchemaImportModal
             isOpen={importModalOpen}
@@ -384,6 +266,7 @@ export default function SchemasPage() {
             onSave={handleSaveSchema}
             onCancel={handleCancel}
             repoInfo={repoInfo}
+            onSchemaListChange={handleSchemaListChange}
           />
         </>
       )}
