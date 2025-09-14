@@ -34,10 +34,12 @@ export function SetupWizard({ repository }: SetupWizardProps) {
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(false);
   const [gitcmsConfig, setGitcmsConfig] = useState<GitCMSConfig | null>(null);
+  const [initResult, setInitResult] = useState<any>(null);
   const [setupConfig, setSetupConfig] = useState({
     contentPath: 'content',
     mediaPath: 'public/media',
     collections: [] as string[],
+    includeDefaultSchemas: true,
   });
   const [step, setStep] = useState<'check' | 'configure' | 'complete'>('check');
   const router = useRouter();
@@ -96,6 +98,7 @@ export function SetupWizard({ repository }: SetupWizardProps) {
 
       const result = await response.json();
       console.log('GitCMS initialized:', result);
+      setInitResult(result);
       setStep('complete');
     } catch (error) {
       console.error('Failed to initialize GitCMS:', error);
@@ -221,6 +224,38 @@ export function SetupWizard({ repository }: SetupWizardProps) {
                   Directory where uploaded media files will be stored
                 </p>
               </div>
+
+              <div className="border-t border-gray-200 pt-4">
+                <div className="flex items-start">
+                  <div className="flex items-center h-5">
+                    <input
+                      id="include-schemas"
+                      type="checkbox"
+                      checked={setupConfig.includeDefaultSchemas}
+                      onChange={e =>
+                        setSetupConfig(prev => ({
+                          ...prev,
+                          includeDefaultSchemas: e.target.checked,
+                        }))
+                      }
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    />
+                  </div>
+                  <div className="ml-3 text-sm">
+                    <label htmlFor="include-schemas" className="font-medium text-gray-700">
+                      Include default schemas
+                    </label>
+                    <p className="text-gray-500">
+                      Create ready-to-use content schemas (Blog Post, Project, Product, Page) for
+                      fast setup and easy learning.
+                      <br />
+                      <span className="text-xs">
+                        Recommended for new users and quick prototyping.
+                      </span>
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div className="flex items-center justify-between pt-4">
@@ -269,8 +304,29 @@ export function SetupWizard({ repository }: SetupWizardProps) {
                 <div className="ml-3">
                   <h4 className="text-sm font-medium text-green-800">Repository Connected</h4>
                   <p className="mt-1 text-sm text-green-700">
-                    GitCMS configuration has been created in {repository.fullName}
+                    {initResult?.message ||
+                      `GitCMS configuration has been created in ${repository.fullName}`}
                   </p>
+                  {initResult?.schemas && initResult.schemas.length > 0 && (
+                    <div className="mt-2">
+                      <p className="text-sm text-green-700 font-medium">
+                        Created {initResult.schemas.length} default schemas:
+                      </p>
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {initResult.schemas.map((schemaId: string) => (
+                          <span
+                            key={schemaId}
+                            className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-green-100 text-green-800"
+                          >
+                            {schemaId}
+                          </span>
+                        ))}
+                      </div>
+                      <p className="mt-1 text-xs text-green-600">
+                        You can now create content using these schemas or customize them as needed.
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

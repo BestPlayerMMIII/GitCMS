@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { GitHubApiClient } from '@gitcms/core';
+import { GitHubApiClient, defaultSchemas } from '@gitcms/core';
 
 export async function GET(request: NextRequest) {
   try {
@@ -153,12 +153,74 @@ Generated on ${new Date().toLocaleDateString()}
       });
     }
 
-    await client.createMultipleFiles(files, 'Initialize GitCMS configuration');
+    // Create default schemas if requested
+    if (config.includeDefaultSchemas) {
+      // Create schemas directory
+      files.push({
+        path: '.gitcms/schemas/.gitkeep',
+        content:
+          '# GitCMS Schemas Directory\n\nThis directory contains content type schema definitions.\n',
+      });
+
+      // Add each default schema as a separate file
+      for (const [schemaId, schema] of Object.entries(defaultSchemas)) {
+        files.push({
+          path: `.gitcms/schemas/${schemaId}.json`,
+          content: JSON.stringify(schema, null, 2),
+        });
+      }
+
+      // Update the README to mention schemas
+      const readmeIndex = files.findIndex(file => file.path === '.gitcms/README.md');
+      if (readmeIndex !== -1) {
+        files[readmeIndex].content = `# GitCMS Configuration
+
+This directory contains the GitCMS configuration for this repository.
+
+## Files
+
+- \`config.json\`: Main configuration file
+- \`schemas/\`: Content type schemas (${Object.keys(defaultSchemas).length} default schemas included)
+- \`collections/\`: Collection definitions
+
+## Content Structure
+
+- Content Path: \`${defaultConfig.contentPath}\`
+- Media Path: \`${defaultConfig.mediaPath}\`
+
+## Default Schemas
+
+The following schemas have been created for you:
+
+${Object.entries(defaultSchemas)
+  .map(
+    ([id, schema]) =>
+      `- **${schema.metadata?.name || id}** (\`${id}\`): ${schema.metadata?.description || 'No description'}`
+  )
+  .join('\n')}
+
+You can edit these schemas or create new ones through the GitCMS admin interface.
+
+Generated on ${new Date().toLocaleDateString()}
+`;
+      }
+    }
+
+    await client.createMultipleFiles(
+      files,
+      config.includeDefaultSchemas
+        ? 'Initialize GitCMS configuration with default schemas'
+        : 'Initialize GitCMS configuration'
+    );
 
     return NextResponse.json({
       success: true,
       config: defaultConfig,
-      message: 'GitCMS configuration initialized successfully',
+      message: config.includeDefaultSchemas
+        ? `GitCMS configuration initialized successfully with ${Object.keys(defaultSchemas).length} default schemas`
+        : 'GitCMS configuration initialized successfully',
+      schemas: config.includeDefaultSchemas ? Object.keys(defaultSchemas) : [],
+      files: files.map(f => f.path),
     });
   } catch (error) {
     console.error('Failed to initialize GitCMS:', error);

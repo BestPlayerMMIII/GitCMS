@@ -1,35 +1,84 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { PageHeader } from '@/components/page-header';
 import { SchemaList } from '@/components/schemas/schema-list';
 import { SchemaEditor } from '@/components/schemas/schema-editor';
+import { SchemaImportModal } from '@/components/schemas/schema-import-modal';
 import type { GitCMSSchema } from '@gitcms/core';
 
 interface SchemaPageState {
-  view: 'list' | 'edit' | 'create';
+  view: 'list' | 'edit' | 'create' | 'import';
   selectedSchema?: GitCMSSchema;
 }
 
 export default function SchemasPage() {
+  const searchParams = useSearchParams();
   const [state, setState] = useState<SchemaPageState>({ view: 'list' });
   const [schemas, setSchemas] = useState<GitCMSSchema[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [repoInfo, setRepoInfo] = useState<{ owner: string; repo: string } | null>(null);
+  const [importModalOpen, setImportModalOpen] = useState(false);
 
-  // Load schemas from the registry
+  // Load schemas when component mounts or repo info changes
   useEffect(() => {
     loadSchemas();
-  }, []);
+  }, [repoInfo]);
+
+  // Initialize repository info
+  useEffect(() => {
+    const urlOwner = searchParams.get('owner');
+    const urlRepo = searchParams.get('repo');
+
+    if (urlOwner && urlRepo) {
+      // Use URL parameters first
+      setRepoInfo({ owner: urlOwner, repo: urlRepo });
+    } else {
+      // Check localStorage for connected repository
+      const connectedRepo = localStorage.getItem('gitcms-connected-repo');
+      if (connectedRepo) {
+        try {
+          const repoData = JSON.parse(connectedRepo);
+          setRepoInfo({
+            owner: repoData.owner,
+            repo: repoData.name,
+          });
+        } catch (error) {
+          console.error('Failed to parse connected repository:', error);
+        }
+      }
+    }
+  }, [searchParams]);
 
   const loadSchemas = async () => {
     try {
       setLoading(true);
       setError(null);
 
-      const response = await fetch('/api/schemas?action=list');
+      let response;
+
+      // Try to load from repository storage if we have repo info
+      if (repoInfo) {
+        try {
+          response = await fetch(
+            `/api/schemas/storage?action=list&owner=${repoInfo.owner}&repo=${repoInfo.repo}`
+          );
+          if (response.ok) {
+            const data = await response.json();
+            setSchemas(data.schemas || []);
+            return;
+          }
+        } catch (storageError) {
+          console.warn('Failed to load from storage, falling back to registry:', storageError);
+        }
+      }
+
+      // Fall back to registry schemas
+      response = await fetch('/api/schemas?action=list');
       if (!response.ok) {
         throw new Error(`Failed to load schemas: ${response.statusText}`);
       }
@@ -58,12 +107,26 @@ export default function SchemasPage() {
     }
 
     try {
-      const response = await fetch(`/api/schemas?action=delete&schemaId=${schemaId}`, {
-        method: 'DELETE',
-      });
+      let response;
+
+      // Use storage API if repository info is available
+      if (repoInfo) {
+        response = await fetch(
+          `/api/schemas/storage?owner=${repoInfo.owner}&repo=${repoInfo.repo}&schemaId=${schemaId}`,
+          {
+            method: 'DELETE',
+          }
+        );
+      } else {
+        // Fall back to registry API (if it supports deletion)
+        response = await fetch(`/api/schemas?action=delete&schemaId=${schemaId}`, {
+          method: 'DELETE',
+        });
+      }
 
       if (!response.ok) {
-        throw new Error(`Failed to delete schema: ${response.statusText}`);
+        const errorData = await response.json();
+        throw new Error(errorData.error || `Failed to delete schema: ${response.statusText}`);
       }
 
       // Reload schemas
@@ -75,17 +138,26 @@ export default function SchemasPage() {
   };
 
   const handleSaveSchema = async (schema: GitCMSSchema) => {
+    if (!repoInfo) {
+      setError('Repository information not available. Please connect a repository first.');
+      return;
+    }
+
     try {
-      const response = await fetch('/api/schemas?action=save', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ schema }),
-      });
+      const response = await fetch(
+        `/api/schemas/storage?action=save&owner=${repoInfo.owner}&repo=${repoInfo.repo}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ schema }),
+        }
+      );
 
       if (!response.ok) {
-        throw new Error(`Failed to save schema: ${response.statusText}`);
+        const errorData = await response.json();
+        throw new Error(errorData.error || `Failed to save schema: ${response.statusText}`);
       }
 
       // Reload schemas and return to list view
@@ -99,6 +171,77 @@ export default function SchemasPage() {
 
   const handleCancel = () => {
     setState({ view: 'list' });
+  };
+
+  const handleImportSchemas = () => {
+    setImportModalOpen(true);
+  };
+
+  const handleImport = async (schemas: GitCMSSchema[], repoUrl: string) => {
+    if (!repoInfo) {
+      throw new Error('Repository information not available. Please connect a repository first.');
+    }
+
+    // Import schemas one by one with conflict detection
+    const results = {
+      imported: 0,
+      skipped: 0,
+      errors: [] as string[],
+    };
+
+    for (const schema of schemas) {
+      try {
+        const response = await fetch(
+          `/api/schemas/storage?action=save&owner=${repoInfo.owner}&repo=${repoInfo.repo}`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              schema,
+              commitMessage: `Import schema ${schema.id} from ${repoUrl}`,
+            }),
+          }
+        );
+
+        if (response.ok) {
+          results.imported++;
+        } else {
+          const errorData = await response.json();
+          if (response.status === 409) {
+            // Schema already exists - this is okay, we'll skip it
+            results.skipped++;
+          } else {
+            results.errors.push(`${schema.id}: ${errorData.error || response.statusText}`);
+          }
+        }
+      } catch (error) {
+        results.errors.push(
+          `${schema.id}: ${error instanceof Error ? error.message : 'Unknown error'}`
+        );
+      }
+    }
+
+    // Reload schemas to show imported ones
+    await loadSchemas();
+
+    // Show summary message
+    let message = `Import completed: ${results.imported} imported`;
+    if (results.skipped > 0) {
+      message += `, ${results.skipped} skipped (already exist)`;
+    }
+    if (results.errors.length > 0) {
+      message += `, ${results.errors.length} failed`;
+      console.error('Import errors:', results.errors);
+    }
+
+    // You could show a toast notification here instead
+    console.log(message);
+
+    if (results.errors.length > 0) {
+      throw new Error(`Some schemas failed to import:\n${results.errors.join('\n')}`);
+    }
   };
 
   const schemasPageHeader = (
@@ -206,6 +349,13 @@ export default function SchemasPage() {
             onCreateSchema={handleCreateSchema}
             onEditSchema={handleEditSchema}
             onDeleteSchema={handleDeleteSchema}
+            onImportSchemas={handleImportSchemas}
+          />
+
+          <SchemaImportModal
+            isOpen={importModalOpen}
+            onClose={() => setImportModalOpen(false)}
+            onImport={handleImport}
           />
         </>
       )}
