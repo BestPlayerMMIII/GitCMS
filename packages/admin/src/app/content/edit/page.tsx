@@ -4,6 +4,8 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { type GitCMSSchema } from '@gitcms/core';
 import { SchemaForm } from '@/components/content/schema-form';
+import { useRepoSchema, useContentItem, useContentMutations } from '@/lib/api-hooks';
+import { ProgressiveLoading } from '@/components/ui/loading';
 
 interface ContentEditorProps {
   owner: string;
@@ -33,13 +35,37 @@ export default function ContentEditor() {
   const schemaId = searchParams.get('schemaId');
   const contentId = searchParams.get('contentId'); // Optional - if editing existing content
 
-  const [schema, setSchema] = useState<GitCMSSchema | null>(null);
-  const [content, setContent] = useState<ContentData | null>(null);
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
+
+  // Use cached hooks for data fetching
+  const {
+    data: schema,
+    loading: schemaLoading,
+    error: schemaError,
+  } = useRepoSchema(repoInfo?.owner || null, repoInfo?.repo || null, schemaId);
+
+  const {
+    data: content,
+    loading: contentLoading,
+    error: contentError,
+  } = useContentItem(
+    repoInfo?.owner || null,
+    repoInfo?.repo || null,
+    schemaId,
+    contentId || null,
+    { enabled: Boolean(contentId) } // Only fetch if editing existing content
+  );
+
+  const { saveContent } = useContentMutations(repoInfo?.owner || null, repoInfo?.repo || null);
+
+  // Determine loading and error states
+  const loading = schemaLoading || (contentId ? contentLoading : false);
+  const apiError = schemaError || contentError;
+
+  // Local error state for save operations
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // Initialize repository info
   useEffect(() => {
@@ -66,78 +92,6 @@ export default function ContentEditor() {
     }
   }, [searchParams]);
 
-  // Load schema and content
-  useEffect(() => {
-    if (!repoInfo || !schemaId) {
-      setError('Missing required parameters');
-      setLoading(false);
-      return;
-    }
-
-    loadData();
-  }, [repoInfo, schemaId, contentId]);
-
-  const loadData = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      // Load schema from user's repository
-      if (!schemaId || !repoInfo) {
-        throw new Error('Schema ID and repository info are required');
-      }
-
-      const schemaParams = new URLSearchParams({
-        action: 'get',
-        owner: repoInfo.owner,
-        repo: repoInfo.repo,
-        schemaId: schemaId,
-      });
-
-      const schemaResponse = await fetch(`/api/schemas/storage?${schemaParams}`);
-      if (!schemaResponse.ok) {
-        if (schemaResponse.status === 404) {
-          throw new Error(
-            `Custom schema '${schemaId}' not found in repository. Please create it first.`
-          );
-        }
-        throw new Error('Failed to load schema from repository');
-      }
-
-      const schemaResult = await schemaResponse.json();
-      if (!schemaResult.schema) {
-        throw new Error(`Schema not found: ${schemaId}`);
-      }
-      setSchema(schemaResult.schema);
-
-      // Load content if editing existing
-      if (contentId && repoInfo) {
-        const response = await fetch(
-          `/api/content?action=get&owner=${repoInfo.owner}&repo=${repoInfo.repo}&schemaId=${schemaId}&contentId=${contentId}`
-        );
-
-        if (!response.ok) {
-          if (response.status === 404) {
-            throw new Error('Content not found');
-          }
-          throw new Error('Failed to load content');
-        }
-
-        const result = await response.json();
-        if (result.success) {
-          setContent(result.content);
-        } else {
-          throw new Error(result.error || 'Failed to load content');
-        }
-      }
-    } catch (error) {
-      console.error('Error loading data:', error);
-      setError(error instanceof Error ? error.message : 'Failed to load data');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleSave = async (formData: Record<string, any>) => {
     if (!repoInfo || !schemaId) {
       return;
@@ -145,74 +99,22 @@ export default function ContentEditor() {
 
     try {
       setSaving(true);
-      setError(null);
-
-      const action = contentId ? 'update' : 'create';
+      setSaveError(null);
 
       // Extract metadata from form data
       const { _metadata, ...data } = formData;
 
-      const payload = {
-        ...(contentId && { contentId }),
-        schemaId,
-        data,
-        metadata: {
-          ...content?.metadata,
-          ..._metadata, // Include custom ID and other metadata
-          status: content?.metadata?.status || 'draft',
-        },
-      };
+      // Use the cached mutation hook
+      const result = await saveContent(schemaId, data, contentId || undefined);
 
-      const response = await fetch(
-        `/api/content?action=${action}&owner=${repoInfo.owner}&repo=${repoInfo.repo}`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(payload),
-        }
-      );
+      setSavedMessage('Content saved successfully!');
+      setTimeout(() => setSavedMessage(null), 3000);
 
-      if (!response.ok) {
-        let errorMessage = 'Failed to save content';
-        let fieldError = null;
-
-        try {
-          const errorData = await response.json();
-          errorMessage = errorData.error || errorMessage;
-
-          // Handle field-specific errors (like ID validation)
-          if (errorData.field && errorData.type === 'validation_error') {
-            fieldError = { field: errorData.field, message: errorData.error };
-          }
-        } catch {
-          // Use status text if JSON parsing fails
-          errorMessage = response.statusText || errorMessage;
-        }
-
-        if (fieldError) {
-          // If it's a field-specific error, we'll need to pass it back to the form
-          throw new Error(JSON.stringify({ message: errorMessage, fieldError }));
-        } else {
-          throw new Error(errorMessage);
-        }
-      }
-
-      const result = await response.json();
-      if (result.success) {
-        setContent(result.content);
-        setSavedMessage('Content saved successfully!');
-        setTimeout(() => setSavedMessage(null), 3000);
-
-        // Update URL with contentId if creating new content
-        if (!contentId && result.content.id) {
-          const newUrl = new URL(window.location.href);
-          newUrl.searchParams.set('contentId', result.content.id);
-          window.history.replaceState({}, '', newUrl.toString());
-        }
-      } else {
-        throw new Error(result.error || 'Failed to save content');
+      // Update URL with contentId if creating new content
+      if (!contentId && result.content?.id) {
+        const newUrl = new URL(window.location.href);
+        newUrl.searchParams.set('contentId', result.content.id);
+        window.history.replaceState({}, '', newUrl.toString());
       }
     } catch (error) {
       console.error('Save error:', error);
@@ -225,15 +127,15 @@ export default function ContentEditor() {
             setFieldErrors({
               [`_metadata.${parsedError.fieldError.field}`]: parsedError.fieldError.message,
             });
-            setError(parsedError.message);
+            setSaveError(parsedError.message);
           } else {
-            setError(error.message);
+            setSaveError(error.message);
           }
         } catch {
-          setError(error.message);
+          setSaveError(error.message);
         }
       } else {
-        setError('Failed to save content');
+        setSaveError('Failed to save content');
       }
     } finally {
       setSaving(false);
@@ -245,7 +147,7 @@ export default function ContentEditor() {
 
     try {
       setSaving(true);
-      setError(null);
+      setSaveError(null);
 
       // Save first if not already saved
       if (!contentId) {
@@ -255,61 +157,42 @@ export default function ContentEditor() {
       // Extract metadata from form data
       const { _metadata, ...data } = formData;
 
-      // Then publish
-      const publishPayload = {
-        contentId: contentId || content?.id,
-        schemaId,
-        data,
-        metadata: {
-          ...content?.metadata,
-          ..._metadata, // Include custom ID and other metadata
-          status: 'published',
-        },
-      };
+      // Use the cached mutation hook to publish
+      const result = await saveContent(schemaId, data, contentId || content?.id);
 
-      const response = await fetch(
-        `/api/content?action=update&owner=${repoInfo.owner}&repo=${repoInfo.repo}`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(publishPayload),
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error('Failed to publish content');
-      }
-
-      const result = await response.json();
-      if (result.success) {
-        setContent(result.content);
-        setSavedMessage('Content published successfully!');
-        setTimeout(() => setSavedMessage(null), 3000);
-      } else {
-        throw new Error(result.error || 'Failed to publish content');
-      }
+      setSavedMessage('Content published successfully!');
+      setTimeout(() => setSavedMessage(null), 3000);
     } catch (error) {
       console.error('Publish error:', error);
-      setError(error instanceof Error ? error.message : 'Failed to publish content');
+      setSaveError(error instanceof Error ? error.message : 'Failed to publish content');
     } finally {
       setSaving(false);
     }
   };
 
+  // Determine the error to display (API errors take priority)
+  const displayError = apiError?.message || saveError;
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading content editor...</p>
-        </div>
-      </div>
+      <ProgressiveLoading
+        loading={true}
+        data={null}
+        skeleton={
+          <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+              <p className="mt-4 text-gray-600">Loading content editor...</p>
+            </div>
+          </div>
+        }
+      >
+        <div></div>
+      </ProgressiveLoading>
     );
   }
 
-  if (error) {
+  if (displayError) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
@@ -326,12 +209,12 @@ export default function ContentEditor() {
               </div>
               <div className="ml-3">
                 <h3 className="text-sm font-medium text-red-800">Error</h3>
-                <p className="text-sm text-red-700 mt-1">{error}</p>
+                <p className="text-sm text-red-700 mt-1">{displayError}</p>
               </div>
             </div>
           </div>
           <button
-            onClick={loadData}
+            onClick={() => setSaveError(null)}
             className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
           >
             Try Again

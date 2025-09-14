@@ -3,6 +3,8 @@
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { type GitCMSSchema, type FieldDefinition, defaultValidationEngine } from '@gitcms/core';
 import { FieldRenderer, SchemaRenderingProvider } from './field-components';
+import { useRepoSchemas } from '../../lib/api-hooks';
+import { LoadingSpinner } from '../ui/loading';
 
 export interface SchemaFormProps {
   schema: GitCMSSchema;
@@ -49,11 +51,31 @@ export function SchemaForm({
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [availableSchemas, setAvailableSchemas] = useState<GitCMSSchema[]>([]);
 
   // Auto-save related state
   const lastSavedData = useRef<Record<string, any>>(initialData);
   const autoSaveTimeout = useRef<NodeJS.Timeout | null>(null);
+
+  // Use cached hook for schema fetching
+  const {
+    data: availableSchemasData,
+    loading: schemasLoading,
+    error: schemasError,
+  } = useRepoSchemas(repoInfo?.owner || '', repoInfo?.repo || '', {
+    enabled: !!repoInfo?.owner && !!repoInfo?.repo,
+  });
+
+  // Ensure availableSchemas is always an array
+  const availableSchemas = availableSchemasData || [];
+
+  // Update form data when initialData changes (e.g., when content loads from API)
+  useEffect(() => {
+    // Update form data when initialData is provided and has content
+    if (initialData && Object.keys(initialData).length > 0) {
+      setFormData(initialData);
+      lastSavedData.current = initialData;
+    }
+  }, [initialData]);
 
   // Merge external errors with internal errors
   const allErrors = useMemo(() => {
@@ -83,31 +105,6 @@ export function SchemaForm({
       onSaveSuccess();
     }
   }, [formData, onSaveSuccess]);
-
-  // Fetch available schemas for schema reference resolution
-  useEffect(() => {
-    const fetchSchemas = async () => {
-      if (!repoInfo) return;
-
-      try {
-        const params = new URLSearchParams({
-          action: 'list',
-          owner: repoInfo.owner,
-          repo: repoInfo.repo,
-        });
-
-        const response = await fetch(`/api/schemas/storage?${params}`);
-        if (response.ok) {
-          const result = await response.json();
-          setAvailableSchemas(result.schemas || []);
-        }
-      } catch (error) {
-        console.error('Failed to fetch schemas:', error);
-      }
-    };
-
-    fetchSchemas();
-  }, [repoInfo]);
 
   // Auto-save effect - separate from the main update effect
   useEffect(() => {
@@ -416,6 +413,23 @@ export function SchemaForm({
               </div>
             </div>
           </div>
+
+          {/* Show loading state for schemas if needed */}
+          {schemasLoading && repoInfo && (
+            <div className="px-6 py-3 bg-blue-50 border-b border-blue-200 flex items-center">
+              <LoadingSpinner size="sm" />
+              <span className="ml-2 text-sm text-blue-700">Loading schema references...</span>
+            </div>
+          )}
+
+          {/* Show error state for schemas if failed */}
+          {schemasError && repoInfo && (
+            <div className="px-6 py-3 bg-red-50 border-b border-red-200">
+              <p className="text-sm text-red-600">
+                Failed to load schema references: {schemasError.message}
+              </p>
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} className="p-6">
             {/* Form-level errors */}

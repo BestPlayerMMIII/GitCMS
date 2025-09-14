@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import type { GitCMSSchema, FieldDefinition, FieldType } from '@gitcms/core';
 import { SchemaReferenceSelector } from './schema-reference-selector';
+import { useRegistrySchemas, useRepoSchemas } from '../../lib/api-hooks';
+import { ProgressiveLoading } from '../ui/loading';
 
 // Extended object field definition to support schema references
 interface ObjectFieldWithSchemaRef {
@@ -69,8 +71,19 @@ export function SchemaEditor({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [advancedSettingsOpen, setAdvancedSettingsOpen] = useState<Record<string, boolean>>({});
   const [editingFieldNames, setEditingFieldNames] = useState<Record<string, string>>({});
-  const [availableSchemas, setAvailableSchemas] = useState<GitCMSSchema[]>([]);
-  const [schemasLoading, setSchemasLoading] = useState(false);
+
+  // Use cached hooks for schema fetching
+  const { data: registrySchemas = [], loading: registryLoading } = useRegistrySchemas();
+
+  const { data: repoSchemas = [], loading: repoLoading } = useRepoSchemas(
+    repoInfo?.owner || null,
+    repoInfo?.repo || null,
+    { fallbackToRegistry: true }
+  );
+
+  // Determine which schemas to use (repo schemas with registry fallback)
+  const availableSchemas = repoInfo ? repoSchemas : registrySchemas;
+  const schemasLoading = repoInfo ? repoLoading : registryLoading;
 
   useEffect(() => {
     if (schema) {
@@ -84,103 +97,15 @@ export function SchemaEditor({
     }
   }, [schema]);
 
-  // Fetch available schemas when repoInfo changes
-  useEffect(() => {
-    const fetchSchemas = async () => {
-      if (!repoInfo) {
-        // If no repo info, try to fetch from registry
-        try {
-          setSchemasLoading(true);
-          const response = await fetch('/api/schemas?action=list');
-          if (response.ok) {
-            const data = await response.json();
-            const schemas = data.schemas || [];
-            setAvailableSchemas(schemas);
-          }
-        } catch (error) {
-          console.warn('Failed to fetch schemas from registry:', error);
-          setAvailableSchemas([]);
-        } finally {
-          setSchemasLoading(false);
-        }
-        return;
-      }
-
-      // Fetch from repository storage
-      try {
-        setSchemasLoading(true);
-        const response = await fetch(
-          `/api/schemas/storage?action=list&owner=${repoInfo.owner}&repo=${repoInfo.repo}`
-        );
-        if (response.ok) {
-          const data = await response.json();
-          const schemas = data.schemas || [];
-          setAvailableSchemas(schemas);
-        } else {
-          // Fall back to registry schemas if storage fails
-          const fallbackResponse = await fetch('/api/schemas?action=list');
-          if (fallbackResponse.ok) {
-            const data = await fallbackResponse.json();
-            const schemas = data.schemas || [];
-            setAvailableSchemas(schemas);
-          }
-        }
-      } catch (error) {
-        console.warn('Failed to fetch schemas:', error);
-        setAvailableSchemas([]);
-      } finally {
-        setSchemasLoading(false);
-      }
-    };
-
-    fetchSchemas();
-  }, [repoInfo]);
-
   // Helper function to get available schemas for object field references
   const getAvailableSchemas = (): Array<{ id: string; name: string }> => {
     // Filter out the current schema to prevent direct self-reference
-    return availableSchemas
+    return (availableSchemas || [])
       .filter(schema => schema.id !== formData.id)
       .map(schema => ({
         id: schema.id,
         name: schema.metadata?.name || schema.id,
       }));
-  };
-
-  // Function to refresh available schemas
-  const refreshAvailableSchemas = async () => {
-    if (!repoInfo) {
-      try {
-        setSchemasLoading(true);
-        const response = await fetch('/api/schemas?action=list');
-        if (response.ok) {
-          const data = await response.json();
-          const schemas = data.schemas || [];
-          setAvailableSchemas(schemas);
-        }
-      } catch (error) {
-        console.warn('Failed to refresh schemas from registry:', error);
-      } finally {
-        setSchemasLoading(false);
-      }
-      return;
-    }
-
-    try {
-      setSchemasLoading(true);
-      const response = await fetch(
-        `/api/schemas/storage?action=list&owner=${repoInfo.owner}&repo=${repoInfo.repo}`
-      );
-      if (response.ok) {
-        const data = await response.json();
-        const schemas = data.schemas || [];
-        setAvailableSchemas(schemas);
-      }
-    } catch (error) {
-      console.warn('Failed to refresh schemas:', error);
-    } finally {
-      setSchemasLoading(false);
-    }
   };
 
   const validateForm = (): boolean => {
@@ -755,7 +680,7 @@ export function SchemaEditor({
               </label>
               <SchemaReferenceSelector
                 currentSchemaId={formData.id}
-                availableSchemas={availableSchemas}
+                availableSchemas={availableSchemas || []}
                 selectedSchemaRef={field.schemaRef}
                 onSchemaRefChange={schemaRef =>
                   updateCallback({ schemaRef: schemaRef || undefined })
@@ -770,7 +695,7 @@ export function SchemaEditor({
               <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-md">
                 <p className="text-sm text-blue-800">
                   <strong>Referenced Schema:</strong>{' '}
-                  {availableSchemas.find(s => s.id === field.schemaRef)?.metadata?.name ||
+                  {(availableSchemas || []).find(s => s.id === field.schemaRef)?.metadata?.name ||
                     field.schemaRef}
                 </p>
                 <p className="text-xs text-blue-600 mt-1">

@@ -37,9 +37,6 @@ export default function SchemasPage() {
     fallbackToRegistry: true,
   });
 
-  // Ensure schemas is always an array
-  const schemasList = schemas || [];
-
   // Mutations with automatic cache invalidation
   const { saveSchema, deleteSchema } = useSchemaMutations(
     repoInfo?.owner || null,
@@ -190,7 +187,7 @@ export default function SchemasPage() {
               <br />
               Create schemas first, then you can create content instances based on these templates.
             </p>
-            {!loading && schemasList.length === 0 && !error && (
+            {!loading && schemas && schemas.length === 0 && !error && repoInfo && (
               <div className="mt-4 bg-blue-50 border border-blue-200 rounded-md p-4">
                 <div className="flex">
                   <div className="flex-shrink-0">
@@ -220,13 +217,13 @@ export default function SchemasPage() {
 
           <ProgressiveLoading
             loading={loading}
-            data={schemasList}
+            data={schemas}
             skeleton={<SchemaListSkeleton count={3} />}
             error={error}
             onRetry={refreshSchemas}
           >
             <SchemaList
-              schemas={schemasList}
+              schemas={schemas || []}
               onCreateSchema={handleCreateSchema}
               onEditSchema={handleEditSchema}
               onDeleteSchema={handleDeleteSchema}

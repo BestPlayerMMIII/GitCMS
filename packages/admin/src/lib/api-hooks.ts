@@ -12,6 +12,7 @@ import {
   createCacheKey,
   cacheInvalidation,
   DEFAULT_TTL,
+  globalCache,
   type UseApiDataResult,
 } from './api-cache';
 
@@ -199,11 +200,55 @@ export function useContentItem(
         throw new Error(data.error || 'Failed to fetch content item');
       }
 
-      return data.item;
+      return data.content;
     },
     ttl: DEFAULT_TTL.CONTENT_ITEM,
     repoScope: owner && repo ? `${owner}/${repo}` : undefined,
     enabled: enabled && Boolean(owner && repo && schemaId && contentId),
+    staleWhileRevalidate: true,
+  });
+}
+
+// Hook for individual schema
+export function useRepoSchema(
+  owner: string | null,
+  repo: string | null,
+  schemaId: string | null,
+  options: { enabled?: boolean } = {}
+): UseApiDataResult<GitCMSSchema> {
+  const { enabled = true } = options;
+
+  return useApiData({
+    key: owner && repo && schemaId ? `repo:${owner}/${repo}:schema:${schemaId}` : 'disabled',
+    fetcher: async () => {
+      if (!owner || !repo || !schemaId) {
+        throw new Error('Owner, repo, and schemaId are required');
+      }
+
+      const params = new URLSearchParams({
+        action: 'get',
+        owner,
+        repo,
+        schemaId,
+      });
+
+      const response = await fetch(`/api/schemas/storage?${params}`);
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch schema: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+
+      if (!data.schema) {
+        throw new Error('Schema not found');
+      }
+
+      return data.schema;
+    },
+    ttl: DEFAULT_TTL.REPO_SCHEMAS,
+    repoScope: owner && repo ? `${owner}/${repo}` : undefined,
+    enabled: enabled && Boolean(owner && repo && schemaId),
     staleWhileRevalidate: true,
   });
 }
@@ -320,7 +365,11 @@ export function useContentMutations(owner: string | null, repo: string | null) {
         throw new Error('Owner and repo are required');
       }
 
+      // Determine action based on whether we have a contentId (update) or not (create)
+      const action = contentId ? 'update' : 'create';
+
       const params = new URLSearchParams({
+        action,
         owner,
         repo,
       });
@@ -331,7 +380,7 @@ export function useContentMutations(owner: string | null, repo: string | null) {
       };
 
       if (contentId) {
-        payload.id = contentId;
+        payload.contentId = contentId;
       }
 
       const response = await fetch(`/api/content?${params}`, {
@@ -411,4 +460,116 @@ export function useCacheInvalidation() {
     invalidateRegistrySchemas: cacheInvalidation.invalidateRegistrySchemas,
     clearAll: cacheInvalidation.clearAll,
   };
+}
+
+/**
+ * Setup and Configuration Hooks
+ */
+export function useGitHubConfig(
+  owner: string | null,
+  repo: string | null,
+  options: { enabled?: boolean } = {}
+): UseApiDataResult<any> {
+  const { enabled = true } = options;
+
+  return useApiData({
+    key: owner && repo ? `github:config:${owner}:${repo}` : 'disabled',
+    fetcher: async () => {
+      if (!owner || !repo) {
+        throw new Error('Owner and repo are required');
+      }
+
+      const response = await fetch(`/api/github/config?owner=${owner}&repo=${repo}`);
+      if (!response.ok) {
+        throw new Error('Failed to check configuration');
+      }
+
+      return response.json();
+    },
+    ttl: 30000, // Cache for 30 seconds
+    enabled: enabled && !!owner && !!repo,
+  });
+}
+
+export function useGitHubConfigMutations() {
+  const initializeGitCMS = useCallback(
+    async (config: { owner: string; repo: string; config: any }) => {
+      const response = await fetch('/api/github/config', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(config),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to initialize GitCMS');
+      }
+
+      const result = await response.json();
+
+      // Invalidate the config cache after successful initialization
+      globalCache.delete(`github:config:${config.owner}:${config.repo}`);
+
+      return result;
+    },
+    []
+  );
+
+  return {
+    initializeGitCMS,
+  };
+}
+
+/**
+ * GitHub Repository Hooks
+ */
+export function useGitHubRepositories(
+  options: { enabled?: boolean } = {}
+): UseApiDataResult<any[]> {
+  const { enabled = true } = options;
+
+  return useApiData({
+    key: 'github:repositories',
+    fetcher: async () => {
+      const response = await fetch('/api/github/repositories');
+      if (!response.ok) {
+        throw new Error('Failed to fetch repositories');
+      }
+      return response.json();
+    },
+    ttl: 60000, // Cache for 1 minute
+    enabled,
+  });
+}
+
+/**
+ * Public Schema Registry Hooks
+ */
+export function usePublicSchemas(
+  owner: string | null,
+  repo: string | null,
+  options: { enabled?: boolean } = {}
+): UseApiDataResult<GitCMSSchema[]> {
+  const { enabled = true } = options;
+
+  return useApiData({
+    key: owner && repo ? `public:schemas:${owner}:${repo}` : 'disabled',
+    fetcher: async () => {
+      if (!owner || !repo) {
+        throw new Error('Owner and repo are required');
+      }
+
+      const response = await fetch(`/api/schemas/public?owner=${owner}&repo=${repo}`);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `Failed to fetch schemas: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      return data.schemas || [];
+    },
+    ttl: 300000, // Cache for 5 minutes
+    enabled: enabled && !!owner && !!repo,
+  });
 }

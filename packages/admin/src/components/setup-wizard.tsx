@@ -1,8 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, ArrowRight, CheckCircle, AlertCircle, Folder, Settings } from 'lucide-react';
+import { useGitHubConfig, useGitHubConfigMutations } from '../lib/api-hooks';
+import { LoadingSpinner } from './ui/loading';
 
 interface Repository {
   owner: string;
@@ -32,8 +34,6 @@ interface SetupWizardProps {
 
 export function SetupWizard({ repository }: SetupWizardProps) {
   const [loading, setLoading] = useState(false);
-  const [checking, setChecking] = useState(false);
-  const [gitcmsConfig, setGitcmsConfig] = useState<GitCMSConfig | null>(null);
   const [initResult, setInitResult] = useState<any>(null);
   const [setupConfig, setSetupConfig] = useState({
     contentPath: 'content',
@@ -44,62 +44,49 @@ export function SetupWizard({ repository }: SetupWizardProps) {
   const [step, setStep] = useState<'check' | 'configure' | 'complete'>('check');
   const router = useRouter();
 
-  const checkConfiguration = async () => {
-    setChecking(true);
-    try {
-      const response = await fetch(
-        `/api/github/config?owner=${repository.owner}&repo=${repository.name}`
-      );
+  // Use cached hooks for GitHub configuration
+  const {
+    data: gitcmsConfig,
+    loading: checking,
+    error: configError,
+    invalidate: refetchConfig,
+  } = useGitHubConfig(repository.owner, repository.name);
 
-      if (!response.ok) {
-        throw new Error('Failed to check configuration');
-      }
+  const { initializeGitCMS: initializeGitCMSMutation } = useGitHubConfigMutations();
 
-      const config = await response.json();
-      setGitcmsConfig(config);
-
-      if (config.hasGitCMS) {
+  // Handle step transitions based on config data
+  useEffect(() => {
+    if (gitcmsConfig) {
+      if (gitcmsConfig.hasGitCMS) {
         setStep('complete');
       } else {
         setStep('configure');
         // Use suggested setup from detected structure
-        if (config.contentStructure?.suggestedSetup) {
+        if (gitcmsConfig.contentStructure?.suggestedSetup) {
           setSetupConfig(prev => ({
             ...prev,
-            contentPath: config.contentStructure.suggestedSetup,
+            contentPath: gitcmsConfig.contentStructure.suggestedSetup,
           }));
         }
       }
-    } catch (error) {
-      console.error('Failed to check configuration:', error);
-    } finally {
-      setChecking(false);
     }
-  };
+  }, [gitcmsConfig]);
 
-  const initializeGitCMS = async () => {
+  const handleInitializeGitCMS = async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/github/config', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          owner: repository.owner,
-          repo: repository.name,
-          config: setupConfig,
-        }),
+      const result = await initializeGitCMSMutation({
+        owner: repository.owner,
+        repo: repository.name,
+        config: setupConfig,
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to initialize GitCMS');
-      }
-
-      const result = await response.json();
       console.log('GitCMS initialized:', result);
       setInitResult(result);
       setStep('complete');
+
+      // Refresh the config to show updated state
+      refetchConfig();
     } catch (error) {
       console.error('Failed to initialize GitCMS:', error);
     } finally {
@@ -137,15 +124,11 @@ export function SetupWizard({ repository }: SetupWizardProps) {
               </p>
             </div>
             <button
-              onClick={checkConfiguration}
+              onClick={refetchConfig}
               disabled={checking}
               className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
             >
-              {checking ? (
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-              ) : (
-                <ArrowRight className="h-4 w-4" />
-              )}
+              {checking ? <LoadingSpinner size="sm" /> : <ArrowRight className="h-4 w-4" />}
               <span>{checking ? 'Analyzing...' : 'Analyze Repository'}</span>
             </button>
           </div>
@@ -177,7 +160,7 @@ export function SetupWizard({ repository }: SetupWizardProps) {
                     Detected Content Directories
                   </h4>
                   <div className="space-y-2">
-                    {gitcmsConfig.contentStructure.detectedPaths.map(path => (
+                    {gitcmsConfig.contentStructure.detectedPaths.map((path: any) => (
                       <div
                         key={path.path}
                         className="flex items-center justify-between bg-gray-50 rounded p-3"
@@ -267,15 +250,11 @@ export function SetupWizard({ repository }: SetupWizardProps) {
                 <span>Back</span>
               </button>
               <button
-                onClick={initializeGitCMS}
+                onClick={handleInitializeGitCMS}
                 disabled={loading}
                 className="flex items-center space-x-2 px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
               >
-                {loading ? (
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                ) : (
-                  <Settings className="h-4 w-4" />
-                )}
+                {loading ? <LoadingSpinner size="sm" /> : <Settings className="h-4 w-4" />}
                 <span>{loading ? 'Setting up...' : 'Initialize GitCMS'}</span>
               </button>
             </div>

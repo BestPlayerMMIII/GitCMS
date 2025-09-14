@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { Search, GitBranch, Calendar, Lock, Unlock, Star, Eye } from 'lucide-react';
+import { useGitHubRepositories } from '../lib/api-hooks';
+import { LoadingSpinner } from './ui/loading';
 
 interface Repository {
   owner: string;
@@ -29,42 +31,19 @@ export function RepositoryPicker({
   inSelectedRepository,
 }: RepositoryPickerProps) {
   const { data: session } = useSession();
-  const [repositories, setRepositories] = useState<Repository[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState<'all' | 'public' | 'private'>('all');
 
-  useEffect(() => {
-    fetchRepositories();
-  }, [session]);
+  // Use cached hook for repositories
+  const {
+    data: repositories = [],
+    loading,
+    error,
+  } = useGitHubRepositories({
+    enabled: !!session?.accessToken,
+  });
 
-  const fetchRepositories = async () => {
-    if (!session?.accessToken) {
-      setError('Authentication required');
-      setLoading(false);
-      return;
-    }
-
-    try {
-      setLoading(true);
-      const response = await fetch('/api/github/repositories');
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch repositories');
-      }
-
-      const repos = await response.json();
-      setRepositories(repos);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch repositories');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const filteredRepositories = repositories.filter(repo => {
+  const filteredRepositories = (repositories || []).filter(repo => {
     const matchesSearch =
       repo.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       repo.fullName.toLowerCase().includes(searchTerm.toLowerCase());
@@ -101,11 +80,11 @@ export function RepositoryPicker({
           <div className="text-red-500">⚠️</div>
           <div>
             <h3 className="font-medium text-red-800">Error loading repositories</h3>
-            <p className="text-red-600 text-sm">{error}</p>
+            <p className="text-red-600 text-sm">{error?.message || String(error)}</p>
           </div>
         </div>
         <button
-          onClick={fetchRepositories}
+          onClick={() => window.location.reload()}
           className="mt-2 text-red-700 hover:text-red-900 text-sm font-medium"
         >
           Try again

@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import type { GitCMSSchema } from '@gitcms/core';
+import { usePublicSchemas } from '../../lib/api-hooks';
+import { LoadingSpinner } from '../ui/loading';
 
 interface SchemaImportModalProps {
   isOpen: boolean;
@@ -46,6 +48,19 @@ export function SchemaImportModal({ isOpen, onClose, onImport }: SchemaImportMod
       return null;
     }
   };
+
+  // Parse repository info from URL
+  const repoInfo = state.repoUrl ? parseGitHubUrl(state.repoUrl) : null;
+
+  // Use cached hook for fetching public schemas
+  const {
+    data: fetchedSchemas,
+    loading: fetchingSchemas,
+    error: fetchError,
+    invalidate: refetchSchemas,
+  } = usePublicSchemas(repoInfo?.owner || null, repoInfo?.repo || null, {
+    enabled: false, // We'll trigger this manually
+  });
 
   const fetchSchemas = async () => {
     const repoInfo = parseGitHubUrl(state.repoUrl);
@@ -235,7 +250,7 @@ export function SchemaImportModal({ isOpen, onClose, onImport }: SchemaImportMod
 
                 {state.step === 'loading' && (
                   <div className="mt-4 text-center">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+                    <LoadingSpinner />
                     <p className="mt-2 text-sm text-gray-500">
                       Fetching schemas from repository...
                     </p>

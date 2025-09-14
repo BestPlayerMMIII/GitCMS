@@ -342,11 +342,15 @@ export function useApiData<T>(options: UseApiDataOptions<T>): UseApiDataResult<T
           error: cached.error || null,
           isStale,
         }));
+      } else if (!cached && enabled) {
+        // Cache was invalidated - trigger refetch if enabled
+        setState(prev => ({ ...prev, data: null, error: null, isStale: false }));
+        fetchData();
       }
     });
 
     return unsubscribe;
-  }, [key, ttl]);
+  }, [key, ttl, enabled, fetchData]);
 
   // Initial fetch or refresh on mount
   useEffect(() => {
