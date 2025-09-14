@@ -429,6 +429,7 @@ export default function ContentEditor() {
           submitLabel={saving ? 'Publishing...' : 'Publish'}
           showIdField={!contentId} // Show ID field only when creating new content
           externalErrors={fieldErrors}
+          repoInfo={repoInfo}
         />
       </div>
     </div>

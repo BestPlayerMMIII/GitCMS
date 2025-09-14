@@ -239,7 +239,21 @@ export default function ContentList() {
     const descFields = ['description', 'excerpt', 'summary', 'content'];
     for (const field of descFields) {
       if (item.data[field] && typeof item.data[field] === 'string') {
-        return item.data[field].substring(0, 150) + (item.data[field].length > 150 ? '...' : '');
+        // Strip HTML tags from rich-text content
+        const cleanText = item.data[field]
+          .replace(/<[^>]*>/g, ' ') // Remove HTML tags
+          .replace(/&nbsp;/g, ' ') // Replace non-breaking spaces
+          .replace(/&amp;/g, '&') // Replace HTML entities
+          .replace(/&lt;/g, '<')
+          .replace(/&gt;/g, '>')
+          .replace(/&quot;/g, '"')
+          .replace(/&#39;/g, "'")
+          .replace(/\s+/g, ' ') // Replace multiple whitespace with single space
+          .trim(); // Remove leading/trailing whitespace
+
+        if (cleanText.length === 0) continue; // Skip empty fields after cleaning
+
+        return cleanText.substring(0, 150) + (cleanText.length > 150 ? '...' : '');
       }
     }
     return 'No description available';

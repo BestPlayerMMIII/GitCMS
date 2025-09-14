@@ -2,11 +2,30 @@
 
 import { useState, useEffect } from 'react';
 import type { GitCMSSchema, FieldDefinition, FieldType } from '@gitcms/core';
+import { SchemaReferenceSelector } from './schema-reference-selector';
+
+// Extended object field definition to support schema references
+interface ObjectFieldWithSchemaRef {
+  type: 'object';
+  label: string;
+  description?: string;
+  placeholder?: string;
+  defaultValue?: any;
+  required?: boolean;
+  hidden?: boolean;
+  readonly?: boolean;
+  group?: string;
+  order?: number;
+  properties?: Record<string, FieldDefinition>;
+  schemaRef?: string; // Reference to another schema ID
+}
 
 interface SchemaEditorProps {
   schema?: GitCMSSchema;
   onSave: (schema: GitCMSSchema) => void;
   onCancel: () => void;
+  repoInfo?: { owner: string; repo: string } | null;
+  onSchemaListChange?: () => void; // Callback to trigger schema list refresh
 }
 
 const FIELD_TYPES = [
@@ -26,7 +45,13 @@ const FIELD_TYPES = [
 ] as const;
 type FieldTypeValue = (typeof FIELD_TYPES)[number];
 
-export function SchemaEditor({ schema, onSave, onCancel }: SchemaEditorProps) {
+export function SchemaEditor({
+  schema,
+  onSave,
+  onCancel,
+  repoInfo,
+  onSchemaListChange,
+}: SchemaEditorProps) {
   const [formData, setFormData] = useState<GitCMSSchema>(() => ({
     id: '',
     metadata: {
@@ -43,6 +68,9 @@ export function SchemaEditor({ schema, onSave, onCancel }: SchemaEditorProps) {
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [advancedSettingsOpen, setAdvancedSettingsOpen] = useState<Record<string, boolean>>({});
+  const [editingFieldNames, setEditingFieldNames] = useState<Record<string, string>>({});
+  const [availableSchemas, setAvailableSchemas] = useState<GitCMSSchema[]>([]);
+  const [schemasLoading, setSchemasLoading] = useState(false);
 
   useEffect(() => {
     if (schema) {
@@ -55,6 +83,105 @@ export function SchemaEditor({ schema, onSave, onCancel }: SchemaEditorProps) {
       setAdvancedSettingsOpen(initialAdvancedSettings);
     }
   }, [schema]);
+
+  // Fetch available schemas when repoInfo changes
+  useEffect(() => {
+    const fetchSchemas = async () => {
+      if (!repoInfo) {
+        // If no repo info, try to fetch from registry
+        try {
+          setSchemasLoading(true);
+          const response = await fetch('/api/schemas?action=list');
+          if (response.ok) {
+            const data = await response.json();
+            const schemas = data.schemas || [];
+            setAvailableSchemas(schemas);
+          }
+        } catch (error) {
+          console.warn('Failed to fetch schemas from registry:', error);
+          setAvailableSchemas([]);
+        } finally {
+          setSchemasLoading(false);
+        }
+        return;
+      }
+
+      // Fetch from repository storage
+      try {
+        setSchemasLoading(true);
+        const response = await fetch(
+          `/api/schemas/storage?action=list&owner=${repoInfo.owner}&repo=${repoInfo.repo}`
+        );
+        if (response.ok) {
+          const data = await response.json();
+          const schemas = data.schemas || [];
+          setAvailableSchemas(schemas);
+        } else {
+          // Fall back to registry schemas if storage fails
+          const fallbackResponse = await fetch('/api/schemas?action=list');
+          if (fallbackResponse.ok) {
+            const data = await fallbackResponse.json();
+            const schemas = data.schemas || [];
+            setAvailableSchemas(schemas);
+          }
+        }
+      } catch (error) {
+        console.warn('Failed to fetch schemas:', error);
+        setAvailableSchemas([]);
+      } finally {
+        setSchemasLoading(false);
+      }
+    };
+
+    fetchSchemas();
+  }, [repoInfo]);
+
+  // Helper function to get available schemas for object field references
+  const getAvailableSchemas = (): Array<{ id: string; name: string }> => {
+    // Filter out the current schema to prevent direct self-reference
+    return availableSchemas
+      .filter(schema => schema.id !== formData.id)
+      .map(schema => ({
+        id: schema.id,
+        name: schema.metadata?.name || schema.id,
+      }));
+  };
+
+  // Function to refresh available schemas
+  const refreshAvailableSchemas = async () => {
+    if (!repoInfo) {
+      try {
+        setSchemasLoading(true);
+        const response = await fetch('/api/schemas?action=list');
+        if (response.ok) {
+          const data = await response.json();
+          const schemas = data.schemas || [];
+          setAvailableSchemas(schemas);
+        }
+      } catch (error) {
+        console.warn('Failed to refresh schemas from registry:', error);
+      } finally {
+        setSchemasLoading(false);
+      }
+      return;
+    }
+
+    try {
+      setSchemasLoading(true);
+      const response = await fetch(
+        `/api/schemas/storage?action=list&owner=${repoInfo.owner}&repo=${repoInfo.repo}`
+      );
+      if (response.ok) {
+        const data = await response.json();
+        const schemas = data.schemas || [];
+        setAvailableSchemas(schemas);
+      }
+    } catch (error) {
+      console.warn('Failed to refresh schemas:', error);
+    } finally {
+      setSchemasLoading(false);
+    }
+  };
 
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
@@ -81,6 +208,35 @@ export function SchemaEditor({ schema, onSave, onCancel }: SchemaEditorProps) {
       if (!field.type) {
         newErrors[`field-${fieldKey}-type`] = 'Field type is required';
       }
+
+      // Validate object field schema references
+      if (field.type === 'object') {
+        const fieldObj = field as any;
+        if (fieldObj.schemaRef) {
+          const availableSchemas = getAvailableSchemas();
+          const schemaExists = availableSchemas.some(schema => schema.id === fieldObj.schemaRef);
+          if (!schemaExists) {
+            newErrors[`field-${fieldKey}-schemaRef`] =
+              'Referenced schema does not exist or would create circular dependency';
+          }
+        }
+        // Note: We allow object fields without schemaRef (they can use inline properties)
+      }
+
+      // Validate array items that are objects
+      if (field.type === 'array') {
+        const arrayField = field as any;
+        if (arrayField.items?.type === 'object' && arrayField.items?.schemaRef) {
+          const availableSchemas = getAvailableSchemas();
+          const schemaExists = availableSchemas.some(
+            schema => schema.id === arrayField.items.schemaRef
+          );
+          if (!schemaExists) {
+            newErrors[`field-${fieldKey}-items-schemaRef`] =
+              'Referenced schema for array items does not exist';
+          }
+        }
+      }
     });
 
     setErrors(newErrors);
@@ -90,6 +246,10 @@ export function SchemaEditor({ schema, onSave, onCancel }: SchemaEditorProps) {
   const handleSave = () => {
     if (validateForm()) {
       onSave(formData);
+      // Trigger schema list refresh after save
+      if (onSchemaListChange) {
+        onSchemaListChange();
+      }
     }
   };
 
@@ -586,6 +746,54 @@ export function SchemaEditor({ schema, onSave, onCancel }: SchemaEditorProps) {
           </>
         );
 
+      case 'object': {
+        return (
+          <>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Schema Reference
+              </label>
+              <SchemaReferenceSelector
+                currentSchemaId={formData.id}
+                availableSchemas={availableSchemas}
+                selectedSchemaRef={field.schemaRef}
+                onSchemaRefChange={schemaRef =>
+                  updateCallback({ schemaRef: schemaRef || undefined })
+                }
+                disabled={schemasLoading}
+                placeholder={
+                  schemasLoading ? 'Loading schemas...' : 'Select a schema to reference...'
+                }
+              />
+            </div>
+            {field.schemaRef && !schemasLoading && (
+              <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                <p className="text-sm text-blue-800">
+                  <strong>Referenced Schema:</strong>{' '}
+                  {availableSchemas.find(s => s.id === field.schemaRef)?.metadata?.name ||
+                    field.schemaRef}
+                </p>
+                <p className="text-xs text-blue-600 mt-1">
+                  Objects using this field will follow the structure defined in the "
+                  {field.schemaRef}" schema.
+                </p>
+              </div>
+            )}
+            {!field.schemaRef && !schemasLoading && (
+              <div className="mt-2 p-3 bg-gray-50 border border-gray-200 rounded-md">
+                <p className="text-sm text-gray-700">
+                  <strong>Alternative:</strong> Define inline properties
+                </p>
+                <p className="text-xs text-gray-600 mt-1">
+                  Without a schema reference, you can define this object's structure using inline
+                  properties (not yet implemented in this UI).
+                </p>
+              </div>
+            )}
+          </>
+        );
+      }
+
       case 'color':
         return null;
 
@@ -616,6 +824,7 @@ export function SchemaEditor({ schema, onSave, onCancel }: SchemaEditorProps) {
                 switch (newItemType) {
                   case 'object':
                     updates.items.properties = {};
+                    updates.items.schemaRef = undefined; // Initialize as undefined, user will select
                     break;
                   case 'select':
                     updates.items.options = [{ label: 'option-1', value: 'option-1' }];
@@ -873,6 +1082,11 @@ export function SchemaEditor({ schema, onSave, onCancel }: SchemaEditorProps) {
       delete newState[fieldKey];
       return newState;
     });
+    setEditingFieldNames(prev => {
+      const newState = { ...prev };
+      delete newState[fieldKey];
+      return newState;
+    });
   };
 
   const updateField = (fieldKey: string, updates: Partial<FieldDefinition>) => {
@@ -901,6 +1115,7 @@ export function SchemaEditor({ schema, onSave, onCancel }: SchemaEditorProps) {
         break;
       case 'object':
         updates.properties = {};
+        updates.schemaRef = undefined; // Initialize as undefined, user will select
         break;
       case 'select':
         updates.options = [{ label: 'option-1', value: 'option-1' }];
@@ -932,6 +1147,48 @@ export function SchemaEditor({ schema, onSave, onCancel }: SchemaEditorProps) {
       const isOpen = newState[oldKey] || false;
       delete newState[oldKey];
       newState[newKey] = isOpen;
+      return newState;
+    });
+
+    setEditingFieldNames(prev => {
+      const newState = { ...prev };
+      // If the old key was being edited, remove it from editing state
+      delete newState[oldKey];
+      return newState;
+    });
+  };
+
+  // Helper functions for field name editing
+  const startEditingFieldName = (fieldKey: string) => {
+    setEditingFieldNames(prev => ({
+      ...prev,
+      [fieldKey]: fieldKey,
+    }));
+  };
+
+  const updateEditingFieldName = (originalKey: string, newValue: string) => {
+    setEditingFieldNames(prev => ({
+      ...prev,
+      [originalKey]: newValue,
+    }));
+  };
+
+  const commitFieldNameChange = (originalKey: string) => {
+    const newKey = editingFieldNames[originalKey];
+    if (newKey && newKey !== originalKey && newKey.trim()) {
+      renameField(originalKey, newKey.trim());
+    }
+    setEditingFieldNames(prev => {
+      const newState = { ...prev };
+      delete newState[originalKey];
+      return newState;
+    });
+  };
+
+  const cancelFieldNameEdit = (originalKey: string) => {
+    setEditingFieldNames(prev => {
+      const newState = { ...prev };
+      delete newState[originalKey];
       return newState;
     });
   };
@@ -1062,15 +1319,28 @@ export function SchemaEditor({ schema, onSave, onCancel }: SchemaEditorProps) {
             {errors.fields && <p className="mb-4 text-sm text-red-600">{errors.fields}</p>}
 
             <div className="space-y-4">
-              {Object.entries(formData.fields || {}).map(([fieldKey, field]) => (
-                <div key={fieldKey} className="border border-gray-200 rounded-lg p-4">
+              {Object.entries(formData.fields || {}).map(([fieldKey, field], index) => (
+                <div
+                  key={`field-${index}-${fieldKey}`}
+                  className="border border-gray-200 rounded-lg p-4"
+                >
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700">Field Key</label>
                       <input
                         type="text"
-                        value={fieldKey}
-                        onChange={e => renameField(fieldKey, e.target.value)}
+                        value={editingFieldNames[fieldKey] ?? fieldKey}
+                        onFocus={() => startEditingFieldName(fieldKey)}
+                        onChange={e => updateEditingFieldName(fieldKey, e.target.value)}
+                        onBlur={() => commitFieldNameChange(fieldKey)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') {
+                            e.currentTarget.blur();
+                          } else if (e.key === 'Escape') {
+                            cancelFieldNameEdit(fieldKey);
+                            e.currentTarget.blur();
+                          }
+                        }}
                         className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                         placeholder="field_name"
                       />

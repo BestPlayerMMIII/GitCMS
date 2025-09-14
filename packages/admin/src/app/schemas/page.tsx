@@ -383,6 +383,7 @@ export default function SchemasPage() {
             schema={state.selectedSchema}
             onSave={handleSaveSchema}
             onCancel={handleCancel}
+            repoInfo={repoInfo}
           />
         </>
       )}

@@ -34,6 +34,7 @@ export interface ValidationContext {
   content: Record<string, any>;
   mode: 'create' | 'update';
   strictMode?: boolean;
+  availableSchemas?: GitCMSSchema[]; // For resolving schema references in object fields
 }
 
 // Custom validation function type
@@ -178,11 +179,12 @@ export class ValidationEngine {
   validateContent(
     content: Record<string, any>,
     schema: GitCMSSchema,
-    mode: 'create' | 'update' = 'create'
+    mode: 'create' | 'update' = 'create',
+    availableSchemas?: GitCMSSchema[]
   ): ValidationResult {
     const errors: ValidationError[] = [];
     const warnings: ValidationError[] = [];
-    const context: ValidationContext = { schema, content, mode };
+    const context: ValidationContext = { schema, content, mode, availableSchemas };
 
     // Check required fields
     const requiredFields = Object.entries(schema.fields)
@@ -566,15 +568,38 @@ export class ValidationEngine {
 
     const objectField = field as any;
 
-    if (objectField.properties) {
-      for (const [propName, propField] of Object.entries(objectField.properties)) {
-        const propValue = value[propName];
-        const propErrors = this.validateField(propValue, propField as FieldDefinition, context, [
-          ...path,
-          propName,
-        ]);
-        errors.push(...propErrors);
+    // Determine which properties to validate
+    let propertiesToValidate: Record<string, FieldDefinition> = {};
+
+    // If there's a schema reference, try to resolve it
+    if (objectField.schemaRef && context.availableSchemas) {
+      const referencedSchema = context.availableSchemas.find(s => s.id === objectField.schemaRef);
+      if (referencedSchema) {
+        propertiesToValidate = referencedSchema.fields;
+      } else {
+        // Schema reference not found - this is an error
+        errors.push({
+          field: fieldName,
+          message: `Schema reference "${objectField.schemaRef}" not found`,
+          code: 'SCHEMA_REF_NOT_FOUND',
+          value: objectField.schemaRef,
+          path,
+        });
+        return errors;
       }
+    } else if (objectField.properties) {
+      // Fall back to inline properties
+      propertiesToValidate = objectField.properties;
+    }
+
+    // Validate each property
+    for (const [propName, propField] of Object.entries(propertiesToValidate)) {
+      const propValue = value[propName];
+      const propErrors = this.validateField(propValue, propField as FieldDefinition, context, [
+        ...path,
+        propName,
+      ]);
+      errors.push(...propErrors);
     }
 
     return errors;

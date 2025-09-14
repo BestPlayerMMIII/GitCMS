@@ -1,8 +1,76 @@
 'use client';
 
-import React, { useState, useCallback } from 'react';
-import { type FieldDefinition, type FieldOption } from '@gitcms/core';
+import React, {
+  useState,
+  useCallback,
+  useMemo,
+  useRef,
+  useEffect,
+  createContext,
+  useContext,
+} from 'react';
+import { type FieldDefinition, type FieldOption, type GitCMSSchema } from '@gitcms/core';
 import RichTextEditor from './rich-text-editor';
+
+// Context for tracking schema rendering stack to prevent circular dependencies
+interface SchemaRenderingContextValue {
+  getCurrentStack: () => string[];
+  pushSchema: (schemaId: string) => boolean;
+  popSchema: (schemaId: string) => void;
+}
+
+const SchemaRenderingContext = createContext<SchemaRenderingContextValue | null>(null);
+
+// Provider component to wrap the entire form
+export function SchemaRenderingProvider({ children }: { children: React.ReactNode }) {
+  const renderingStackRef = useRef<string[]>([]);
+
+  const getCurrentStack = useCallback(() => {
+    return [...renderingStackRef.current]; // Return copy to prevent mutations
+  }, []);
+
+  const pushSchema = useCallback((schemaId: string): boolean => {
+    if (renderingStackRef.current.includes(schemaId)) {
+      return false; // Would create circular dependency
+    }
+    renderingStackRef.current.push(schemaId);
+    return true;
+  }, []);
+
+  const popSchema = useCallback((schemaId: string) => {
+    renderingStackRef.current = renderingStackRef.current.filter(id => id !== schemaId);
+  }, []);
+
+  // Static context value to prevent re-renders
+  const contextValue = useMemo(
+    () => ({
+      getCurrentStack,
+      pushSchema,
+      popSchema,
+    }),
+    [getCurrentStack, pushSchema, popSchema]
+  );
+
+  return (
+    <SchemaRenderingContext.Provider value={contextValue}>
+      {children}
+    </SchemaRenderingContext.Provider>
+  );
+}
+
+// Hook to access schema rendering context
+function useSchemaRenderingContext() {
+  const context = useContext(SchemaRenderingContext);
+  if (!context) {
+    // If no context provided, return a safe default that allows rendering
+    return {
+      getCurrentStack: () => [],
+      pushSchema: () => true,
+      popSchema: () => {},
+    };
+  }
+  return context;
+}
 
 // Base props for all field components
 export interface BaseFieldProps {
@@ -11,6 +79,17 @@ export interface BaseFieldProps {
   onChange: (value: any) => void;
   error?: string;
   disabled?: boolean;
+  availableSchemas?: GitCMSSchema[]; // For resolving schema references in object fields
+  allErrors?: Record<string, string>; // All form errors for nested error handling
+  fieldPath?: string; // Current field path for error resolution
+}
+export interface BaseFieldProps {
+  field: FieldDefinition;
+  value: any;
+  onChange: (value: any) => void;
+  error?: string;
+  disabled?: boolean;
+  availableSchemas?: GitCMSSchema[]; // Available schemas for schema reference resolution
 }
 
 // String/Text Field Component
@@ -207,7 +286,14 @@ export function SelectField({ field, value, onChange, error, disabled }: BaseFie
 }
 
 // Array Field Component
-export function ArrayField({ field, value, onChange, error, disabled }: BaseFieldProps) {
+export function ArrayField({
+  field,
+  value,
+  onChange,
+  error,
+  disabled,
+  availableSchemas,
+}: BaseFieldProps) {
   const arrayField = field as any;
   const arrayValue = value || [];
 
@@ -270,6 +356,7 @@ export function ArrayField({ field, value, onChange, error, disabled }: BaseFiel
                   value={item}
                   onChange={itemValue => updateItem(index, itemValue)}
                   disabled={disabled}
+                  availableSchemas={availableSchemas}
                 />
               ) : (
                 <div className="text-red-500 text-sm">
@@ -297,15 +384,77 @@ export function ArrayField({ field, value, onChange, error, disabled }: BaseFiel
 }
 
 // Object Field Component
-export function ObjectField({ field, value, onChange, error, disabled }: BaseFieldProps) {
+export function ObjectField({
+  field,
+  value,
+  onChange,
+  error,
+  disabled,
+  availableSchemas,
+  allErrors,
+  fieldPath,
+}: BaseFieldProps) {
   const objectField = field as any;
   const objectValue = value || {};
+
+  // Use context for circular dependency protection
+  const { getCurrentStack, pushSchema, popSchema } = useSchemaRenderingContext();
+
+  // Memoize schema reference resolution to avoid repeated lookups
+  const { properties, circularDependencyError } = useMemo((): {
+    properties: Record<string, FieldDefinition>;
+    circularDependencyError?: string;
+  } => {
+    // If there's a schema reference, try to resolve it
+    if (objectField.schemaRef && availableSchemas) {
+      // Check for circular dependency at runtime
+      const currentStack = getCurrentStack();
+      if (currentStack.includes(objectField.schemaRef)) {
+        const cyclePath = [...currentStack, objectField.schemaRef].join(' → ');
+        return {
+          properties: {},
+          circularDependencyError: `Circular dependency detected: ${cyclePath}`,
+        };
+      }
+
+      const referencedSchema = availableSchemas.find(schema => schema.id === objectField.schemaRef);
+      if (referencedSchema) {
+        return { properties: referencedSchema.fields };
+      }
+    }
+
+    // Fall back to inline properties
+    return { properties: objectField.properties || {} };
+  }, [objectField.schemaRef, objectField.properties, availableSchemas]);
+
+  // Update rendering stack when rendering schema reference
+  useEffect(() => {
+    if (objectField.schemaRef && !circularDependencyError) {
+      const canPush = pushSchema(objectField.schemaRef);
+      if (canPush) {
+        return () => {
+          popSchema(objectField.schemaRef);
+        };
+      }
+    }
+    // Note: pushSchema and popSchema are stable callbacks, don't include in deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [objectField.schemaRef, circularDependencyError]);
 
   const updateProperty = (key: string, propValue: any) => {
     onChange({
       ...objectValue,
       [key]: propValue,
     });
+  };
+
+  // Helper function to get nested field error
+  const getNestedFieldError = (fieldKey: string): string | undefined => {
+    if (!allErrors || !fieldPath) return undefined;
+
+    // Look for nested error with the pattern: fieldPath.fieldKey
+    const nestedErrorKey = `${fieldPath}.${fieldKey}`;
+    return allErrors[nestedErrorKey];
   };
 
   return (
@@ -315,16 +464,58 @@ export function ObjectField({ field, value, onChange, error, disabled }: BaseFie
         {field.required && <span className="text-red-500 ml-1">*</span>}
       </label>
       {field.description && <p className="text-sm text-gray-500">{field.description}</p>}
+
+      {/* Show schema reference info if applicable */}
+      {objectField.schemaRef && (
+        <div className="mb-2 p-2 bg-blue-50 border border-blue-200 rounded text-sm">
+          <span className="text-blue-800">
+            <strong>Schema Reference:</strong> {objectField.schemaRef}
+            {availableSchemas && !availableSchemas.find(s => s.id === objectField.schemaRef) && (
+              <span className="text-red-600 ml-2">(Schema not found)</span>
+            )}
+          </span>
+        </div>
+      )}
+
       <div className="space-y-4 p-4 border border-gray-200 rounded">
-        {Object.entries(objectField.properties || {}).map(([key, propField]) => (
-          <FieldRenderer
-            key={key}
-            field={propField as FieldDefinition}
-            value={objectValue[key]}
-            onChange={propValue => updateProperty(key, propValue)}
-            disabled={disabled}
-          />
-        ))}
+        {circularDependencyError ? (
+          <div className="p-3 bg-red-50 border border-red-200 rounded text-sm text-red-800">
+            <div className="flex items-center">
+              <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                <path
+                  fillRule="evenodd"
+                  d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+                  clipRule="evenodd"
+                />
+              </svg>
+              <strong>Circular Dependency Error</strong>
+            </div>
+            <p className="mt-1">{circularDependencyError}</p>
+            <p className="mt-1 text-xs">
+              This field cannot be rendered due to a circular reference in schema definitions.
+            </p>
+          </div>
+        ) : Object.keys(properties).length === 0 ? (
+          <p className="text-gray-500 text-sm italic">
+            {objectField.schemaRef
+              ? `Schema "${objectField.schemaRef}" not found or has no fields.`
+              : 'No properties defined for this object.'}
+          </p>
+        ) : (
+          Object.entries(properties).map(([key, propField]) => (
+            <FieldRenderer
+              key={key}
+              field={propField as FieldDefinition}
+              value={objectValue[key]}
+              onChange={propValue => updateProperty(key, propValue)}
+              error={getNestedFieldError(key)}
+              disabled={disabled}
+              availableSchemas={availableSchemas}
+              allErrors={allErrors}
+              fieldPath={fieldPath ? `${fieldPath}.${key}` : key}
+            />
+          ))
+        )}
       </div>
       {error && <p className="text-sm text-red-500">{error}</p>}
     </div>
@@ -472,7 +663,16 @@ export function RichTextField({ field, value, onChange, error, disabled }: BaseF
 }
 
 // Main Field Renderer Component
-export function FieldRenderer({ field, value, onChange, error, disabled }: BaseFieldProps) {
+export function FieldRenderer({
+  field,
+  value,
+  onChange,
+  error,
+  disabled,
+  availableSchemas,
+  allErrors,
+  fieldPath,
+}: BaseFieldProps) {
   switch (field.type) {
     case 'string':
     case 'text':
@@ -542,6 +742,9 @@ export function FieldRenderer({ field, value, onChange, error, disabled }: BaseF
           onChange={onChange}
           error={error}
           disabled={disabled}
+          availableSchemas={availableSchemas}
+          allErrors={allErrors}
+          fieldPath={fieldPath}
         />
       );
 
@@ -553,6 +756,9 @@ export function FieldRenderer({ field, value, onChange, error, disabled }: BaseF
           onChange={onChange}
           error={error}
           disabled={disabled}
+          availableSchemas={availableSchemas}
+          allErrors={allErrors}
+          fieldPath={fieldPath}
         />
       );
 

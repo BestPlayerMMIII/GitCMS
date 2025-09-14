@@ -65,6 +65,16 @@ export {
   ContentItemSchema,
 } from './validation';
 
+// Schema dependency checking exports
+export {
+  type DependencyGraph,
+  buildDependencyGraph,
+  extractSchemaReferences,
+  wouldCreateCircularDependency,
+  getCircularDependencyPath,
+  getSafeSchemaReferences,
+} from './schema-dependency-checker';
+
 // Registry system exports
 export {
   // Types
