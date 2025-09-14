@@ -189,11 +189,17 @@ export function SelectField({ field, value, onChange, error, disabled }: BaseFie
         }`}
       >
         {!isMultiple && !field.required && <option value="">Select an option...</option>}
-        {selectField.options?.map((option: FieldOption) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
+        {selectField.options?.map((option: any, index: number) => {
+          // Handle both string arrays and FieldOption arrays
+          const optionValue = typeof option === 'string' ? option : option.value;
+          const optionLabel = typeof option === 'string' ? option : option.label;
+
+          return (
+            <option key={`${optionValue}-${index}`} value={optionValue}>
+              {optionLabel}
+            </option>
+          );
+        })}
       </select>
       {error && <p className="text-sm text-red-500">{error}</p>}
     </div>
@@ -206,6 +212,15 @@ export function ArrayField({ field, value, onChange, error, disabled }: BaseFiel
   const arrayValue = value || [];
 
   const addItem = () => {
+    if (!arrayField.items) {
+      console.warn('Array field items definition is missing:', field);
+      // Fallback to string type if items is not defined
+      const fallbackItem = { type: 'string', label: 'Item' } as any;
+      const newItem = getDefaultValue(fallbackItem);
+      onChange([...arrayValue, newItem]);
+      return;
+    }
+
     const newItem = getDefaultValue(arrayField.items);
     onChange([...arrayValue, newItem]);
   };
@@ -249,12 +264,18 @@ export function ArrayField({ field, value, onChange, error, disabled }: BaseFiel
             className="flex items-start space-x-2 p-3 border border-gray-200 rounded"
           >
             <div className="flex-1">
-              <FieldRenderer
-                field={arrayField.items}
-                value={item}
-                onChange={itemValue => updateItem(index, itemValue)}
-                disabled={disabled}
-              />
+              {arrayField.items ? (
+                <FieldRenderer
+                  field={arrayField.items}
+                  value={item}
+                  onChange={itemValue => updateItem(index, itemValue)}
+                  disabled={disabled}
+                />
+              ) : (
+                <div className="text-red-500 text-sm">
+                  Array items definition is missing. Please check your schema configuration.
+                </div>
+              )}
             </div>
             <button
               type="button"
@@ -594,7 +615,11 @@ export function FieldRenderer({ field, value, onChange, error, disabled }: BaseF
 }
 
 // Utility function to get default value for a field
-function getDefaultValue(field: FieldDefinition): any {
+function getDefaultValue(field: FieldDefinition | undefined): any {
+  if (!field) {
+    return null;
+  }
+
   if (field.defaultValue !== undefined) {
     return field.defaultValue;
   }

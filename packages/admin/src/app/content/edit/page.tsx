@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { type GitCMSSchema, defaultRegistry } from '@gitcms/core';
+import { type GitCMSSchema } from '@gitcms/core';
 import { SchemaForm } from '@/components/content/schema-form';
 
 interface ContentEditorProps {
@@ -82,16 +82,33 @@ export default function ContentEditor() {
       setLoading(true);
       setError(null);
 
-      // Load schema from registry
-      if (!schemaId) {
-        throw new Error('Schema ID is required');
+      // Load schema from user's repository
+      if (!schemaId || !repoInfo) {
+        throw new Error('Schema ID and repository info are required');
       }
 
-      const schemaData = defaultRegistry.get(schemaId);
-      if (!schemaData) {
+      const schemaParams = new URLSearchParams({
+        action: 'get',
+        owner: repoInfo.owner,
+        repo: repoInfo.repo,
+        schemaId: schemaId,
+      });
+
+      const schemaResponse = await fetch(`/api/schemas/storage?${schemaParams}`);
+      if (!schemaResponse.ok) {
+        if (schemaResponse.status === 404) {
+          throw new Error(
+            `Custom schema '${schemaId}' not found in repository. Please create it first.`
+          );
+        }
+        throw new Error('Failed to load schema from repository');
+      }
+
+      const schemaResult = await schemaResponse.json();
+      if (!schemaResult.schema) {
         throw new Error(`Schema not found: ${schemaId}`);
       }
-      setSchema(schemaData);
+      setSchema(schemaResult.schema);
 
       // Load content if editing existing
       if (contentId && repoInfo) {

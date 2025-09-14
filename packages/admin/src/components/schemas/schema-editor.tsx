@@ -18,12 +18,12 @@ const FIELD_TYPES = [
   'datetime',
   'array',
   'object',
-  'media',
-  'reference',
+  'file',
   'rich-text',
   'select',
+  'color',
+  'reference',
 ] as const;
-
 type FieldTypeValue = (typeof FIELD_TYPES)[number];
 
 export function SchemaEditor({ schema, onSave, onCancel }: SchemaEditorProps) {
@@ -42,10 +42,17 @@ export function SchemaEditor({ schema, onSave, onCancel }: SchemaEditorProps) {
   }));
 
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [advancedSettingsOpen, setAdvancedSettingsOpen] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (schema) {
       setFormData({ ...schema });
+      // Initialize advanced settings state for existing fields
+      const initialAdvancedSettings: Record<string, boolean> = {};
+      Object.keys(schema.fields || {}).forEach(fieldKey => {
+        initialAdvancedSettings[fieldKey] = false;
+      });
+      setAdvancedSettingsOpen(initialAdvancedSettings);
     }
   }, [schema]);
 
@@ -99,6 +106,757 @@ export function SchemaEditor({ schema, onSave, onCancel }: SchemaEditorProps) {
         },
       },
     }));
+    setAdvancedSettingsOpen(prev => ({
+      ...prev,
+      [fieldKey]: false,
+    }));
+  };
+
+  const toggleAdvancedSettings = (fieldKey: string) => {
+    setAdvancedSettingsOpen(prev => ({
+      ...prev,
+      [fieldKey]: !prev[fieldKey],
+    }));
+  };
+
+  const renderAdvancedSettings = (fieldKey: string, field: FieldDefinition) => {
+    const isOpen = advancedSettingsOpen[fieldKey] || false;
+
+    return (
+      <div className="mt-4 border-t border-gray-100">
+        <button
+          type="button"
+          onClick={() => toggleAdvancedSettings(fieldKey)}
+          className="flex items-center justify-between w-full pt-3 text-sm font-medium text-gray-700 hover:text-gray-900"
+        >
+          <span>Advanced Settings</span>
+          <svg
+            className={`w-4 h-4 transform transition-transform ${isOpen ? 'rotate-180' : ''}`}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+
+        {isOpen && (
+          <div className="mt-3 space-y-3">
+            {/* Description - common to all fields */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Description</label>
+              <textarea
+                rows={2}
+                value={field.description || ''}
+                onChange={e => updateField(fieldKey, { description: e.target.value })}
+                className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Field description or help text"
+              />
+            </div>
+
+            {/* Placeholder - common to input fields */}
+            {['string', 'text', 'number'].includes(field.type) && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Placeholder</label>
+                <input
+                  type="text"
+                  value={(field as any).placeholder || ''}
+                  onChange={e => updateField(fieldKey, { placeholder: e.target.value })}
+                  className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Placeholder text"
+                />
+              </div>
+            )}
+
+            {/* Default Value */}
+            {!['array', 'object', 'file', 'rich-text', 'reference', 'select'].includes(
+              field.type
+            ) && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Default Value</label>
+                {field.type === 'boolean' ? (
+                  <select
+                    value={field.defaultValue === undefined ? '' : field.defaultValue.toString()}
+                    onChange={e =>
+                      updateField(fieldKey, {
+                        defaultValue: e.target.value === '' ? undefined : e.target.value === 'true',
+                      })
+                    }
+                    className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">No default</option>
+                    <option value="true">True</option>
+                    <option value="false">False</option>
+                  </select>
+                ) : field.type === 'number' ? (
+                  <input
+                    type="number"
+                    value={field.defaultValue || ''}
+                    onChange={e =>
+                      updateField(fieldKey, {
+                        defaultValue: e.target.value ? parseFloat(e.target.value) : undefined,
+                      })
+                    }
+                    className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Default value"
+                  />
+                ) : field.type === 'color' ? (
+                  <input
+                    type="color"
+                    value={field.defaultValue || '#000000'}
+                    onChange={e => updateField(fieldKey, { defaultValue: e.target.value })}
+                    className="mt-1 block w-20 h-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                ) : field.type === 'date' ? (
+                  <input
+                    type="date"
+                    value={field.defaultValue || ''}
+                    onChange={e =>
+                      updateField(fieldKey, { defaultValue: e.target.value || undefined })
+                    }
+                    className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                ) : field.type === 'datetime' ? (
+                  <input
+                    type="datetime-local"
+                    value={field.defaultValue || ''}
+                    onChange={e =>
+                      updateField(fieldKey, { defaultValue: e.target.value || undefined })
+                    }
+                    className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                ) : (
+                  <input
+                    type="text"
+                    value={field.defaultValue || ''}
+                    onChange={e =>
+                      updateField(fieldKey, { defaultValue: e.target.value || undefined })
+                    }
+                    className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Default value"
+                  />
+                )}
+              </div>
+            )}
+
+            {/* Type-specific settings */}
+            {renderTypeSpecificSettings(fieldKey, field)}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderFieldTypeSettings = (
+    field: any,
+    updateCallback: (updates: any) => void
+  ): React.ReactNode => {
+    switch (field.type) {
+      case 'string':
+      case 'text':
+        return (
+          <>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Min Length</label>
+                <input
+                  type="number"
+                  value={field.minLength || ''}
+                  onChange={e =>
+                    updateCallback({
+                      minLength: e.target.value ? parseInt(e.target.value) : undefined,
+                    })
+                  }
+                  className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  min="0"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Max Length</label>
+                <input
+                  type="number"
+                  value={field.maxLength || ''}
+                  onChange={e =>
+                    updateCallback({
+                      maxLength: e.target.value ? parseInt(e.target.value) : undefined,
+                    })
+                  }
+                  className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  min="1"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Pattern (RegEx)</label>
+              <input
+                type="text"
+                value={field.pattern || ''}
+                onChange={e => updateCallback({ pattern: e.target.value || undefined })}
+                className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="e.g., ^[\\w.-]+@[\\w.-]+\\.[a-zA-Z]{2,}$ (email) or ^https?://.*$ (URL)"
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                Common patterns: Email validation, URL validation, slug format, etc.
+              </p>
+            </div>
+          </>
+        );
+
+      case 'number':
+        return (
+          <>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Minimum</label>
+                <input
+                  type="number"
+                  value={field.min ?? ''}
+                  onChange={e =>
+                    updateCallback({
+                      min: e.target.value ? parseFloat(e.target.value) : undefined,
+                    })
+                  }
+                  className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  step="any"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Maximum</label>
+                <input
+                  type="number"
+                  value={field.max ?? ''}
+                  onChange={e =>
+                    updateCallback({
+                      max: e.target.value ? parseFloat(e.target.value) : undefined,
+                    })
+                  }
+                  className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  step="any"
+                />
+              </div>
+            </div>
+            <div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Precision</label>
+                <input
+                  type="number"
+                  value={field.precision || ''}
+                  onChange={e =>
+                    updateCallback({
+                      precision: e.target.value ? parseInt(e.target.value) : undefined,
+                    })
+                  }
+                  className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  min="0"
+                />
+              </div>
+            </div>
+          </>
+        );
+
+      case 'date':
+      case 'datetime':
+        return (
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Min Date</label>
+              <input
+                type={field.type === 'datetime' ? 'datetime-local' : 'date'}
+                value={field.min || ''}
+                onChange={e => updateCallback({ min: e.target.value || undefined })}
+                className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Max Date</label>
+              <input
+                type={field.type === 'datetime' ? 'datetime-local' : 'date'}
+                value={field.max || ''}
+                onChange={e => updateCallback({ max: e.target.value || undefined })}
+                className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+        );
+
+      case 'file':
+        return (
+          <>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Max File Size (MB)</label>
+              <input
+                type="number"
+                value={field.maxSize || ''}
+                onChange={e =>
+                  updateCallback({
+                    maxSize: e.target.value ? parseInt(e.target.value) : undefined,
+                  })
+                }
+                className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                min="1"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Accepted File Types</label>
+              <input
+                type="text"
+                value={field.accept?.join(', ') || ''}
+                onChange={e =>
+                  updateCallback({
+                    accept: e.target.value
+                      ? e.target.value.split(',').map((s: string) => s.trim())
+                      : undefined,
+                  })
+                }
+                className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="e.g., .jpg, .png, .pdf"
+              />
+            </div>
+            <div>
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={field.multiple || false}
+                  onChange={e => updateCallback({ multiple: e.target.checked })}
+                  className="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
+                />
+                <span className="ml-2 text-sm text-gray-700">Allow multiple files</span>
+              </label>
+            </div>
+          </>
+        );
+
+      case 'rich-text':
+        return (
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Max Length</label>
+            <input
+              type="number"
+              value={field.maxLength || ''}
+              onChange={e =>
+                updateCallback({
+                  maxLength: e.target.value ? parseInt(e.target.value) : undefined,
+                })
+              }
+              className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              min="1"
+            />
+          </div>
+        );
+
+      case 'select':
+        return (
+          <>
+            <div>
+              <label className="flex items-center mb-3">
+                <input
+                  type="checkbox"
+                  checked={field.multiple || false}
+                  onChange={e => updateCallback({ multiple: e.target.checked })}
+                  className="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
+                />
+                <span className="ml-2 text-sm text-gray-700">Allow multiple selections</span>
+              </label>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Options</label>
+              <div className="space-y-2">
+                {(field.options || []).map((option: any, index: number) => {
+                  // Normalize option to object format
+                  const optionObj =
+                    typeof option === 'string' ? { label: option, value: option } : option;
+
+                  return (
+                    <div key={index} className="flex gap-2">
+                      <input
+                        type="text"
+                        value={optionObj.label || ''}
+                        onChange={e => {
+                          const newOptions = [...(field.options || [])];
+                          newOptions[index] = {
+                            label: e.target.value,
+                            value: e.target.value,
+                          };
+                          updateCallback({ options: newOptions });
+                        }}
+                        className="flex-1 border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="Option value"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newOptions = [...(field.options || [])];
+                          newOptions.splice(index, 1);
+                          updateCallback({ options: newOptions });
+                        }}
+                        className="px-3 py-2 text-red-600 hover:text-red-800 text-sm"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  );
+                })}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const newOptions = [...(field.options || [])];
+                    const newOptionValue = `option-${newOptions.length + 1}`;
+                    const newOption = {
+                      label: newOptionValue,
+                      value: newOptionValue,
+                    };
+                    newOptions.push(newOption);
+                    updateCallback({ options: newOptions });
+                  }}
+                  className="text-blue-600 hover:text-blue-800 text-sm"
+                >
+                  + Add Option
+                </button>
+              </div>
+            </div>
+            {field.multiple && (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Min Selections</label>
+                  <input
+                    type="number"
+                    value={field.minSelections || ''}
+                    onChange={e =>
+                      updateCallback({
+                        minSelections: e.target.value ? parseInt(e.target.value) : undefined,
+                      })
+                    }
+                    className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    min="0"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Max Selections</label>
+                  <input
+                    type="number"
+                    value={field.maxSelections || ''}
+                    onChange={e =>
+                      updateCallback({
+                        maxSelections: e.target.value ? parseInt(e.target.value) : undefined,
+                      })
+                    }
+                    className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    min="1"
+                  />
+                </div>
+              </div>
+            )}
+          </>
+        );
+
+      case 'reference':
+        return (
+          <>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Collection</label>
+              <input
+                type="text"
+                value={field.collection || ''}
+                onChange={e => updateCallback({ collection: e.target.value })}
+                className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Referenced collection name"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Display Field</label>
+              <input
+                type="text"
+                value={field.displayField || ''}
+                onChange={e => updateCallback({ displayField: e.target.value || undefined })}
+                className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Field to display (e.g., title)"
+              />
+            </div>
+            <div>
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={field.multiple || false}
+                  onChange={e => updateCallback({ multiple: e.target.checked })}
+                  className="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
+                />
+                <span className="ml-2 text-sm text-gray-700">Allow multiple selections</span>
+              </label>
+            </div>
+          </>
+        );
+
+      case 'color':
+        return null;
+
+      default:
+        return null;
+    }
+  };
+
+  const renderTypeSpecificSettings = (fieldKey: string, field: FieldDefinition) => {
+    if (field.type === 'array') {
+      return (
+        <>
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Item Type</label>
+            <select
+              value={(field as any).items?.type || 'string'}
+              onChange={e => {
+                const newItemType = e.target.value;
+                const updates: any = {
+                  items: {
+                    ...(field as any).items,
+                    type: newItemType,
+                    label: (field as any).items?.label || 'Item',
+                  },
+                };
+
+                // Add required properties for specific item types
+                switch (newItemType) {
+                  case 'object':
+                    updates.items.properties = {};
+                    break;
+                  case 'select':
+                    updates.items.options = [{ label: 'option-1', value: 'option-1' }];
+                    break;
+                  case 'reference':
+                    updates.items.collection = '';
+                    break;
+                  case 'color':
+                    updates.items.defaultValue = '#000000';
+                    break;
+                }
+
+                updateField(fieldKey, updates);
+              }}
+              className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {FIELD_TYPES.filter(type => type !== 'array').map(type => (
+                <option key={type} value={type}>
+                  {type.charAt(0).toUpperCase() + type.slice(1).replace('-', ' ')}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Item type specific configuration */}
+          {(field as any).items?.type && (
+            <div className="mt-4 p-4 border border-gray-200 rounded-lg bg-gray-50">
+              <h4 className="text-sm font-medium text-gray-900 mb-3">
+                Item Configuration ({(field as any).items.type})
+              </h4>
+              <div className="space-y-3">
+                {/* Description - common to all item types */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Item Description
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={(field as any).items?.description || ''}
+                    onChange={e =>
+                      updateField(fieldKey, {
+                        items: {
+                          ...(field as any).items,
+                          description: e.target.value,
+                        },
+                      })
+                    }
+                    className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Description for array items"
+                  />
+                </div>
+
+                {/* Placeholder - for input item types */}
+                {['string', 'text', 'number'].includes((field as any).items?.type) && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">
+                      Item Placeholder
+                    </label>
+                    <input
+                      type="text"
+                      value={(field as any).items?.placeholder || ''}
+                      onChange={e =>
+                        updateField(fieldKey, {
+                          items: {
+                            ...(field as any).items,
+                            placeholder: e.target.value,
+                          },
+                        })
+                      }
+                      className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Placeholder text for items"
+                    />
+                  </div>
+                )}
+
+                {/* Default Value - for appropriate item types */}
+                {!['array', 'object', 'file', 'rich-text', 'reference', 'select'].includes(
+                  (field as any).items?.type
+                ) && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">
+                      Item Default Value
+                    </label>
+                    {(field as any).items?.type === 'boolean' ? (
+                      <select
+                        value={
+                          (field as any).items?.defaultValue === undefined
+                            ? ''
+                            : (field as any).items?.defaultValue?.toString()
+                        }
+                        onChange={e =>
+                          updateField(fieldKey, {
+                            items: {
+                              ...(field as any).items,
+                              defaultValue:
+                                e.target.value === '' ? undefined : e.target.value === 'true',
+                            },
+                          })
+                        }
+                        className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">No default</option>
+                        <option value="true">True</option>
+                        <option value="false">False</option>
+                      </select>
+                    ) : (field as any).items?.type === 'number' ? (
+                      <input
+                        type="number"
+                        value={(field as any).items?.defaultValue || ''}
+                        onChange={e =>
+                          updateField(fieldKey, {
+                            items: {
+                              ...(field as any).items,
+                              defaultValue: e.target.value ? parseFloat(e.target.value) : undefined,
+                            },
+                          })
+                        }
+                        className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="Default value for items"
+                      />
+                    ) : (field as any).items?.type === 'color' ? (
+                      <input
+                        type="color"
+                        value={(field as any).items?.defaultValue || '#000000'}
+                        onChange={e =>
+                          updateField(fieldKey, {
+                            items: {
+                              ...(field as any).items,
+                              defaultValue: e.target.value,
+                            },
+                          })
+                        }
+                        className="mt-1 block w-20 h-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    ) : (field as any).items?.type === 'date' ? (
+                      <input
+                        type="date"
+                        value={(field as any).items?.defaultValue || ''}
+                        onChange={e =>
+                          updateField(fieldKey, {
+                            items: {
+                              ...(field as any).items,
+                              defaultValue: e.target.value || undefined,
+                            },
+                          })
+                        }
+                        className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    ) : (field as any).items?.type === 'datetime' ? (
+                      <input
+                        type="datetime-local"
+                        value={(field as any).items?.defaultValue || ''}
+                        onChange={e =>
+                          updateField(fieldKey, {
+                            items: {
+                              ...(field as any).items,
+                              defaultValue: e.target.value || undefined,
+                            },
+                          })
+                        }
+                        className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    ) : (
+                      <input
+                        type="text"
+                        value={(field as any).items?.defaultValue || ''}
+                        onChange={e =>
+                          updateField(fieldKey, {
+                            items: {
+                              ...(field as any).items,
+                              defaultValue: e.target.value || undefined,
+                            },
+                          })
+                        }
+                        className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="Default value for items"
+                      />
+                    )}
+                  </div>
+                )}
+
+                {/* Type-specific settings */}
+                {(field as any).items?.type !== 'boolean' &&
+                  renderFieldTypeSettings((field as any).items, (updates: any) =>
+                    updateField(fieldKey, {
+                      items: {
+                        ...(field as any).items,
+                        ...updates,
+                      },
+                    })
+                  )}
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Min Items</label>
+              <input
+                type="number"
+                value={(field as any).minItems || ''}
+                onChange={e =>
+                  updateField(fieldKey, {
+                    minItems: e.target.value ? parseInt(e.target.value) : undefined,
+                  })
+                }
+                className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                min="0"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Max Items</label>
+              <input
+                type="number"
+                value={(field as any).maxItems || ''}
+                onChange={e =>
+                  updateField(fieldKey, {
+                    maxItems: e.target.value ? parseInt(e.target.value) : undefined,
+                  })
+                }
+                className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                min="1"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="flex items-center">
+              <input
+                type="checkbox"
+                checked={(field as any).uniqueItems || false}
+                onChange={e => updateField(fieldKey, { uniqueItems: e.target.checked })}
+                className="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
+              />
+              <span className="ml-2 text-sm text-gray-700">Unique items only</span>
+            </label>
+          </div>
+        </>
+      );
+    }
+
+    return renderFieldTypeSettings(field, (updates: any) => updateField(fieldKey, updates));
   };
 
   const removeField = (fieldKey: string) => {
@@ -109,6 +867,11 @@ export function SchemaEditor({ schema, onSave, onCancel }: SchemaEditorProps) {
         ...prev,
         fields: newFields,
       };
+    });
+    setAdvancedSettingsOpen(prev => {
+      const newState = { ...prev };
+      delete newState[fieldKey];
+      return newState;
     });
   };
 
@@ -125,6 +888,31 @@ export function SchemaEditor({ schema, onSave, onCancel }: SchemaEditorProps) {
     }));
   };
 
+  const handleFieldTypeChange = (fieldKey: string, newType: string) => {
+    const updates: any = { type: newType };
+
+    // Add required properties for specific field types
+    switch (newType) {
+      case 'array':
+        updates.items = {
+          type: 'string',
+          label: 'Item',
+        };
+        break;
+      case 'object':
+        updates.properties = {};
+        break;
+      case 'select':
+        updates.options = [{ label: 'option-1', value: 'option-1' }];
+        break;
+      case 'reference':
+        updates.collection = '';
+        break;
+    }
+
+    updateField(fieldKey, updates);
+  };
+
   const renameField = (oldKey: string, newKey: string) => {
     if (oldKey === newKey || !newKey.trim()) return;
 
@@ -137,6 +925,14 @@ export function SchemaEditor({ schema, onSave, onCancel }: SchemaEditorProps) {
         ...prev,
         fields: newFields,
       };
+    });
+
+    setAdvancedSettingsOpen(prev => {
+      const newState = { ...prev };
+      const isOpen = newState[oldKey] || false;
+      delete newState[oldKey];
+      newState[newKey] = isOpen;
+      return newState;
     });
   };
 
@@ -284,7 +1080,7 @@ export function SchemaEditor({ schema, onSave, onCancel }: SchemaEditorProps) {
                       <label className="block text-sm font-medium text-gray-700">Type</label>
                       <select
                         value={field.type}
-                        onChange={e => updateField(fieldKey, { type: e.target.value as any })}
+                        onChange={e => handleFieldTypeChange(fieldKey, e.target.value)}
                         className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                       >
                         {FIELD_TYPES.map(type => (
@@ -318,16 +1114,6 @@ export function SchemaEditor({ schema, onSave, onCancel }: SchemaEditorProps) {
                         />
                         <span className="ml-2 text-sm text-gray-700">Required</span>
                       </label>
-
-                      <label className="flex items-center">
-                        <input
-                          type="checkbox"
-                          checked={field.hidden || false}
-                          onChange={e => updateField(fieldKey, { hidden: e.target.checked })}
-                          className="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
-                        />
-                        <span className="ml-2 text-sm text-gray-700">Hidden</span>
-                      </label>
                     </div>
 
                     <button
@@ -352,17 +1138,8 @@ export function SchemaEditor({ schema, onSave, onCancel }: SchemaEditorProps) {
                     </button>
                   </div>
 
-                  {field.description && (
-                    <div className="mt-2">
-                      <input
-                        type="text"
-                        value={field.description}
-                        onChange={e => updateField(fieldKey, { description: e.target.value })}
-                        className="block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="Field description"
-                      />
-                    </div>
-                  )}
+                  {/* Advanced Settings Section */}
+                  {renderAdvancedSettings(fieldKey, field)}
                 </div>
               ))}
             </div>

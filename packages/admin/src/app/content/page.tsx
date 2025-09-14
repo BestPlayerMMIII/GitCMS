@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import type { GitCMSSchema } from '@gitcms/core';
 
 interface ContentItem {
   id: string;
@@ -30,6 +31,11 @@ export default function ContentList() {
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+
+  // Schema selection modal state
+  const [showSchemaModal, setShowSchemaModal] = useState(false);
+  const [availableSchemas, setAvailableSchemas] = useState<GitCMSSchema[]>([]);
+  const [loadingSchemas, setLoadingSchemas] = useState(false);
 
   // Initialize repository info
   useEffect(() => {
@@ -102,6 +108,66 @@ export default function ContentList() {
     }
   };
 
+  const loadAvailableSchemas = async () => {
+    if (!repoInfo) return;
+
+    try {
+      setLoadingSchemas(true);
+
+      // Fetch user-defined schemas from the repository
+      const params = new URLSearchParams({
+        action: 'list',
+        owner: repoInfo.owner,
+        repo: repoInfo.repo,
+      });
+
+      const response = await fetch(`/api/schemas/storage?${params}`);
+
+      if (!response.ok) {
+        throw new Error('Failed to load user schemas');
+      }
+
+      const result = await response.json();
+      setAvailableSchemas(result.schemas || []);
+    } catch (error) {
+      console.error('Error loading user schemas:', error);
+      setError(
+        'Failed to load schemas from repository. Make sure your repository is set up for GitCMS.'
+      );
+      setAvailableSchemas([]);
+    } finally {
+      setLoadingSchemas(false);
+    }
+  };
+
+  const handleCreateContent = () => {
+    if (!repoInfo) {
+      setError('No repository connected. Please connect a repository first.');
+      return;
+    }
+
+    if (availableSchemas.length === 0) {
+      loadAvailableSchemas().then(() => {
+        setShowSchemaModal(true);
+      });
+    } else {
+      setShowSchemaModal(true);
+    }
+  };
+
+  const handleSchemaSelect = (selectedSchema: GitCMSSchema) => {
+    if (!repoInfo) return;
+
+    const params = new URLSearchParams({
+      owner: repoInfo.owner,
+      repo: repoInfo.repo,
+      schemaId: selectedSchema.id,
+    });
+
+    setShowSchemaModal(false);
+    router.push(`/content/edit?${params}`);
+  };
+
   const handleDelete = async (contentId: string, itemSchemaId: string) => {
     if (!repoInfo) return;
 
@@ -141,16 +207,6 @@ export default function ContentList() {
       repo: repoInfo.repo,
       schemaId: item.schemaId,
       contentId: item.id,
-    });
-    return `/content/edit?${params}`;
-  };
-
-  const getCreateUrl = () => {
-    if (!repoInfo) return '/content';
-    const params = new URLSearchParams({
-      owner: repoInfo.owner,
-      repo: repoInfo.repo,
-      schemaId: schemaId || 'blog-post', // Default to blog-post if no schema specified
     });
     return `/content/edit?${params}`;
   };
@@ -338,8 +394,8 @@ export default function ContentList() {
               </div>
             </div>
 
-            <Link
-              href={getCreateUrl()}
+            <button
+              onClick={handleCreateContent}
               className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center space-x-2"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -351,7 +407,7 @@ export default function ContentList() {
                 />
               </svg>
               <span>Create Content</span>
-            </Link>
+            </button>
           </div>
         </div>
       </div>
@@ -419,12 +475,12 @@ export default function ContentList() {
                 : 'Try adjusting your search or filters.'}
             </p>
             {content.length === 0 && (
-              <Link
-                href={getCreateUrl()}
+              <button
+                onClick={handleCreateContent}
                 className="mt-4 inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
               >
                 Create Content
-              </Link>
+              </button>
             )}
           </div>
         ) : (
@@ -488,6 +544,140 @@ export default function ContentList() {
           </div>
         )}
       </div>
+
+      {/* Schema Selection Modal */}
+      {showSchemaModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            {/* Background overlay */}
+            <div
+              className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
+              onClick={() => setShowSchemaModal(false)}
+            />
+
+            {/* Modal panel */}
+            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full">
+              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                <div className="sm:flex sm:items-start">
+                  <div className="w-full">
+                    <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">
+                      Choose Content Type
+                    </h3>
+                    <p className="text-sm text-gray-500 mb-6">
+                      Select from your custom schemas stored in this repository.
+                    </p>
+
+                    {loadingSchemas ? (
+                      <div className="flex items-center justify-center py-8">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                        <span className="ml-3 text-gray-600">Loading schemas...</span>
+                      </div>
+                    ) : availableSchemas.length === 0 ? (
+                      <div className="text-center py-8">
+                        <svg
+                          className="mx-auto h-12 w-12 text-gray-400"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                          />
+                        </svg>
+                        <h4 className="mt-2 text-lg font-medium text-gray-900">
+                          No custom schemas found
+                        </h4>
+                        <p className="mt-1 text-sm text-gray-500">
+                          You need to create custom schemas for this repository before you can add
+                          content. Schemas define the structure and fields for your content types.
+                        </p>
+                        <div className="mt-4 space-y-2">
+                          <Link
+                            href="/schemas"
+                            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
+                            onClick={() => setShowSchemaModal(false)}
+                          >
+                            Create Schema
+                          </Link>
+                          <div className="text-xs text-gray-400">
+                            Repository: {repoInfo?.owner}/{repoInfo?.repo}
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="grid gap-3 max-h-96 overflow-y-auto">
+                        {availableSchemas.map(schema => (
+                          <button
+                            key={schema.id}
+                            onClick={() => handleSchemaSelect(schema)}
+                            className="text-left p-4 border border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 transition-colors group"
+                          >
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1">
+                                <div className="flex items-center space-x-2">
+                                  <h4 className="text-sm font-medium text-gray-900 group-hover:text-blue-700">
+                                    {schema.metadata.name}
+                                  </h4>
+                                  {schema.metadata.icon && (
+                                    <span className="text-lg">{schema.metadata.icon}</span>
+                                  )}
+                                </div>
+                                <p className="text-xs text-gray-500 mt-1">{schema.id}</p>
+                                {schema.metadata.description && (
+                                  <p className="text-sm text-gray-600 mt-2">
+                                    {schema.metadata.description}
+                                  </p>
+                                )}
+                                <div className="flex items-center mt-2 space-x-2">
+                                  {schema.metadata.category && (
+                                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                                      {schema.metadata.category}
+                                    </span>
+                                  )}
+                                  <span className="text-xs text-gray-500">
+                                    {Object.keys(schema.fields).length} field
+                                    {Object.keys(schema.fields).length !== 1 ? 's' : ''}
+                                  </span>
+                                </div>
+                              </div>
+                              <svg
+                                className="w-5 h-5 text-gray-400 group-hover:text-blue-500"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M9 5l7 7-7 7"
+                                />
+                              </svg>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                <button
+                  type="button"
+                  onClick={() => setShowSchemaModal(false)}
+                  className="w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
