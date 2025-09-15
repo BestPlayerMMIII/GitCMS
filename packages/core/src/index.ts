@@ -3,6 +3,8 @@ export * from './utils';
 export * from './github';
 export * from './github-utils';
 export * from './content-parser';
+export * from './media';
+export * from './config';
 
 // Additional GitHub types export
 export type { GitHubFileContent, GitHubCommitResponse } from './github';

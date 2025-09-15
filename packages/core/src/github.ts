@@ -180,6 +180,32 @@ export class GitHubApiClient {
   }
 
   /**
+   * Upload a binary file (already base64 encoded) to the repository
+   */
+  async uploadBinaryFile(
+    path: string,
+    base64Content: string,
+    message: string,
+    sha?: string
+  ): Promise<GitHubCommitResponse> {
+    try {
+      const { data } = await this.octokit.rest.repos.createOrUpdateFileContents({
+        owner: this.owner,
+        repo: this.repo,
+        path,
+        message,
+        content: base64Content,
+        sha,
+        branch: this.branch,
+      });
+
+      return data.commit;
+    } catch (error) {
+      throw this.handleError(error, `Failed to upload binary file: ${path}`);
+    }
+  }
+
+  /**
    * Delete a file from the repository
    */
   async deleteFile(path: string, message: string, sha: string): Promise<GitHubCommitResponse> {

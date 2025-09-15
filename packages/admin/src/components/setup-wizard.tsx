@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, ArrowRight, CheckCircle, AlertCircle, Folder, Settings } from 'lucide-react';
 import { useGitHubConfig, useGitHubConfigMutations } from '../lib/api-hooks';
 import { LoadingSpinner } from './ui/loading';
+import { DEFAULT_GITCMS_CONFIG } from '@gitcms/core';
 
 interface Repository {
   owner: string;
@@ -36,8 +37,8 @@ export function SetupWizard({ repository }: SetupWizardProps) {
   const [loading, setLoading] = useState(false);
   const [initResult, setInitResult] = useState<any>(null);
   const [setupConfig, setSetupConfig] = useState({
-    contentPath: 'content',
-    mediaPath: 'public/media',
+    contentPath: DEFAULT_GITCMS_CONFIG.contentPath!,
+    mediaPath: DEFAULT_GITCMS_CONFIG.mediaPath!,
     collections: [] as string[],
     includeDefaultSchemas: true,
   });

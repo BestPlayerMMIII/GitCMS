@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { GitHubApiClient, defaultSchemas } from '@gitcms/core';
+import {
+  GitHubApiClient,
+  defaultSchemas,
+  DEFAULT_GITCMS_CONFIG,
+  createGitCMSConfig,
+  GitCMSRepositoryConfig,
+} from '@gitcms/core';
 
 export async function GET(request: NextRequest) {
   try {
@@ -99,16 +105,8 @@ export async function POST(request: NextRequest) {
 
     const client = new GitHubApiClient(session.accessToken, owner, repo);
 
-    // Create default GitCMS configuration
-    const defaultConfig = {
-      version: '1.0.0',
-      contentPath: config.contentPath || 'content',
-      mediaPath: config.mediaPath || 'public/media',
-      collections: config.collections || [],
-      schemas: config.schemas || {},
-      createdAt: new Date().toISOString(),
-      ...config,
-    };
+    // Create default GitCMS configuration using centralized defaults
+    const defaultConfig = createGitCMSConfig(config);
 
     const files = [
       {

@@ -613,7 +613,13 @@ export class ValidationEngine {
   ): ValidationError[] {
     const errors: ValidationError[] = [];
 
-    if (typeof value !== 'string' && !(value instanceof File)) {
+    // Accept strings (file paths), File objects, or GitCMSMediaFile objects
+    const isValidMedia =
+      typeof value === 'string' ||
+      value instanceof File ||
+      (value && typeof value === 'object' && 'url' in value && 'filename' in value);
+
+    if (!isValidMedia) {
       errors.push({
         field: fieldName,
         message: `${field.label || fieldName} must be a file or file path`,

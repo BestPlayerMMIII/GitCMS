@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
-import { GitHubApiClient, getGitCMSConfig } from '@gitcms/core';
+import {
+  GitHubApiClient,
+  getGitCMSConfig,
+  getContentPath as getCentralizedContentPath,
+} from '@gitcms/core';
 
 // Content item interface
 interface ContentItem {
@@ -566,18 +570,10 @@ async function getContentPath(
 ): Promise<string> {
   try {
     const config = await getGitCMSConfig(accessToken, owner, repo);
-    // Ensure contentPath is a relative path and doesn't contain '.gitcms'
-    const configPath = config?.contentPath || 'content';
-
-    // If for some reason the config has .gitcms prefix, remove it to fix legacy configs
-    if (configPath.startsWith('.gitcms/')) {
-      return configPath.replace('.gitcms/', '');
-    }
-
-    return configPath;
+    return getCentralizedContentPath(config);
   } catch (error) {
     console.warn('Failed to read GitCMS config, using default contentPath:', error);
-    return 'content';
+    return getCentralizedContentPath(null);
   }
 }
 

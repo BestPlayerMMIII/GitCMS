@@ -9,6 +9,8 @@ import React, {
   createContext,
   useContext,
 } from 'react';
+import { MediaPickerModal } from '../media/media-picker-modal';
+import { File as FileIcon } from 'lucide-react';
 import { type FieldDefinition, type FieldOption, type GitCMSSchema } from '@gitcms/core';
 import RichTextEditor from './rich-text-editor';
 
@@ -555,9 +557,52 @@ export function ColorField({ field, value, onChange, error, disabled }: BaseFiel
   );
 }
 
-// Media Field Component (placeholder for now)
+// Media Field Component
 export function MediaField({ field, value, onChange, error, disabled }: BaseFieldProps) {
   const mediaField = field as any;
+  const [showPicker, setShowPicker] = useState(false);
+  const [repositoryContext, setRepositoryContext] = useState<{
+    owner: string;
+    repo: string;
+  } | null>(null);
+
+  // Get repository context from URL params
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const owner = params.get('owner');
+    const repo = params.get('repo');
+
+    if (owner && repo && owner !== 'placeholder' && repo !== 'placeholder') {
+      setRepositoryContext({ owner, repo });
+    }
+  }, []);
+
+  // Get accepted media types from field configuration
+  const acceptedTypes = mediaField.mediaTypes || undefined;
+  const multiple = mediaField.multiple || false;
+
+  // Parse current value
+  const currentMedia = value ? (Array.isArray(value) ? value : [value]) : [];
+
+  // Handle media selection
+  const handleMediaSelect = (selectedMedia: any) => {
+    if (Array.isArray(selectedMedia)) {
+      onChange(multiple ? selectedMedia : selectedMedia[0]);
+    } else {
+      onChange(multiple ? [selectedMedia] : selectedMedia);
+    }
+    setShowPicker(false);
+  };
+
+  // Handle media removal
+  const handleRemoveMedia = (index: number) => {
+    if (multiple) {
+      const newMedia = currentMedia.filter((_, i) => i !== index);
+      onChange(newMedia.length > 0 ? newMedia : null);
+    } else {
+      onChange(null);
+    }
+  };
 
   return (
     <div className="space-y-2">
@@ -566,26 +611,107 @@ export function MediaField({ field, value, onChange, error, disabled }: BaseFiel
         {field.required && <span className="text-red-500 ml-1">*</span>}
       </label>
       {field.description && <p className="text-sm text-gray-500">{field.description}</p>}
-      <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
-        <div className="text-gray-500">
-          <svg
-            className="mx-auto h-12 w-12 text-gray-400"
-            stroke="currentColor"
-            fill="none"
-            viewBox="0 0 48 48"
-          >
-            <path
-              d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
-              strokeWidth={2}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-          <p className="mt-2">Media upload coming soon</p>
-          <p className="text-sm">Accept: {mediaField.accept?.join(', ') || 'All files'}</p>
+
+      {/* Current Media Display */}
+      {currentMedia.length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 mb-4">
+          {currentMedia.map((media: any, index: number) => (
+            <div key={index} className="relative group">
+              <div className="aspect-square bg-gray-100 rounded-lg overflow-hidden">
+                {media.mediaType === 'image' ? (
+                  <img
+                    src={media.thumbnailUrl || media.url}
+                    alt={media.filename || 'Media'}
+                    className="w-full h-full object-cover"
+                    onError={e => {
+                      // Fallback to original URL if thumbnail fails
+                      const target = e.target as HTMLImageElement;
+                      if (target.src === media.thumbnailUrl && media.url) {
+                        target.src = media.url;
+                      }
+                    }}
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <div className="text-center">
+                      <FileIcon className="w-8 h-8 text-gray-400 mx-auto mb-1" />
+                      <p className="text-xs text-gray-500 truncate">{media.filename || 'File'}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => handleRemoveMedia(index)}
+                className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
+              >
+                ×
+              </button>
+            </div>
+          ))}
         </div>
-      </div>
-      {error && <p className="text-sm text-red-500">{error}</p>}
+      )}
+
+      {/* Add Media Button */}
+      {(!currentMedia.length || multiple) && (
+        <button
+          type="button"
+          onClick={() => setShowPicker(true)}
+          disabled={disabled || !repositoryContext}
+          className="w-full border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          <div className="text-gray-500">
+            <svg
+              className="mx-auto h-12 w-12 text-gray-400 mb-4"
+              stroke="currentColor"
+              fill="none"
+              viewBox="0 0 48 48"
+            >
+              <path
+                d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
+                strokeWidth={2}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            {!repositoryContext ? (
+              <div>
+                <p className="text-sm font-medium text-gray-400">Repository context required</p>
+                <p className="text-xs text-gray-400 mt-1">
+                  Please navigate from a repository page to select media
+                </p>
+              </div>
+            ) : (
+              <div>
+                <p className="text-sm font-medium">
+                  {currentMedia.length > 0 ? 'Add more media' : 'Select media'}
+                </p>
+                <p className="text-xs text-gray-400 mt-1">
+                  {acceptedTypes
+                    ? `Accepted: ${acceptedTypes.join(', ')}`
+                    : 'All media types accepted'}
+                </p>
+              </div>
+            )}
+          </div>
+        </button>
+      )}
+
+      {error && <p className="text-sm text-red-600">{error}</p>}
+
+      {/* Media Picker Modal */}
+      {showPicker && repositoryContext && (
+        <MediaPickerModal
+          isOpen={showPicker}
+          onClose={() => setShowPicker(false)}
+          onSelect={handleMediaSelect}
+          owner={repositoryContext.owner}
+          repo={repositoryContext.repo}
+          multiple={multiple}
+          acceptedTypes={acceptedTypes}
+          title={`Select ${field.label}`}
+        />
+      )}
     </div>
   );
 }
