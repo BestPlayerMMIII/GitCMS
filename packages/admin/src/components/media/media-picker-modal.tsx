@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { GitCMSMediaFile, MediaType } from '@gitcms/core';
 import { MediaLibrary } from './media-library';
 import { MediaUploader } from './media-uploader';
@@ -29,6 +29,26 @@ export function MediaPickerModal({
 }: MediaPickerModalProps) {
   const [currentTab, setCurrentTab] = useState<'library' | 'upload'>('library');
   const [selectedMedia, setSelectedMedia] = useState<GitCMSMediaFile[]>([]);
+
+  // Prevent form submissions within the modal from affecting parent forms
+  useEffect(() => {
+    const handleFormSubmit = (e: Event) => {
+      // Check if the event target is within our modal
+      const target = e.target as Element;
+      const modal = document.querySelector('[data-media-picker-modal]');
+      if (modal && modal.contains(target)) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+
+    // Add event listener to capture form submissions
+    document.addEventListener('submit', handleFormSubmit, true);
+
+    return () => {
+      document.removeEventListener('submit', handleFormSubmit, true);
+    };
+  }, []);
 
   // Handle media selection from library
   const handleMediaSelect = useCallback(
@@ -95,7 +115,14 @@ export function MediaPickerModal({
 
       {/* Modal */}
       <div className="flex min-h-full items-center justify-center p-4">
-        <div className="relative bg-white rounded-lg shadow-xl w-full max-w-6xl max-h-[90vh] flex flex-col">
+        <div
+          className="relative bg-white rounded-lg shadow-xl w-full max-w-6xl max-h-[90vh] flex flex-col"
+          data-media-picker-modal
+          onClick={e => {
+            // Prevent event propagation to parent forms
+            e.stopPropagation();
+          }}
+        >
           {/* Header */}
           <div className="flex items-center justify-between p-6 border-b border-gray-200">
             <div className="flex items-center space-x-4">
@@ -111,7 +138,11 @@ export function MediaPickerModal({
             <div className="flex items-center space-x-1 bg-gray-100 rounded-lg p-1">
               <button
                 type="button"
-                onClick={() => setCurrentTab('library')}
+                onClick={e => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setCurrentTab('library');
+                }}
                 className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
                   currentTab === 'library'
                     ? 'bg-white text-gray-900 shadow-sm'
@@ -123,7 +154,11 @@ export function MediaPickerModal({
               </button>
               <button
                 type="button"
-                onClick={() => setCurrentTab('upload')}
+                onClick={e => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setCurrentTab('upload');
+                }}
                 className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
                   currentTab === 'upload'
                     ? 'bg-white text-gray-900 shadow-sm'
@@ -138,7 +173,11 @@ export function MediaPickerModal({
             {/* Close Button */}
             <button
               type="button"
-              onClick={handleClose}
+              onClick={e => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleClose();
+              }}
               className="text-gray-400 hover:text-gray-600 transition-colors"
             >
               <X className="w-6 h-6" />
@@ -146,18 +185,16 @@ export function MediaPickerModal({
           </div>
 
           {/* Content */}
-          <div className="flex-1 overflow-hidden">
+          <div className="flex-1 overflow-y-auto">
             {currentTab === 'library' ? (
-              <div className="h-full overflow-y-auto">
-                <MediaLibrary
-                  owner={owner}
-                  repo={repo}
-                  onSelect={handleMediaSelect}
-                  multiple={multiple}
-                  acceptedTypes={acceptedTypes}
-                  mode="picker"
-                />
-              </div>
+              <MediaLibrary
+                owner={owner}
+                repo={repo}
+                onSelect={handleMediaSelect}
+                multiple={multiple}
+                acceptedTypes={acceptedTypes}
+                mode="picker"
+              />
             ) : (
               <div className="p-6">
                 <MediaUploader
@@ -218,14 +255,22 @@ export function MediaPickerModal({
                 <div className="flex items-center space-x-3">
                   <button
                     type="button"
-                    onClick={() => setSelectedMedia([])}
+                    onClick={e => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setSelectedMedia([]);
+                    }}
                     className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
                   >
                     Clear Selection
                   </button>
                   <button
                     type="button"
-                    onClick={handleConfirmSelection}
+                    onClick={e => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleConfirmSelection();
+                    }}
                     className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
                   >
                     Select {selectedMedia.length} File{selectedMedia.length !== 1 ? 's' : ''}

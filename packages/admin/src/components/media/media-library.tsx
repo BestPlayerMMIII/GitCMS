@@ -1,8 +1,17 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSession } from 'next-auth/react';
-import { GitCMSMediaFile, MediaType, MediaValidator, MEDIA_TYPES } from '@gitcms/core';
+import {
+  GitCMSMediaFile,
+  MediaType,
+  MediaValidator,
+  MEDIA_TYPES,
+  type CDNConfig,
+} from '@gitcms/core';
+import CDNSettings from './cdn-settings';
+import AdvancedMediaSearch from './advanced-media-search';
+import BulkOperations from './bulk-operations';
 import {
   Camera,
   FolderOpen,
@@ -20,6 +29,8 @@ import {
   Video,
   Image as ImageIcon,
   File,
+  Settings,
+  Globe,
 } from 'lucide-react';
 
 interface MediaLibraryProps {
@@ -55,6 +66,13 @@ export function MediaLibrary({
   const [selectedMedia, setSelectedMedia] = useState<Set<string>>(new Set());
   const [folders, setFolders] = useState<string[]>([]);
   const [showUploader, setShowUploader] = useState(false);
+  const [showCDNSettings, setShowCDNSettings] = useState(false);
+  const [searchResults, setSearchResults] = useState<GitCMSMediaFile[]>([]);
+  const [showBulkOperations, setShowBulkOperations] = useState(false);
+  const [hasActiveSearch, setHasActiveSearch] = useState(false);
+
+  // Determine what media to display
+  const displayedMedia = hasActiveSearch ? searchResults : media;
 
   // Load media files
   const loadMedia = useCallback(async () => {
@@ -140,6 +158,41 @@ export function MediaLibrary({
       console.error('Error loading folders:', err);
     }
   }, [session]);
+
+  // Handle search results
+  const handleSearchResults = useCallback(
+    (results: { media: GitCMSMediaFile[]; hasActiveSearch: boolean }) => {
+      setSearchResults(results.media);
+      setHasActiveSearch(results.hasActiveSearch);
+    },
+    []
+  );
+
+  // Handle bulk operation completion - prevent auto-refresh
+  const handleBulkOperationComplete = useCallback(
+    (result: any) => {
+      console.log('Bulk operation completed:', result);
+      // Only refresh if the operation actually modified files
+      if (result.operation === 'delete' || result.operation === 'move-folder') {
+        loadMedia();
+      }
+    },
+    [loadMedia]
+  );
+
+  // Handle clear selection
+  const handleClearSelection = useCallback(() => {
+    setSelectedMedia(new Set());
+  }, []);
+
+  // Memoize selected media array to prevent recreating on every render
+  const selectedMediaArray = useMemo(
+    () =>
+      Array.from(selectedMedia)
+        .map(id => media.find(m => m.id === id)!)
+        .filter(Boolean),
+    [selectedMedia, media]
+  );
 
   useEffect(() => {
     loadMedia();
@@ -241,6 +294,7 @@ export function MediaLibrary({
       <div className="text-center py-8">
         <div className="text-red-600 mb-4">Error: {error}</div>
         <button
+          type="button"
           onClick={loadMedia}
           className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
         >
@@ -266,26 +320,48 @@ export function MediaLibrary({
           </h1>
           <div className="flex items-center space-x-2">
             {mode === 'library' && (
-              <button
-                type="button"
-                onClick={() => setShowUploader(true)}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center"
-              >
-                <Upload className="w-4 h-4 mr-2" />
-                Upload Media
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={e => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setShowCDNSettings(true);
+                  }}
+                  className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 flex items-center"
+                >
+                  <Globe className="w-4 h-4 mr-2" />
+                  CDN Settings
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowUploader(true)}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center"
+                >
+                  <Upload className="w-4 h-4 mr-2" />
+                  Upload Media
+                </button>
+              </>
             )}
             <div className="flex items-center border border-gray-300 rounded-md">
               <button
                 type="button"
-                onClick={() => setViewMode('grid')}
+                onClick={e => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setViewMode('grid');
+                }}
                 className={`p-2 ${viewMode === 'grid' ? 'bg-gray-100' : ''}`}
               >
                 <Grid3X3 className="w-4 h-4" />
               </button>
               <button
                 type="button"
-                onClick={() => setViewMode('list')}
+                onClick={e => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setViewMode('list');
+                }}
                 className={`p-2 ${viewMode === 'list' ? 'bg-gray-100' : ''}`}
               >
                 <List className="w-4 h-4" />
@@ -294,76 +370,43 @@ export function MediaLibrary({
           </div>
         </div>
 
-        {/* Filters */}
-        <div className="flex flex-wrap items-center gap-4 p-4 bg-gray-50 rounded-lg">
-          {/* Search */}
-          <div className="flex-1 min-w-64">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-              <input
-                type="text"
-                placeholder="Search media files..."
-                value={filters.search || ''}
-                onChange={e => handleFilterChange('search', e.target.value)}
-                className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
-            </div>
-          </div>
-
-          {/* Media Type Filter */}
-          <select
-            value={filters.mediaType || ''}
-            onChange={e => handleFilterChange('mediaType', e.target.value || undefined)}
-            className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          >
-            <option value="">All Types</option>
-            <option value="image">Images</option>
-            <option value="video">Videos</option>
-            <option value="audio">Audio</option>
-            <option value="document">Documents</option>
-            <option value="other">Other</option>
-          </select>
-
-          {/* Folder Filter */}
-          <select
-            value={filters.folder || ''}
-            onChange={e => handleFilterChange('folder', e.target.value || undefined)}
-            className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          >
-            <option value="">All Folders</option>
-            {folders.map(folder => (
-              <option key={folder} value={folder}>
-                {folder}
-              </option>
-            ))}
-          </select>
-
-          {/* Clear Filters */}
-          {(filters.search || filters.mediaType || filters.folder) && (
-            <button
-              type="button"
-              onClick={clearFilters}
-              className="px-3 py-2 text-gray-600 hover:text-gray-800"
-            >
-              Clear Filters
-            </button>
-          )}
+        {/* Advanced Search + Filters */}
+        <div className="mb-6">
+          <AdvancedMediaSearch media={media} onSearchResults={handleSearchResults} />
         </div>
       </div>
 
+      {/* Bulk Operations */}
+      {selectedMedia.size > 0 && (
+        <div className="mb-6">
+          <BulkOperations
+            selectedMedia={selectedMediaArray}
+            onClearSelection={handleClearSelection}
+            onOperationComplete={handleBulkOperationComplete}
+          />
+        </div>
+      )}
+
       {/* Media Grid/List */}
-      {media.length === 0 ? (
+      {displayedMedia.length === 0 ? (
         <div className="text-center py-12">
           <Camera className="w-12 h-12 text-gray-400 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-gray-900 mb-2">No media files found</h3>
           <p className="text-gray-500 mb-4">
-            {Object.keys(filters).length > 0
-              ? 'Try adjusting your filters or upload some media files.'
-              : 'Upload some media files to get started.'}
+            {hasActiveSearch
+              ? 'No media files match your current filters. Try adjusting your search criteria.'
+              : media.length === 0
+                ? 'Upload some media files to get started.'
+                : 'Try adjusting your filters or upload some media files.'}
           </p>
-          {mode === 'library' && (
+          {mode === 'library' && !hasActiveSearch && (
             <button
-              onClick={() => setShowUploader(true)}
+              type="button"
+              onClick={e => {
+                e.preventDefault();
+                e.stopPropagation();
+                setShowUploader(true);
+              }}
               className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
             >
               Upload Media
@@ -374,7 +417,7 @@ export function MediaLibrary({
         <>
           {viewMode === 'grid' ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-              {media.map(mediaFile => (
+              {displayedMedia.map(mediaFile => (
                 <MediaCard
                   key={mediaFile.id}
                   media={mediaFile}
@@ -414,7 +457,7 @@ export function MediaLibrary({
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {media.map(mediaFile => (
+                  {displayedMedia.map(mediaFile => (
                     <MediaRow
                       key={mediaFile.id}
                       media={mediaFile}
@@ -444,6 +487,41 @@ export function MediaLibrary({
           >
             Select {selectedMedia.size} file{selectedMedia.size !== 1 ? 's' : ''}
           </button>
+        </div>
+      )}
+
+      {/* CDN Settings Modal */}
+      {showCDNSettings && owner && repo && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-auto">
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-semibold text-gray-900">CDN Configuration</h2>
+                <button
+                  onClick={() => setShowCDNSettings(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div className="p-6">
+              <CDNSettings
+                owner={owner}
+                repo={repo}
+                onConfigChange={(config: CDNConfig) => {
+                  console.log('CDN config updated:', config);
+                }}
+              />
+            </div>
+          </div>
         </div>
       )}
     </div>

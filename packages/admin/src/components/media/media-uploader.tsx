@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useCallback } from 'react';
 import { MediaType, MediaValidator, MEDIA_TYPES } from '@gitcms/core';
+import ImageOptimizer from './image-optimizer';
 import {
   Upload,
   X,
@@ -13,6 +14,8 @@ import {
   Music,
   FileText,
   Loader2,
+  Settings,
+  Zap,
 } from 'lucide-react';
 
 interface UploadFile {
@@ -50,10 +53,12 @@ export function MediaUploader({
   const [files, setFiles] = useState<UploadFile[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [showOptimizer, setShowOptimizer] = useState(false);
+  const [optimizedFiles, setOptimizedFiles] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Generate unique ID for upload file
-  const generateId = () => `upload_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const generateId = () => `upload_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
   // Create file preview
   const createFilePreview = useCallback((file: File): Promise<string | undefined> => {
@@ -236,6 +241,38 @@ export function MediaUploader({
   // Clear all files
   const clearFiles = useCallback(() => {
     setFiles([]);
+    setOptimizedFiles([]);
+  }, []);
+
+  // Handle optimized images
+  const handleOptimizedImages = useCallback((results: any[]) => {
+    // Replace original files with optimized versions
+    const optimizedFileMap = new Map(results.map(r => [r.originalFile.name, r.optimizedFile]));
+
+    setFiles(prev =>
+      prev.map(uploadFile => {
+        const optimizedFile = optimizedFileMap.get(uploadFile.file.name);
+        if (optimizedFile) {
+          return {
+            ...uploadFile,
+            file: optimizedFile,
+          };
+        }
+        return uploadFile;
+      })
+    );
+
+    // Store optimized files for reference
+    setOptimizedFiles(results.map(r => r.optimizedFile));
+
+    // Hide optimizer after optimization
+    setShowOptimizer(false);
+  }, []);
+
+  // Handle optimization progress
+  const handleOptimizationProgress = useCallback((completed: number, total: number) => {
+    // Could show progress if needed
+    console.log(`Optimization progress: ${completed}/${total}`);
   }, []);
 
   // Get file type icon
@@ -326,6 +363,22 @@ export function MediaUploader({
           <div className="flex items-center justify-between mb-4">
             <h4 className="text-lg font-medium text-gray-900">Files ({files.length})</h4>
             <div className="flex space-x-2">
+              {/* Image Optimization Button */}
+              {pendingFiles.some(f => f.file.type.startsWith('image/')) && (
+                <button
+                  type="button"
+                  onClick={() => setShowOptimizer(!showOptimizer)}
+                  disabled={isUploading}
+                  className={`px-4 py-2 border rounded-md flex items-center disabled:opacity-50 disabled:cursor-not-allowed ${
+                    showOptimizer
+                      ? 'bg-blue-50 text-blue-700 border-blue-300'
+                      : 'text-gray-600 border-gray-300 hover:bg-gray-50'
+                  }`}
+                >
+                  <Zap className="w-4 h-4 mr-2" />
+                  Optimize Images
+                </button>
+              )}
               {pendingFiles.length > 0 && (
                 <button
                   type="button"
@@ -356,6 +409,18 @@ export function MediaUploader({
               </button>
             </div>
           </div>
+
+          {/* Image Optimizer */}
+          {showOptimizer && (
+            <div className="mb-6">
+              <ImageOptimizer
+                files={files.map(f => f.file)}
+                onOptimized={handleOptimizedImages}
+                onProgress={handleOptimizationProgress}
+                className="border-t border-gray-200 pt-6"
+              />
+            </div>
+          )}
 
           {/* File Items */}
           <div className="space-y-3 max-h-64 overflow-y-auto">

@@ -4,6 +4,9 @@ export * from './github';
 export * from './github-utils';
 export * from './content-parser';
 export * from './media';
+export * from './image-optimization';
+export * from './cdn';
+export * from './media-organization';
 export * from './config';
 
 // Additional GitHub types export
