@@ -290,7 +290,7 @@ export class GitHubMediaStorage {
 
       // Generate media file object
       const mediaFile: GitCMSMediaFile = {
-        id: this.generateId(),
+        id: this.generateDeterministicId(path),
         filename: MediaPathManager.sanitizeFilename(file.name),
         originalName: file.name,
         path,
@@ -333,6 +333,21 @@ export class GitHubMediaStorage {
 
   static generateId(): string {
     return `media_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  }
+
+  static generateDeterministicId(filepath: string): string {
+    // Generate a deterministic ID based on the file path
+    // This ensures the same file always gets the same ID
+    const hash = filepath.split('').reduce((acc, char) => {
+      return ((acc << 5) - acc + char.charCodeAt(0)) & 0xffffffff;
+    }, 0);
+    return `media_${Math.abs(hash)}_${
+      filepath
+        .split('/')
+        .pop()
+        ?.replace(/[^a-zA-Z0-9]/g, '')
+        .substring(0, 10) || 'file'
+    }`;
   }
 
   private static async fileToBase64(file: File): Promise<string> {

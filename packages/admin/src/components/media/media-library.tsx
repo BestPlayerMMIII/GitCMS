@@ -70,9 +70,26 @@ export function MediaLibrary({
   const [searchResults, setSearchResults] = useState<GitCMSMediaFile[]>([]);
   const [showBulkOperations, setShowBulkOperations] = useState(false);
   const [hasActiveSearch, setHasActiveSearch] = useState(false);
+  const [showHidden, setShowHidden] = useState(false);
 
   // Determine what media to display
-  const displayedMedia = hasActiveSearch ? searchResults : media;
+  const displayedMedia = useMemo(() => {
+    if (hasActiveSearch) {
+      return searchResults;
+    }
+
+    // When not in search mode, filter hidden files based on showHidden state
+    if (!showHidden) {
+      return media.filter(item => {
+        const filename = item.filename;
+        const pathParts = item.path.split('/');
+        // Filter out files that start with . or are in folders that start with .
+        return !filename.startsWith('.') && !pathParts.some(part => part.startsWith('.'));
+      });
+    }
+
+    return media;
+  }, [hasActiveSearch, searchResults, media, showHidden]);
 
   // Load media files
   const loadMedia = useCallback(async () => {
@@ -91,6 +108,9 @@ export function MediaLibrary({
       if (filters.folder) params.set('folder', filters.folder);
       if (filters.search) params.set('search', filters.search);
       if (filters.tags?.length) params.set('tags', filters.tags.join(','));
+
+      // Always load hidden files from API - filtering will be done on frontend
+      params.set('showHidden', 'true');
 
       // Include image content for thumbnails
       params.set('includeContent', 'true');
@@ -161,11 +181,16 @@ export function MediaLibrary({
 
   // Handle search results
   const handleSearchResults = useCallback(
-    (results: { media: GitCMSMediaFile[]; hasActiveSearch: boolean }) => {
+    (results: { media: GitCMSMediaFile[]; hasActiveSearch: boolean; showHidden?: boolean }) => {
       setSearchResults(results.media);
       setHasActiveSearch(results.hasActiveSearch);
+
+      // Update showHidden state if it has changed
+      if (results.showHidden !== undefined && results.showHidden !== showHidden) {
+        setShowHidden(results.showHidden);
+      }
     },
-    []
+    [showHidden]
   );
 
   // Handle bulk operation completion - prevent auto-refresh
@@ -259,8 +284,9 @@ export function MediaLibrary({
     try {
       const params = new URLSearchParams();
       params.set('mediaId', mediaFile.id);
-      params.set('owner', mediaFile.repository.owner);
-      params.set('repo', mediaFile.repository.repo);
+      // Use the props passed to the component instead of trying to access mediaFile.repository
+      params.set('owner', owner || mediaFile.repository?.owner || '');
+      params.set('repo', repo || mediaFile.repository?.repo || '');
 
       const response = await fetch(`/api/media?${params}`, {
         method: 'DELETE',
@@ -295,7 +321,7 @@ export function MediaLibrary({
         <div className="text-red-600 mb-4">Error: {error}</div>
         <button
           type="button"
-          onClick={loadMedia}
+          onClick={() => loadMedia()}
           className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
         >
           Retry
@@ -616,19 +642,21 @@ function MediaCard({
 
       {/* Actions */}
       {showActions && (
-        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-          <div className="flex space-x-1">
+        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-white rounded shadow-sm">
+          <div className="flex space-x-1 p-1">
             <button
+              type="button"
               onClick={e => {
                 e.stopPropagation();
                 window.open(media.url, '_blank');
               }}
-              className="p-1 bg-white rounded shadow-sm hover:bg-gray-50"
+              className="p-1 hover:bg-gray-50 rounded"
               title="View"
             >
               <Eye className="w-3 h-3 text-gray-600" />
             </button>
             <button
+              type="button"
               onClick={e => {
                 e.stopPropagation();
                 const link = document.createElement('a');
@@ -636,17 +664,18 @@ function MediaCard({
                 link.download = media.filename;
                 link.click();
               }}
-              className="p-1 bg-white rounded shadow-sm hover:bg-gray-50"
+              className="p-1 hover:bg-gray-50 rounded"
               title="Download"
             >
               <Download className="w-3 h-3 text-gray-600" />
             </button>
             <button
+              type="button"
               onClick={e => {
                 e.stopPropagation();
                 onDelete();
               }}
-              className="p-1 bg-white rounded shadow-sm hover:bg-red-50"
+              className="p-1 hover:bg-red-50 rounded"
               title="Delete"
             >
               <Trash2 className="w-3 h-3 text-red-600" />
@@ -776,6 +805,7 @@ function MediaRow({
         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
           <div className="flex space-x-2">
             <button
+              type="button"
               onClick={e => {
                 e.stopPropagation();
                 window.open(media.url, '_blank');
@@ -786,6 +816,7 @@ function MediaRow({
               <Eye className="w-4 h-4" />
             </button>
             <button
+              type="button"
               onClick={e => {
                 e.stopPropagation();
                 const link = document.createElement('a');
@@ -799,6 +830,7 @@ function MediaRow({
               <Download className="w-4 h-4" />
             </button>
             <button
+              type="button"
               onClick={e => {
                 e.stopPropagation();
                 onDelete();

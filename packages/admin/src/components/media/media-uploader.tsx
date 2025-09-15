@@ -18,13 +18,20 @@ import {
   Zap,
 } from 'lucide-react';
 
+// Chunked upload configuration
+const CHUNK_SIZE = 1024 * 1024; // 1MB chunks
+const LARGE_FILE_THRESHOLD = 5 * 1024 * 1024; // 5MB - files larger than this use chunked upload
+
 interface UploadFile {
   file: File;
   id: string;
-  status: 'pending' | 'uploading' | 'success' | 'error';
+  status: 'pending' | 'uploading' | 'processing' | 'success' | 'error';
   progress: number;
+  processingProgress?: number;
+  phase: 'upload' | 'processing' | 'complete';
   error?: string;
   preview?: string;
+  uploadId?: string; // For chunked uploads
 }
 
 interface MediaUploaderProps {
@@ -102,6 +109,7 @@ export function MediaUploader({
           id: generateId(),
           status: 'pending',
           progress: 0,
+          phase: 'upload',
           preview,
         });
       }
@@ -155,8 +163,22 @@ export function MediaUploader({
     setFiles(prev => prev.filter(f => f.id !== id));
   }, []);
 
-  // Upload single file
+  // Upload single file with chunking support
   const uploadFile = useCallback(
+    async (uploadFile: UploadFile): Promise<void> => {
+      const isLargeFile = uploadFile.file.size > LARGE_FILE_THRESHOLD;
+
+      if (isLargeFile) {
+        return uploadFileChunked(uploadFile);
+      } else {
+        return uploadFileTraditional(uploadFile);
+      }
+    },
+    [owner, repo, folder]
+  );
+
+  // Traditional upload for smaller files
+  const uploadFileTraditional = useCallback(
     async (uploadFile: UploadFile): Promise<void> => {
       const formData = new FormData();
       formData.append('file', uploadFile.file);
@@ -166,38 +188,274 @@ export function MediaUploader({
 
       // Update status to uploading
       setFiles(prev =>
-        prev.map(f => (f.id === uploadFile.id ? { ...f, status: 'uploading', progress: 0 } : f))
+        prev.map(f =>
+          f.id === uploadFile.id ? { ...f, status: 'uploading', progress: 0, phase: 'upload' } : f
+        )
+      );
+
+      return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', '/api/media?action=upload');
+
+        xhr.upload.onprogress = event => {
+          if (event.lengthComputable) {
+            const percent = (event.loaded / event.total) * 100;
+            setFiles(prev =>
+              prev.map(f => (f.id === uploadFile.id ? { ...f, progress: percent } : f))
+            );
+          }
+        };
+
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            let result;
+            try {
+              result = JSON.parse(xhr.responseText);
+            } catch (e) {
+              result = {};
+            }
+            setFiles(prev =>
+              prev.map(f =>
+                f.id === uploadFile.id
+                  ? { ...f, status: 'success', progress: 100, phase: 'complete' }
+                  : f
+              )
+            );
+            resolve(result.media);
+          } else {
+            let errorMessage = 'Upload failed';
+            try {
+              const errorData = JSON.parse(xhr.responseText);
+              errorMessage = errorData.error || errorMessage;
+            } catch (e) {}
+            setFiles(prev =>
+              prev.map(f =>
+                f.id === uploadFile.id
+                  ? { ...f, status: 'error', progress: 0, error: errorMessage, phase: 'upload' }
+                  : f
+              )
+            );
+            reject(new Error(errorMessage));
+          }
+        };
+
+        xhr.onerror = () => {
+          setFiles(prev =>
+            prev.map(f =>
+              f.id === uploadFile.id
+                ? { ...f, status: 'error', progress: 0, error: 'Upload failed', phase: 'upload' }
+                : f
+            )
+          );
+          reject(new Error('Upload failed'));
+        };
+
+        xhr.send(formData);
+      });
+    },
+    [owner, repo, folder]
+  );
+
+  // Chunked upload for larger files
+  const uploadFileChunked = useCallback(
+    async (uploadFile: UploadFile): Promise<any> => {
+      const file = uploadFile.file;
+      const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+      const uploadId = `upload_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+
+      // Update file with upload ID
+      setFiles(prev =>
+        prev.map(f =>
+          f.id === uploadFile.id
+            ? { ...f, status: 'uploading', progress: 0, phase: 'upload', uploadId }
+            : f
+        )
       );
 
       try {
-        const response = await fetch('/api/media?action=upload', {
+        // Step 1: Initialize chunked upload
+        const initResponse = await fetch('/api/media/chunked?action=init', {
           method: 'POST',
-          body: formData,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            filename: file.name,
+            fileSize: file.size,
+            totalChunks,
+            mimeType: file.type,
+            owner,
+            repo,
+            folder,
+            uploadId,
+          }),
         });
 
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || 'Upload failed');
+        if (!initResponse.ok) {
+          const errorText = await initResponse.text();
+          console.error('Init response error:', errorText);
+          throw new Error('Failed to initialize chunked upload');
         }
 
-        const result = await response.json();
+        const initResult = await initResponse.json();
+        console.log('Upload initialized:', initResult);
 
-        // Update status to success
-        setFiles(prev =>
-          prev.map(f => (f.id === uploadFile.id ? { ...f, status: 'success', progress: 100 } : f))
-        );
+        // Step 2: Upload chunks
+        for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+          const start = chunkIndex * CHUNK_SIZE;
+          const end = Math.min(start + CHUNK_SIZE, file.size);
+          const chunk = file.slice(start, end);
 
-        return result.media;
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Upload failed';
+          const chunkFormData = new FormData();
+          chunkFormData.append('chunk', chunk);
+          chunkFormData.append('uploadId', uploadId);
+          chunkFormData.append('chunkIndex', chunkIndex.toString());
+          chunkFormData.append('totalChunks', totalChunks.toString());
 
-        // Update status to error
+          const chunkResponse = await fetch('/api/media/chunked?action=upload-chunk', {
+            method: 'POST',
+            body: chunkFormData,
+          });
+
+          if (!chunkResponse.ok) {
+            const errorText = await chunkResponse.text();
+            console.error(`Chunk ${chunkIndex + 1} response error:`, errorText);
+            throw new Error(`Failed to upload chunk ${chunkIndex + 1}`);
+          }
+
+          const chunkResult = await chunkResponse.json();
+          console.log(`Chunk ${chunkIndex + 1} uploaded:`, chunkResult);
+
+          // Update upload progress
+          const uploadProgress = ((chunkIndex + 1) / totalChunks) * 50; // 50% for upload phase
+          setFiles(prev =>
+            prev.map(f => (f.id === uploadFile.id ? { ...f, progress: uploadProgress } : f))
+          );
+        }
+
+        // Step 3: Finalize and upload to GitHub (with progress updates via SSE)
         setFiles(prev =>
           prev.map(f =>
-            f.id === uploadFile.id ? { ...f, status: 'error', progress: 0, error: errorMessage } : f
+            f.id === uploadFile.id
+              ? { ...f, status: 'processing', phase: 'processing', processingProgress: 0 }
+              : f
           )
         );
 
+        return new Promise((resolve, reject) => {
+          // Start the finalization process
+          console.log('Starting finalization for uploadId:', uploadId);
+
+          fetch('/api/media/chunked?action=finalize', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ uploadId }),
+          })
+            .then(response => {
+              if (!response.ok) {
+                response.text().then(errorText => {
+                  console.error('Finalize response error:', errorText);
+                  reject(new Error('Failed to start finalization'));
+                });
+                return;
+              }
+
+              response.json().then(result => {
+                console.log('Finalization started:', result);
+              });
+            })
+            .catch(error => {
+              console.error('Finalize request error:', error);
+              reject(error);
+            });
+
+          // Listen for progress updates via Server-Sent Events
+          const eventSource = new EventSource(`/api/media/chunked/progress?uploadId=${uploadId}`);
+
+          let progressTimeout = setTimeout(() => {
+            console.error('Progress timeout - no updates received');
+            eventSource.close();
+            reject(new Error('Upload progress timeout'));
+          }, 30000); // 30 second timeout
+
+          eventSource.onmessage = event => {
+            clearTimeout(progressTimeout);
+            const data = JSON.parse(event.data);
+            console.log('Progress update:', data);
+
+            if (data.type === 'progress') {
+              const processingProgress = data.progress;
+              const totalProgress = 50 + processingProgress * 0.5; // 50% upload + 50% processing
+
+              setFiles(prev =>
+                prev.map(f =>
+                  f.id === uploadFile.id ? { ...f, progress: totalProgress, processingProgress } : f
+                )
+              );
+
+              // Reset timeout for next update
+              progressTimeout = setTimeout(() => {
+                console.error('Progress timeout - no updates received');
+                eventSource.close();
+                reject(new Error('Upload progress timeout'));
+              }, 30000);
+            } else if (data.type === 'complete') {
+              clearTimeout(progressTimeout);
+              eventSource.close();
+              console.log('Upload completed:', data.media);
+              setFiles(prev =>
+                prev.map(f =>
+                  f.id === uploadFile.id
+                    ? { ...f, status: 'success', progress: 100, phase: 'complete' }
+                    : f
+                )
+              );
+              resolve(data.media);
+            } else if (data.type === 'error') {
+              clearTimeout(progressTimeout);
+              eventSource.close();
+              console.error('Upload error from SSE:', data.error);
+              setFiles(prev =>
+                prev.map(f =>
+                  f.id === uploadFile.id
+                    ? { ...f, status: 'error', error: data.error, phase: 'processing' }
+                    : f
+                )
+              );
+              reject(new Error(data.error));
+            }
+          };
+
+          eventSource.onerror = error => {
+            clearTimeout(progressTimeout);
+            console.error('EventSource error:', error);
+            eventSource.close();
+            setFiles(prev =>
+              prev.map(f =>
+                f.id === uploadFile.id
+                  ? {
+                      ...f,
+                      status: 'error',
+                      error: 'Connection lost during processing',
+                      phase: 'processing',
+                    }
+                  : f
+              )
+            );
+            reject(new Error('Connection lost during processing'));
+          };
+        });
+      } catch (error) {
+        setFiles(prev =>
+          prev.map(f =>
+            f.id === uploadFile.id
+              ? {
+                  ...f,
+                  status: 'error',
+                  error: error instanceof Error ? error.message : 'Upload failed',
+                  phase: 'upload',
+                }
+              : f
+          )
+        );
         throw error;
       }
     },
@@ -297,12 +555,32 @@ export function MediaUploader({
     switch (status) {
       case 'uploading':
         return <Loader2 className="w-4 h-4 animate-spin text-blue-500" />;
+      case 'processing':
+        return <Loader2 className="w-4 h-4 animate-spin text-yellow-500" />;
       case 'success':
         return <Check className="w-4 h-4 text-green-500" />;
       case 'error':
         return <AlertCircle className="w-4 h-4 text-red-500" />;
       default:
         return null;
+    }
+  };
+
+  // Get phase label
+  const getPhaseLabel = (uploadFile: UploadFile) => {
+    if (uploadFile.status === 'pending') return '';
+    if (uploadFile.status === 'error') return 'Failed';
+    if (uploadFile.status === 'success') return 'Complete';
+
+    switch (uploadFile.phase) {
+      case 'upload':
+        return 'Uploading...';
+      case 'processing':
+        return 'Processing on GitHub...';
+      case 'complete':
+        return 'Complete';
+      default:
+        return '';
     }
   };
 
@@ -449,7 +727,43 @@ export function MediaUploader({
                   </p>
                   <p className="text-sm text-gray-500">
                     {MediaValidator.formatFileSize(uploadFile.file.size)}
+                    {uploadFile.file.size > LARGE_FILE_THRESHOLD && (
+                      <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded">
+                        Large file - chunked upload
+                      </span>
+                    )}
                   </p>
+                  {/* Progress Bar & Processing State */}
+                  {(uploadFile.status === 'uploading' || uploadFile.status === 'processing') && (
+                    <div className="w-full mt-2">
+                      <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                        <div
+                          className={`h-2 transition-all duration-200 ${
+                            uploadFile.status === 'processing' ? 'bg-yellow-500' : 'bg-blue-500'
+                          }`}
+                          style={{ width: `${uploadFile.progress}%` }}
+                        />
+                      </div>
+                      <div className="text-xs text-gray-500 mt-1 flex items-center justify-between">
+                        <span>{getPhaseLabel(uploadFile)}</span>
+                        <span>{Math.round(uploadFile.progress)}%</span>
+                      </div>
+                      {/* Additional processing progress for chunked uploads */}
+                      {uploadFile.status === 'processing' &&
+                        uploadFile.processingProgress !== undefined && (
+                          <div className="text-xs text-gray-500 mt-1">
+                            GitHub upload: {Math.round(uploadFile.processingProgress)}%
+                          </div>
+                        )}
+                    </div>
+                  )}
+                  {/* Large File Warning */}
+                  {files.some(f => f.file.size > 10 * 1024 * 1024) && (
+                    <div className="mb-4 p-2 bg-yellow-100 text-yellow-800 rounded text-sm">
+                      Warning: Large files (&gt;10MB) may take a long time to upload and process.
+                      Please be patient.
+                    </div>
+                  )}
                   {uploadFile.error && (
                     <p className="text-sm text-red-600 mt-1">{uploadFile.error}</p>
                   )}

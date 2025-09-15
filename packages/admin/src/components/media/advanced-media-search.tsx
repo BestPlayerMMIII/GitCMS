@@ -28,6 +28,7 @@ interface MediaSearchOptions {
   sizeRange?: { min?: number; max?: number };
   sortBy?: 'name' | 'date' | 'size' | 'type';
   sortDirection?: 'asc' | 'desc';
+  showHidden?: boolean;
   limit?: number;
   offset?: number;
 }
@@ -60,6 +61,16 @@ interface MediaCollection {
 class SimpleMediaSearchEngine {
   searchMedia(media: GitCMSMediaFile[], options: MediaSearchOptions): MediaSearchResult {
     let filtered = [...media];
+
+    // Apply hidden files filter by default (exclude files/folders starting with .)
+    if (!options.showHidden) {
+      filtered = filtered.filter(item => {
+        const filename = item.filename;
+        const pathParts = item.path.split('/');
+        // Filter out files that start with . or are in folders that start with .
+        return !filename.startsWith('.') && !pathParts.some(part => part.startsWith('.'));
+      });
+    }
 
     // Apply text search
     if (options.query) {
@@ -104,7 +115,7 @@ class SimpleMediaSearchEngine {
       });
     }
 
-    // Generate facets
+    // Generate facets before sorting and pagination
     const facets = this.generateFacets(filtered);
 
     // Apply sorting
@@ -112,14 +123,15 @@ class SimpleMediaSearchEngine {
 
     // Apply pagination
     const total = filtered.length;
+    let paginatedResults = filtered;
     if (options.offset) {
-      filtered = filtered.slice(options.offset);
+      paginatedResults = paginatedResults.slice(options.offset);
     }
     if (options.limit) {
-      filtered = filtered.slice(0, options.limit);
+      paginatedResults = paginatedResults.slice(0, options.limit);
     }
 
-    return { media: filtered, total, facets };
+    return { media: paginatedResults, total, facets };
   }
 
   private generateFacets(media: GitCMSMediaFile[]) {
@@ -148,7 +160,8 @@ class SimpleMediaSearchEngine {
   ): GitCMSMediaFile[] {
     const multiplier = direction === 'asc' ? 1 : -1;
 
-    return media.sort((a, b) => {
+    // Create a new array to avoid mutating the original
+    return [...media].sort((a, b) => {
       switch (sortBy) {
         case 'name':
           return a.filename.localeCompare(b.filename) * multiplier;
@@ -167,7 +180,9 @@ class SimpleMediaSearchEngine {
 
 interface AdvancedMediaSearchProps {
   media: GitCMSMediaFile[];
-  onSearchResults: (results: MediaSearchResult & { hasActiveSearch: boolean }) => void;
+  onSearchResults: (
+    results: MediaSearchResult & { hasActiveSearch: boolean; showHidden?: boolean }
+  ) => void;
   availableLabels?: MediaLabel[];
   availableCollections?: MediaCollection[];
   className?: string;
@@ -184,6 +199,7 @@ function AdvancedMediaSearch({
     query: '',
     sortBy: 'name',
     sortDirection: 'asc',
+    showHidden: false,
     limit: 50,
     offset: 0,
   });
@@ -206,6 +222,15 @@ function AdvancedMediaSearch({
   const availableTags = useMemo(() => {
     const tags = new Set<string>();
     media.forEach(item => {
+      // Skip hidden files if showHidden is false
+      if (!searchOptions.showHidden) {
+        const filename = item.filename;
+        const pathParts = item.path.split('/');
+        if (filename.startsWith('.') || pathParts.some(part => part.startsWith('.'))) {
+          return; // Skip this file
+        }
+      }
+
       const itemMetadata = item.metadata as any;
       if (itemMetadata?.autoTags) {
         itemMetadata.autoTags.forEach((tag: string) => tags.add(tag));
@@ -215,16 +240,25 @@ function AdvancedMediaSearch({
       }
     });
     return Array.from(tags).sort();
-  }, [media]);
+  }, [media, searchOptions.showHidden]);
 
   const availableFolders = useMemo(() => {
     const folders = new Set<string>();
     media.forEach(item => {
+      // Skip hidden files if showHidden is false
+      if (!searchOptions.showHidden) {
+        const filename = item.filename;
+        const pathParts = item.path.split('/');
+        if (filename.startsWith('.') || pathParts.some(part => part.startsWith('.'))) {
+          return; // Skip this file
+        }
+      }
+
       const folder = item.path.substring(0, item.path.lastIndexOf('/')) || '/';
       folders.add(folder);
     });
     return Array.from(folders).sort();
-  }, [media]);
+  }, [media, searchOptions.showHidden]);
 
   const updateActiveFilters = useCallback(() => {
     const filters: string[] = [];
@@ -250,6 +284,22 @@ function AdvancedMediaSearch({
     if (searchOptions.dateRange) {
       filters.push(`Date: ${formatDateRange(searchOptions.dateRange)}`);
     }
+    if (searchOptions.showHidden) {
+      filters.push(`Including hidden files`);
+    }
+    // Show sorting when it's not the default
+    if (searchOptions.sortBy !== 'name' || searchOptions.sortDirection !== 'asc') {
+      const sortLabel =
+        searchOptions.sortBy === 'name'
+          ? 'Name'
+          : searchOptions.sortBy === 'date'
+            ? 'Date'
+            : searchOptions.sortBy === 'size'
+              ? 'Size'
+              : 'Type';
+      const directionLabel = searchOptions.sortDirection === 'asc' ? '↑' : '↓';
+      filters.push(`Sort: ${sortLabel} ${directionLabel}`);
+    }
 
     setActiveFilters(filters);
   }, [searchOptions]);
@@ -264,7 +314,10 @@ function AdvancedMediaSearch({
       options.sizeRange?.min ||
       options.sizeRange?.max ||
       options.dateRange?.from ||
-      options.dateRange?.to
+      options.dateRange?.to ||
+      options.showHidden || // Show hidden files is considered an active search
+      options.sortBy !== 'name' || // Non-default sorting is considered active
+      options.sortDirection !== 'asc' // Non-default sort direction is considered active
     );
   }, []);
 
@@ -272,7 +325,11 @@ function AdvancedMediaSearch({
   useEffect(() => {
     const results = searchEngine.searchMedia(media, debouncedSearchOptions);
     const isActiveSearch = hasActiveSearch(debouncedSearchOptions);
-    onSearchResults({ ...results, hasActiveSearch: isActiveSearch });
+    onSearchResults({
+      ...results,
+      hasActiveSearch: isActiveSearch,
+      showHidden: debouncedSearchOptions.showHidden,
+    });
     updateActiveFilters();
   }, [media, debouncedSearchOptions, updateActiveFilters, hasActiveSearch, onSearchResults]);
 
@@ -314,9 +371,10 @@ function AdvancedMediaSearch({
 
   const clearFilters = () => {
     setSearchOptions({
-      query: searchOptions.query,
+      query: '',
       sortBy: 'name',
       sortDirection: 'asc',
+      showHidden: false,
       limit: 50,
       offset: 0,
     });
@@ -661,6 +719,28 @@ function AdvancedMediaSearch({
                 <option value={100}>100</option>
                 <option value={200}>200</option>
               </select>
+            </div>
+
+            {/* Show Hidden Files */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Visibility Options
+              </label>
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={searchOptions.showHidden || false}
+                  onChange={e => {
+                    handleInteraction(e);
+                    updateSearchOptions({ showHidden: e.target.checked });
+                  }}
+                  className="mr-2"
+                />
+                <span className="text-sm">Show hidden files</span>
+                <span className="text-xs text-gray-500 ml-1">
+                  (files/folders starting with ".")
+                </span>
+              </label>
             </div>
           </div>
         </div>

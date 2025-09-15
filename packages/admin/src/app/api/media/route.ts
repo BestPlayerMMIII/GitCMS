@@ -324,7 +324,7 @@ async function handleGetRepositoryMedia(
         }
 
         const mediaFile: GitCMSMediaFile = {
-          id: GitHubMediaStorage.generateId(),
+          id: GitHubMediaStorage.generateDeterministicId(file.path),
           filename: file.name,
           originalName: file.name,
           path: file.path,
@@ -348,9 +348,20 @@ async function handleGetRepositoryMedia(
       }
     }
 
+    // Filter hidden files by default (files/folders starting with .)
+    const showHidden = searchParams.get('showHidden') === 'true';
+    const filteredMediaFiles = showHidden
+      ? mediaFiles
+      : mediaFiles.filter(file => {
+          const filename = file.filename;
+          const pathParts = file.path.split('/');
+          // Filter out files that start with . or are in folders that start with .
+          return !filename.startsWith('.') && !pathParts.some(part => part.startsWith('.'));
+        });
+
     return NextResponse.json({
-      media: mediaFiles,
-      total: mediaFiles.length,
+      media: filteredMediaFiles,
+      total: filteredMediaFiles.length,
     });
   } catch (error: any) {
     console.error('Error fetching repository media:', error);
@@ -428,6 +439,18 @@ async function handleUploadMedia(request: NextRequest, accessToken: string): Pro
       );
     }
 
+    // Upload to GitHub
+    const githubClient = new GitHubApiClient(accessToken, owner, repo);
+    // Fast authentication check before upload
+    try {
+      await githubClient.getUser();
+    } catch (authError) {
+      return NextResponse.json(
+        { error: 'GitHub authentication failed. Please check your access token.' },
+        { status: 401 }
+      );
+    }
+
     // Get the configured media path
     const mediaBasePath = await getMediaPath(owner, repo, accessToken);
 
@@ -443,8 +466,6 @@ async function handleUploadMedia(request: NextRequest, accessToken: string): Pro
       generateThumbnail: validation.mediaType === 'image',
     };
 
-    // Upload to GitHub
-    const githubClient = new GitHubApiClient(accessToken, owner, repo);
     const mediaFile = await GitHubMediaStorage.uploadFile(
       file,
       path,
@@ -672,13 +693,76 @@ async function handleDeleteMedia(
   accessToken: string
 ): Promise<NextResponse> {
   try {
-    const media = defaultMediaRegistry.get(mediaId);
+    let media = defaultMediaRegistry.get(mediaId);
+
+    // If not found in registry, try to find by path or regenerate ID
     if (!media) {
-      return NextResponse.json({ error: 'Media not found' }, { status: 404 });
+      console.warn(`Media ID ${mediaId} not found in registry. Attempting to find media...`);
+
+      // Try to refresh the media list to ensure we have current data
+      const githubClient = new GitHubApiClient(accessToken, owner, repo);
+      const mediaPath = await getMediaPath(owner, repo, accessToken);
+      const files = await githubClient.getDirectory(mediaPath);
+
+      // Find the file and regenerate its ID
+      for (const file of files) {
+        if (file.type === 'file') {
+          const regeneratedId = GitHubMediaStorage.generateDeterministicId(file.path);
+          if (regeneratedId === mediaId) {
+            // Found the file, create a temporary media object for deletion
+            media = {
+              id: mediaId,
+              filename: file.name,
+              originalName: file.name,
+              path: file.path,
+              size: file.size || 0,
+              mimeType: getMimeTypeFromExtension(file.name),
+              mediaType:
+                MediaValidator.getMediaType({
+                  name: file.name,
+                  type: getMimeTypeFromExtension(file.name),
+                } as File) || 'other',
+              url: GitHubMediaStorage.generateGitHubUrl(owner, repo, file.path),
+              metadata: {},
+              uploadedAt: new Date().toISOString(),
+              uploadedBy: 'unknown',
+              repository: { owner, repo },
+            };
+            break;
+          }
+        }
+      }
+
+      if (!media) {
+        return NextResponse.json(
+          {
+            error: 'Media not found',
+            details: `Media with ID ${mediaId} could not be found in repository.`,
+          },
+          { status: 404 }
+        );
+      }
     }
 
-    // TODO: Implement GitHub file deletion
-    // Need to get the file SHA first, then delete
+    // Delete from GitHub repository
+    const githubClient = new GitHubApiClient(accessToken, owner, repo);
+
+    try {
+      // Get the file to obtain its SHA (required for deletion)
+      const fileInfo = await githubClient.getFile(media.path);
+
+      // Delete the file
+      await githubClient.deleteFile(
+        media.path,
+        `Delete media file: ${media.filename}`,
+        fileInfo.sha
+      );
+
+      console.log(`Successfully deleted file from GitHub: ${media.path}`);
+    } catch (deleteError) {
+      console.error('Error deleting file from GitHub:', deleteError);
+      // Continue with registry cleanup even if GitHub deletion fails
+    }
 
     // Remove from registry
     defaultMediaRegistry.delete(mediaId);
@@ -686,6 +770,11 @@ async function handleDeleteMedia(
     return NextResponse.json({
       success: true,
       message: 'Media deleted successfully',
+      deletedFile: {
+        id: media.id,
+        filename: media.filename,
+        path: media.path,
+      },
     });
   } catch (error) {
     console.error('Delete media error:', error);

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ProgressiveLoading, ContentGridSkeleton } from '@/components/ui/loading';
@@ -20,7 +20,7 @@ interface ContentItem {
   };
 }
 
-export default function ContentList() {
+function ContentListContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
@@ -629,5 +629,13 @@ export default function ContentList() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function ContentList() {
+  return (
+    <Suspense fallback={<ContentGridSkeleton />}>
+      <ContentListContent />
+    </Suspense>
   );
 }

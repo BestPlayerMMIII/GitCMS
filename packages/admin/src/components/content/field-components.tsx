@@ -440,7 +440,6 @@ export function ObjectField({
       }
     }
     // Note: pushSchema and popSchema are stable callbacks, don't include in deps
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [objectField.schemaRef, circularDependencyError]);
 
   const updateProperty = (key: string, propValue: any) => {
