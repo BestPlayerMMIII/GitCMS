@@ -711,8 +711,8 @@ const _sfc_main$1 = {
     const statusMessage = _error.statusMessage ?? (is404 ? "Page Not Found" : "Internal Server Error");
     const description = _error.message || _error.toString();
     const stack = void 0;
-    const _Error404 = defineAsyncComponent(() => import('./error-404-BsO6Ebww.mjs'));
-    const _Error = defineAsyncComponent(() => import('./error-500-BueRsZES.mjs'));
+    const _Error404 = defineAsyncComponent(() => import('./error-404-BM49fUkS.mjs'));
+    const _Error = defineAsyncComponent(() => import('./error-500-DG1SDtgT.mjs'));
     const ErrorTemplate = is404 ? _Error404 : _Error;
     return (_ctx, _push, _parent, _attrs) => {
       _push(ssrRenderComponent(unref(ErrorTemplate), mergeProps({ statusCode: unref(statusCode), statusMessage: unref(statusMessage), description: unref(description), stack: unref(stack) }, _attrs), null, _parent));

@@ -235,9 +235,8 @@ export function MediaLibrary({
           newSelected.add(mediaFile.id);
         }
         setSelectedMedia(newSelected);
-      } else {
-        onSelect(mediaFile);
       }
+      onSelect(mediaFile);
     }
   };
 
@@ -499,21 +498,6 @@ export function MediaLibrary({
             </div>
           )}
         </>
-      )}
-
-      {/* Picker Actions */}
-      {mode === 'picker' && multiple && selectedMedia.size > 0 && (
-        <div className="fixed bottom-6 right-6 bg-blue-600 text-white px-6 py-3 rounded-lg shadow-lg">
-          <button
-            onClick={() => {
-              const selectedFiles = media.filter(file => selectedMedia.has(file.id));
-              selectedFiles.forEach(file => onSelect?.(file));
-            }}
-            className="font-medium"
-          >
-            Select {selectedMedia.size} file{selectedMedia.size !== 1 ? 's' : ''}
-          </button>
-        </div>
       )}
 
       {/* CDN Settings Modal */}
