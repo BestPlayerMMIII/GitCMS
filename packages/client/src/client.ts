@@ -5,12 +5,15 @@ import { CollectionRef } from './collections';
 export class GitCMS {
   private octokit: Octokit;
   private config: GitCMSConfig;
+  private transport: 'github' | 'http';
 
   constructor(config: GitCMSConfig) {
     this.config = {
       branch: 'main',
       ...config,
     };
+
+    this.transport = config.baseUrl ? 'http' : 'github';
 
     this.octokit = new Octokit({
       auth: config.token,
@@ -28,26 +31,42 @@ export class GitCMS {
    * Get a single document by path
    */
   async doc(path: string): Promise<ContentItem | null> {
-    try {
+    if (this.transport === 'http' && this.config.baseUrl) {
       const [owner, repo] = this.config.repository.split('/');
-      const response = await this.octokit.rest.repos.getContent({
-        owner,
-        repo,
-        path: `content/${path}.json`,
-        ref: this.config.branch,
+      const id = path.includes('/') ? path.split('/').pop()! : path;
+      const schema = path.includes('/') ? path.split('/')[0] : '';
+      const url = new URL(`${this.config.baseUrl}/api/content/${owner}/${repo}/${schema}`);
+      url.searchParams.set('id', id);
+      url.searchParams.set('branch', this.config.branch || 'main');
+      const res = await fetch(url.toString(), {
+        headers: this.config.token ? { Authorization: `Bearer ${this.config.token}` } : {},
       });
+      if (res.status === 404) return null;
+      if (!res.ok) throw new Error(`GitCMS HTTP error ${res.status}`);
+      const json = await res.json();
+      return json.content as ContentItem;
+    } else {
+      try {
+        const [owner, repo] = this.config.repository.split('/');
+        const response = await this.octokit.rest.repos.getContent({
+          owner,
+          repo,
+          path: `content/${path}.json`,
+          ref: this.config.branch,
+        });
 
-      if ('content' in response.data) {
-        const content = Buffer.from(response.data.content, 'base64').toString('utf-8');
-        return JSON.parse(content);
-      }
+        if ('content' in response.data) {
+          const content = Buffer.from(response.data.content, 'base64').toString('utf-8');
+          return JSON.parse(content);
+        }
 
-      return null;
-    } catch (error) {
-      if ((error as any).status === 404) {
         return null;
+      } catch (error) {
+        if ((error as any).status === 404) {
+          return null;
+        }
+        throw error;
       }
-      throw error;
     }
   }
 
@@ -108,7 +127,6 @@ export class GitCMS {
 
       return null;
     } catch (error) {
-      // Return default schema if not found
       return {
         name: contentType,
         displayName: contentType,

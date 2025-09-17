@@ -1,46 +1,65 @@
-# Next.js Blog with GitCMS
+# Example: Consuming GitCMS content (Phase 6)
 
-This example demonstrates how to create a blog using Next.js and GitCMS.
+This example shows two ways to fetch content:
 
-## Setup
+1) Direct GitHub (private repos require a Fine-Grained PAT)
+2) Via your deployed API (apps/web) proxy endpoint
 
-1. Install dependencies:
+## Install
+
 ```bash
-npm install
+npm i @gitcms/client
 ```
 
-2. Configure GitCMS:
-```typescript
-// lib/cms.ts
-import { GitCMS } from '@gitcms/client';
+## Usage (direct GitHub)
 
-export const cms = new GitCMS({
-  repository: 'your-username/your-blog-repo',
-  // token: 'your-github-token', // for private repos
-});
+```ts
+import { GitCMS } from '@gitcms/client'
+
+const cms = new GitCMS({
+  repository: 'username/my-blog',
+  branch: 'main',
+  token: process.env.GITCMS_GITHUB_TOKEN, // Fine-grained PAT
+})
+
+const posts = await cms
+  .collection('blog-posts')
+  .where('published', true)
+  .orderBy('publishedAt', 'desc')
+  .limit(10)
+  .get()
 ```
 
-3. Start development server:
-```bash
-npm run dev
+## Usage (HTTP via API proxy)
+
+Expose the content endpoint:
+
+- `GET /api/content/:owner/:repo/:schema?branch=main&limit=10&orderBy=publishedAt&order=desc&where={"published":true}`
+
+```ts
+import { GitCMS } from '@gitcms/client'
+
+const cms = new GitCMS({
+  repository: 'username/my-blog',
+  branch: 'main',
+  baseUrl: process.env.NEXT_PUBLIC_GITCMS_API_BASE, // e.g. https://your-site.vercel.app
+  token: process.env.GITCMS_GITHUB_TOKEN, // Optional if repo is public
+})
+
+const posts = await cms
+  .collection('blog-posts')
+  .where('published', true)
+  .orderBy('publishedAt', 'desc')
+  .limit(10)
+  .get()
 ```
 
-## Usage
+## Fetch a single document
 
-```typescript
-// pages/index.tsx
-import { cms } from '../lib/cms';
-
-export async function getStaticProps() {
-  const posts = await cms
-    .collection('blog-posts')
-    .where('published', true)
-    .orderBy('publishedAt', 'desc')
-    .get();
-
-  return {
-    props: { posts },
-    revalidate: 60,
-  };
-}
+```ts
+const post = await cms.collection('blog-posts').doc('my-first-post').get()
 ```
+
+Notes:
+- For private repositories, provide a fine‑grained PAT with least privileges: `Contents: Read` on the specific repo.
+- The API route will use the provided bearer token when present.

@@ -41,6 +41,8 @@ export interface QueryOptions {
   offset?: number;
 }
 
+export type TransportMode = 'github' | 'http';
+
 export interface GitCMSError extends Error {
   code: string;
   details?: any;

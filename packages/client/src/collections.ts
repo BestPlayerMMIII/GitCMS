@@ -12,6 +12,17 @@ export class CollectionRef {
    * Get all items in the collection
    */
   async get(): Promise<ContentItem[]> {
+    if (this.config.baseUrl) {
+      const [owner, repo] = this.config.repository.split('/');
+      const url = new URL(`${this.config.baseUrl}/api/content/${owner}/${repo}/${this.name}`);
+      url.searchParams.set('branch', this.config.branch || 'main');
+      const res = await fetch(url.toString(), {
+        headers: this.config.token ? { Authorization: `Bearer ${this.config.token}` } : {},
+      });
+      if (!res.ok) throw new Error(`GitCMS HTTP error ${res.status}`);
+      const json = await res.json();
+      return json.items as ContentItem[];
+    }
     try {
       const [owner, repo] = this.config.repository.split('/');
       const response = await this.octokit.rest.repos.getContent({
@@ -39,7 +50,6 @@ export class CollectionRef {
               if (file.name.endsWith('.json')) {
                 items.push(JSON.parse(content));
               } else if (file.name.endsWith('.md')) {
-                // Parse markdown frontmatter
                 const item = this.parseMarkdown(content, file.name);
                 items.push(item);
               }
@@ -158,6 +168,23 @@ export class CollectionQuery {
   }
 
   async get(): Promise<ContentItem[]> {
+    if (this.config.baseUrl) {
+      const [owner, repo] = this.config.repository.split('/');
+      const url = new URL(`${this.config.baseUrl}/api/content/${owner}/${repo}/${this.collectionName}`);
+      url.searchParams.set('branch', this.config.branch || 'main');
+      if (Object.keys(this.filters).length) url.searchParams.set('where', JSON.stringify(this.filters));
+      if (this.ordering) {
+        url.searchParams.set('orderBy', this.ordering.field);
+        url.searchParams.set('order', this.ordering.direction);
+      }
+      if (this.limitCount != null) url.searchParams.set('limit', String(this.limitCount));
+      const res = await fetch(url.toString(), {
+        headers: this.config.token ? { Authorization: `Bearer ${this.config.token}` } : {},
+      });
+      if (!res.ok) throw new Error(`GitCMS HTTP error ${res.status}`);
+      const json = await res.json();
+      return json.items as ContentItem[];
+    }
     const collection = new CollectionRef(this.collectionName, this.octokit, this.config);
     let items = await collection.get();
 
