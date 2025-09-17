@@ -34,7 +34,7 @@ export class CollectionRef {
 
       if (Array.isArray(response.data)) {
         const items: ContentItem[] = [];
-        
+
         for (const file of response.data) {
           if (file.type === 'file' && (file.name.endsWith('.json') || file.name.endsWith('.md'))) {
             const fileResponse = await this.octokit.rest.repos.getContent({
@@ -46,7 +46,7 @@ export class CollectionRef {
 
             if ('content' in fileResponse.data) {
               const content = Buffer.from(fileResponse.data.content, 'base64').toString('utf-8');
-              
+
               if (file.name.endsWith('.json')) {
                 items.push(JSON.parse(content));
               } else if (file.name.endsWith('.md')) {
@@ -129,9 +129,8 @@ export class CollectionRef {
       }
     }
 
-    const markdownContent = frontmatterEnd > 0 
-      ? lines.slice(frontmatterEnd + 1).join('\n') 
-      : content;
+    const markdownContent =
+      frontmatterEnd > 0 ? lines.slice(frontmatterEnd + 1).join('\n') : content;
 
     return {
       id: filename.replace(/\.(md|json)$/, ''),
@@ -170,9 +169,12 @@ export class CollectionQuery {
   async get(): Promise<ContentItem[]> {
     if (this.config.baseUrl) {
       const [owner, repo] = this.config.repository.split('/');
-      const url = new URL(`${this.config.baseUrl}/api/content/${owner}/${repo}/${this.collectionName}`);
+      const url = new URL(
+        `${this.config.baseUrl}/api/content/${owner}/${repo}/${this.collectionName}`
+      );
       url.searchParams.set('branch', this.config.branch || 'main');
-      if (Object.keys(this.filters).length) url.searchParams.set('where', JSON.stringify(this.filters));
+      if (Object.keys(this.filters).length)
+        url.searchParams.set('where', JSON.stringify(this.filters));
       if (this.ordering) {
         url.searchParams.set('orderBy', this.ordering.field);
         url.searchParams.set('order', this.ordering.direction);
@@ -190,7 +192,7 @@ export class CollectionQuery {
 
     // Apply filters
     Object.entries(this.filters).forEach(([field, value]) => {
-      items = items.filter(item => item[field] === value);
+      items = items.filter(item => item.data[field] === value);
     });
 
     // Apply ordering
@@ -198,7 +200,7 @@ export class CollectionQuery {
       items.sort((a, b) => {
         const aVal = a[this.ordering!.field];
         const bVal = b[this.ordering!.field];
-        
+
         if (aVal < bVal) return this.ordering!.direction === 'asc' ? -1 : 1;
         if (aVal > bVal) return this.ordering!.direction === 'asc' ? 1 : -1;
         return 0;
@@ -225,10 +227,10 @@ export class DocumentRef {
   async get(): Promise<ContentItem | null> {
     try {
       const [owner, repo] = this.config.repository.split('/');
-      
+
       // Try JSON first, then Markdown
       const extensions = ['json', 'md'];
-      
+
       for (const ext of extensions) {
         try {
           const response = await this.octokit.rest.repos.getContent({
@@ -240,7 +242,7 @@ export class DocumentRef {
 
           if ('content' in response.data) {
             const content = Buffer.from(response.data.content, 'base64').toString('utf-8');
-            
+
             if (ext === 'json') {
               return JSON.parse(content);
             } else {

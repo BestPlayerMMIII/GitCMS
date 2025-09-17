@@ -85,7 +85,7 @@ export class GitCMS {
 
       if (Array.isArray(response.data)) {
         const collections: Collection[] = [];
-        
+
         for (const item of response.data) {
           if (item.type === 'dir') {
             const collectionData = await this.collection(item.name).get();
