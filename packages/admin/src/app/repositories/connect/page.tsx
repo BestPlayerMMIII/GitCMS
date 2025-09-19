@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { use, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { RepositoryPicker } from '@/components/repository-picker';
-import { PageHeader } from '@/components/page-header';
-import { ArrowLeft, ArrowRight } from 'lucide-react';
+import { PageSubHeader } from '@/components/page-header';
+import { ArrowRight } from 'lucide-react';
+import { useNavigationHeader } from '@/contexts/navigation-context';
 
 interface Repository {
   owner: string;
@@ -15,6 +16,15 @@ interface Repository {
 }
 
 export default function ConnectRepositoryPage() {
+  const { setHeader } = useNavigationHeader();
+  useEffect(() => {
+    setHeader(
+      'repositories',
+      <PageSubHeader title="Connect Repository" backName="Back to Dashboard" onBack="/" />
+    );
+    return () => setHeader('repositories', null);
+  }, [setHeader]);
+
   const [selectedRepository, setSelectedRepository] = useState<Repository | null>(null);
   const [connecting, setConnecting] = useState(false);
   const router = useRouter();
@@ -37,20 +47,7 @@ export default function ConnectRepositoryPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <PageHeader
-        title="Connect Repository"
-        leftElement={
-          <button
-            onClick={() => router.push('/')}
-            className="flex items-center space-x-2 text-gray-600 hover:text-gray-900"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            <span>Back to Dashboard</span>
-          </button>
-        }
-      />
-
+    <div className="bg-gray-50">
       {/* Main Content */}
       <main className="max-w-4xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
         <div className="bg-white rounded-lg shadow">
@@ -76,7 +73,7 @@ export default function ConnectRepositoryPage() {
                         ) : (
                           <ArrowRight className="h-4 w-4" />
                         )}
-                        <span>{connecting ? 'Connecting...' : 'Setup Repository'}</span>
+                        <span>{connecting ? 'Connecting...' : 'Connect Repository'}</span>
                       </button>
                     </div>
                   </div>

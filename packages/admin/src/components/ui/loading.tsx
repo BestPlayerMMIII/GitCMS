@@ -270,7 +270,7 @@ export function LoadingSpinner({
 // Full page loading component
 export function PageLoading({ message = 'Loading...' }: { message?: string }) {
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+    <div className="bg-gray-50 flex items-center justify-center">
       <div className="text-center">
         <LoadingSpinner size="lg" />
         <p className="mt-4 text-gray-600">{message}</p>

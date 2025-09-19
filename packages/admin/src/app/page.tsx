@@ -2,25 +2,17 @@
 
 import { useSession, signOut } from 'next-auth/react';
 import { LogOut, Github, Settings, FileText } from 'lucide-react';
+import { useNavigationHeader } from '@/contexts/navigation-context';
+import { useEffect } from 'react';
 
 export default function HomePage() {
   const { data: session, status } = useSession();
+  const { setHeader } = useNavigationHeader();
 
-  if (status === 'loading') {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-gray-900 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading...</p>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="min-h-screen bg-gray-50">
-      {/* User Info Header */}
-      {session?.user && (
+  const createHeader = () => {
+    if (!session?.user) return <></>;
+    else
+      return (
         <div className="bg-white shadow-sm border-b">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
             <div className="flex items-center justify-between">
@@ -47,8 +39,26 @@ export default function HomePage() {
             </div>
           </div>
         </div>
-      )}
+      );
+  };
+  useEffect(() => {
+    setHeader('dashboard', createHeader());
+    return () => setHeader('dashboard', null);
+  }, [setHeader, session?.user]);
 
+  if (status === 'loading') {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-gray-900 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-gray-50">
       {/* Main content */}
       <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         <div className="px-4 py-6 sm:px-0">

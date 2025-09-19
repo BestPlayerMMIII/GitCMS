@@ -7,6 +7,8 @@ import { ProgressiveLoading, ContentGridSkeleton } from '@/components/ui/loading
 import { useContentList, useRepoSchemas, useContentMutations } from '@/lib/api-hooks';
 import { useRepository } from '@/contexts/repository-context';
 import type { GitCMSSchema } from '@gitcms/core';
+import { PageSubHeader } from '@/components/page-header';
+import { useNavigationHeader } from '@/contexts/navigation-context';
 
 interface ContentItem {
   id: string;
@@ -22,6 +24,12 @@ interface ContentItem {
 }
 
 function ContentListContent() {
+  const { setHeader } = useNavigationHeader();
+  useEffect(() => {
+    setHeader('content', <PageSubHeader title="Content" backName="Back to Dashboard" onBack="/" />);
+    return () => setHeader('content', null);
+  }, [setHeader]);
+
   const searchParams = useSearchParams();
   const router = useRouter();
   const { repositoryInfo, setRepositoryInfo } = useRepository();
@@ -232,7 +240,7 @@ function ContentListContent() {
 
   if (loading && !contentList.length) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
           <p className="mt-4 text-gray-600">Loading content...</p>
@@ -243,7 +251,7 @@ function ContentListContent() {
 
   if (error && !contentList.length) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="bg-red-50 border border-red-200 rounded-lg p-6 max-w-md">
             <div className="flex items-center">
@@ -276,7 +284,7 @@ function ContentListContent() {
   // Empty state when no repository is connected
   if (!repositoryInfo) {
     return (
-      <div className="min-h-screen bg-gray-50">
+      <div className="bg-gray-50">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
           <div className="text-center">
             <div className="mx-auto h-24 w-24 bg-gray-100 rounded-full flex items-center justify-center">
@@ -350,53 +358,7 @@ function ContentListContent() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center space-x-4">
-              <button
-                onClick={() => router.back()}
-                className="p-2 text-gray-400 hover:text-gray-600"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M15 19l-7-7 7-7"
-                  />
-                </svg>
-              </button>
-              <div>
-                <h1 className="text-lg font-semibold text-gray-900">
-                  Content {schemaId ? `• ${schemaId}` : ''}
-                </h1>
-                <p className="text-sm text-gray-500">
-                  {repositoryInfo?.owner}/{repositoryInfo?.repo}
-                </p>
-              </div>
-            </div>
-
-            <button
-              onClick={handleCreateContent}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center space-x-2"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 4v16m8-8H4"
-                />
-              </svg>
-              <span>Create Content</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
+    <div className="bg-gray-50">
       {/* Filters */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0">

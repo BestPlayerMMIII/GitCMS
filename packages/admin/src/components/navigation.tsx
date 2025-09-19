@@ -2,30 +2,45 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, Github, Settings, FileText, FolderOpen, Image, Archive } from 'lucide-react';
+import { Home, Github, Settings, FileText, Image, Archive, LucideIcon } from 'lucide-react';
 import { ReactNode } from 'react';
+import { useNavigationHeader } from '@/contexts/navigation-context';
 
-const navigation = [
-  { name: 'Dashboard', href: '/', icon: Home },
-  { name: 'Repositories', href: '/repositories/connect', icon: Github },
-  { name: 'Schemas', href: '/schemas', icon: Settings },
-  { name: 'Collections', href: '/collections', icon: Archive },
-  { name: 'Content', href: '/content', icon: FileText },
-  { name: 'Media', href: '/media', icon: Image },
+export type NavigationItem =
+  | 'dashboard'
+  | 'repositories'
+  | 'schemas'
+  | 'collections'
+  | 'content'
+  | 'media';
+interface NavigationEntry {
+  id: NavigationItem;
+  name: string;
+  href: string;
+  icon: LucideIcon;
+  header?: ReactNode;
+}
+const navigation: NavigationEntry[] = [
+  { id: 'dashboard', name: 'Dashboard', href: '/', icon: Home },
+  { id: 'repositories', name: 'Repositories', href: '/repositories/connect', icon: Github },
+  { id: 'schemas', name: 'Schemas', href: '/schemas', icon: Settings },
+  { id: 'collections', name: 'Collections', href: '/collections', icon: Archive },
+  { id: 'content', name: 'Content', href: '/content', icon: FileText },
+  { id: 'media', name: 'Media', href: '/media', icon: Image },
 ];
 
 interface NavigationProps {
-  /** Optional additional headers to stack below the main navigation */
-  additionalHeaders?: ReactNode[];
-  /** Repository information to display in header */
-  repositoryInfo?: {
-    owner: string;
-    repo: string;
-  };
+  repositoryInfo?: { owner: string; repo: string };
 }
 
-export function Navigation({ additionalHeaders, repositoryInfo }: NavigationProps = {}) {
+export function Navigation({ repositoryInfo }: NavigationProps = {}) {
   const pathname = usePathname();
+
+  const { headers } = useNavigationHeader();
+  const activeId = navigation.find(item =>
+    item.href === '/' ? pathname === item.href : pathname.startsWith(item.href)
+  )?.id;
+  const activeSubheader = activeId ? headers[activeId] : null;
 
   return (
     <div className="sticky top-0 z-50 bg-white shadow-sm">
@@ -38,13 +53,6 @@ export function Navigation({ additionalHeaders, repositoryInfo }: NavigationProp
                 <Link href="/" className="text-xl font-bold text-gray-900">
                   GitCMS
                 </Link>
-                {repositoryInfo && (
-                  <div className="ml-4 hidden sm:block">
-                    <span className="text-sm text-gray-500">
-                      {repositoryInfo.owner}/{repositoryInfo.repo}
-                    </span>
-                  </div>
-                )}
               </div>
               <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
                 {navigation.map(item => {
@@ -69,45 +77,16 @@ export function Navigation({ additionalHeaders, repositoryInfo }: NavigationProp
               </div>
             </div>
 
-            {/* Quick Action Buttons */}
-            <div className="hidden sm:ml-6 sm:flex sm:items-center sm:space-x-4">
-              <Link
-                href="/media"
-                className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-md text-sm font-medium transition-colors"
-              >
-                Media Library
-              </Link>
-              <Link
-                href="/content/edit"
-                className="bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-md text-sm font-medium transition-colors"
-                onClick={e => {
-                  // Check if we have a connected repository and include it in the URL
-                  const connectedRepo = localStorage.getItem('gitcms-connected-repo');
-                  if (connectedRepo) {
-                    try {
-                      const repoData = JSON.parse(connectedRepo);
-                      const params = new URLSearchParams({
-                        owner: repoData.owner,
-                        repo: repoData.name,
-                        schemaId: 'blog-post', // Default schema
-                      });
-                      e.preventDefault();
-                      window.location.href = `/content/edit?${params}`;
-                    } catch (error) {
-                      // Fall back to default behavior
-                    }
-                  }
-                }}
-              >
-                New Content
-              </Link>
-              <Link
-                href="/demo/rich-editor"
-                className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 rounded-md text-sm font-medium transition-colors"
-              >
-                Try Editor
-              </Link>
-            </div>
+            {/* Repository Info */}
+            {repositoryInfo && (
+              <div className="hidden sm:ml-6 sm:flex sm:items-center sm:space-x-4">
+                <div className="ml-4 hidden sm:block">
+                  <span className="text-sm text-gray-500">
+                    {repositoryInfo.owner}/{repositoryInfo.repo}
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -135,44 +114,6 @@ export function Navigation({ additionalHeaders, repositoryInfo }: NavigationProp
                 </Link>
               );
             })}
-            <div className="border-t border-gray-200 pt-3 pb-3">
-              <Link
-                href="/media"
-                className="block mx-3 mb-2 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-md text-sm font-medium text-center"
-              >
-                Media Library
-              </Link>
-              <Link
-                href="/content/edit"
-                className="block mx-3 mb-2 bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-md text-sm font-medium text-center"
-                onClick={e => {
-                  // Check if we have a connected repository and include it in the URL
-                  const connectedRepo = localStorage.getItem('gitcms-connected-repo');
-                  if (connectedRepo) {
-                    try {
-                      const repoData = JSON.parse(connectedRepo);
-                      const params = new URLSearchParams({
-                        owner: repoData.owner,
-                        repo: repoData.name,
-                        schemaId: 'blog-post', // Default schema
-                      });
-                      e.preventDefault();
-                      window.location.href = `/content/edit?${params}`;
-                    } catch (error) {
-                      // Fall back to default behavior
-                    }
-                  }
-                }}
-              >
-                New Content
-              </Link>
-              <Link
-                href="/demo/rich-editor"
-                className="block mx-3 bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 rounded-md text-sm font-medium text-center"
-              >
-                Try Editor
-              </Link>
-            </div>
             {repositoryInfo && (
               <div className="px-3 py-2 border-t border-gray-200">
                 <span className="text-sm text-gray-500">
@@ -184,12 +125,8 @@ export function Navigation({ additionalHeaders, repositoryInfo }: NavigationProp
         </div>
       </nav>
 
-      {/* Additional Stacked Headers */}
-      {additionalHeaders?.map((header, index) => (
-        <div key={index} className="border-b border-gray-100 bg-gray-50">
-          {header}
-        </div>
-      ))}
+      {/* Additional Sub Header */}
+      {activeSubheader}
     </div>
   );
 }

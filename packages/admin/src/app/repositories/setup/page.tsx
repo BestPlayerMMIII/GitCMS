@@ -3,8 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { SetupWizard } from '@/components/setup-wizard';
-import { PageHeader } from '@/components/page-header';
-import { ArrowLeft } from 'lucide-react';
+import { PageSubHeader } from '@/components/page-header';
+import { useNavigationHeader } from '@/contexts/navigation-context';
 
 interface Repository {
   owner: string;
@@ -15,6 +15,15 @@ interface Repository {
 }
 
 export default function SetupPage() {
+  const { setHeader } = useNavigationHeader();
+  useEffect(() => {
+    setHeader(
+      'repositories',
+      <PageSubHeader title="Setup Repository" backName="Back" onBack="/repositories/connect" />
+    );
+    return () => setHeader('repositories', null);
+  }, [setHeader]);
+
   const [repository, setRepository] = useState<Repository | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
@@ -57,7 +66,7 @@ export default function SetupPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="bg-gray-50 flex items-center justify-center">
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-gray-900"></div>
       </div>
     );
@@ -65,7 +74,7 @@ export default function SetupPage() {
 
   if (!repository) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <p className="text-gray-500">No repository selected</p>
           <button
@@ -80,20 +89,7 @@ export default function SetupPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <PageHeader
-        title="Setup Repository"
-        leftElement={
-          <button
-            onClick={() => router.push('/repositories/connect')}
-            className="flex items-center space-x-2 text-gray-600 hover:text-gray-900"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            <span>Back to Repository Selection</span>
-          </button>
-        }
-      />
-
+    <div className="bg-gray-50">
       {/* Main Content */}
       <main className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
         <SetupWizard repository={repository} />

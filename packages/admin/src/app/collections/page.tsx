@@ -1,12 +1,13 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, use } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useRepository } from '@/contexts/repository-context';
-import { PageHeader } from '@/components/page-header';
+import { PageSubHeader } from '@/components/page-header';
 import { useRepoSchemas } from '@/lib/api-hooks';
-import { ArrowLeft, Plus, Archive, Edit, Trash2, Users, FileText, Settings } from 'lucide-react';
+import { Plus, Archive, Trash2, Users, FileText, Settings } from 'lucide-react';
+import { useNavigationHeader } from '@/contexts/navigation-context';
 
 interface Collection {
   id: string;
@@ -19,6 +20,15 @@ interface Collection {
 }
 
 export default function CollectionsPage() {
+  const { setHeader } = useNavigationHeader();
+  useEffect(() => {
+    setHeader(
+      'collections',
+      <PageSubHeader title="Collections" backName="Back to Dashboard" onBack="/" />
+    );
+    return () => setHeader('collections', null);
+  }, [setHeader]);
+
   const searchParams = useSearchParams();
   const { repositoryInfo, setRepositoryInfo } = useRepository();
   const [collections, setCollections] = useState<Collection[]>([]);
@@ -117,26 +127,9 @@ export default function CollectionsPage() {
     );
   }
 
-  const collectionsPageHeader = (
-    <PageHeader
-      title="Collections"
-      leftElement={
-        <Link
-          href="/content"
-          className="flex items-center space-x-2 text-gray-600 hover:text-gray-900"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back to Content
-        </Link>
-      }
-      isStacked={true}
-    />
-  );
-
   if (loading || schemasLoading) {
     return (
-      <div className="bg-gray-50 min-h-screen">
-        {collectionsPageHeader}
+      <div className="bg-gray-50">
         <div className="max-w-7xl mx-auto py-6">
           <div className="flex items-center justify-center h-64">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
@@ -149,8 +142,7 @@ export default function CollectionsPage() {
 
   if (error) {
     return (
-      <div className="bg-gray-50 min-h-screen">
-        {collectionsPageHeader}
+      <div className="bg-gray-50">
         <div className="max-w-7xl mx-auto py-6">
           <div className="text-center py-8">
             <div className="text-red-600 mb-4">Error: {error}</div>
@@ -167,8 +159,7 @@ export default function CollectionsPage() {
   }
 
   return (
-    <div className="bg-gray-50 min-h-screen">
-      {collectionsPageHeader}
+    <div className="bg-gray-50">
       <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">

@@ -3,12 +3,21 @@
 import { MediaLibrary } from '@/components/media/media-library';
 import { useSearchParams } from 'next/navigation';
 import { useRepository } from '@/contexts/repository-context';
-import { PageHeader } from '@/components/page-header';
+import { PageSubHeader } from '@/components/page-header';
 import Link from 'next/link';
-import { ArrowLeft } from 'lucide-react';
 import { useEffect } from 'react';
+import { useNavigationHeader } from '@/contexts/navigation-context';
 
 export default function MediaPage() {
+  const { setHeader } = useNavigationHeader();
+  useEffect(() => {
+    setHeader(
+      'media',
+      <PageSubHeader title="Media Library" backName="Back to Dashboard" onBack="/" />
+    );
+    return () => setHeader('media', null);
+  }, [setHeader]);
+
   const searchParams = useSearchParams();
   const { repositoryInfo, setRepositoryInfo } = useRepository();
 
@@ -58,25 +67,8 @@ export default function MediaPage() {
     );
   }
 
-  const mediaPageHeader = (
-    <PageHeader
-      title="Media Library"
-      leftElement={
-        <Link
-          href="/content"
-          className="flex items-center space-x-2 text-gray-600 hover:text-gray-900"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back to Content
-        </Link>
-      }
-      isStacked={true}
-    />
-  );
-
   return (
-    <div className="bg-gray-50 min-h-screen">
-      {mediaPageHeader}
+    <div className="bg-gray-50">
       <div className="max-w-7xl mx-auto py-6">
         <MediaLibrary owner={repositoryInfo.owner} repo={repositoryInfo.repo} mode="library" />
       </div>

@@ -1,10 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, use } from 'react';
 import { useSearchParams } from 'next/navigation';
-import Link from 'next/link';
-import { ArrowLeft } from 'lucide-react';
-import { PageHeader } from '@/components/page-header';
+import { PageSubHeader } from '@/components/page-header';
 import { SchemaList } from '@/components/schemas/schema-list';
 import { SchemaEditor } from '@/components/schemas/schema-editor';
 import { SchemaImportModal } from '@/components/schemas/schema-import-modal';
@@ -12,6 +10,7 @@ import { ProgressiveLoading, SchemaListSkeleton } from '@/components/ui/loading'
 import { useRepoSchemas, useSchemaMutations, useCacheInvalidation } from '@/lib/api-hooks';
 import { useRepository } from '@/contexts/repository-context';
 import type { GitCMSSchema } from '@gitcms/core';
+import { useNavigationHeader } from '@/contexts/navigation-context';
 
 interface SchemaPageState {
   view: 'list' | 'edit' | 'create' | 'import';
@@ -23,6 +22,7 @@ export default function SchemasPage() {
   const [state, setState] = useState<SchemaPageState>({ view: 'list' });
   const [importModalOpen, setImportModalOpen] = useState(false);
   const { repositoryInfo, setRepositoryInfo } = useRepository();
+  const { setHeader } = useNavigationHeader();
 
   // Cache invalidation utilities
   const { invalidateRepoSchemas } = useCacheInvalidation();
@@ -201,24 +201,32 @@ export default function SchemasPage() {
     refreshSchemas();
   };
 
-  const schemasPageHeader = (
-    <PageHeader
-      title="Content Schemas"
-      leftElement={
-        <Link href="/" className="flex items-center space-x-2 text-gray-600 hover:text-gray-900">
-          <ArrowLeft className="h-4 w-4" />
-          Back to Dashboard
-        </Link>
-      }
-      className="mb-4"
-    />
-  );
+  const createHeader = () => {
+    return state.view === 'list' ? (
+      <PageSubHeader title="Schemas" backName="Back to Dashboard" onBack={'/'} />
+    ) : (
+      <PageSubHeader
+        title={
+          state.view === 'create'
+            ? 'Create Schema'
+            : state.view === 'edit'
+              ? 'Edit Schema'
+              : 'Schemas'
+        }
+        backName="Back to Schemas"
+        onBack={handleCancel}
+      />
+    );
+  };
+  useEffect(() => {
+    setHeader('schemas', createHeader());
+    return () => setHeader('schemas', null);
+  }, [setHeader, state]);
 
   return (
     <div className="container mx-auto py-8">
       {state.view === 'list' && (
         <>
-          {schemasPageHeader}
           <div className="mb-6">
             <p className="text-gray-600">
               Content schemas define the structure and fields for your content types.
@@ -280,23 +288,6 @@ export default function SchemasPage() {
 
       {(state.view === 'create' || state.view === 'edit') && (
         <>
-          <div className="mb-6">
-            <button
-              onClick={handleCancel}
-              className="inline-flex items-center text-sm text-gray-500 hover:text-gray-700 mb-4"
-            >
-              <ArrowLeft className="h-4 w-4 mr-1" />
-              Back to Schemas
-            </button>
-            <PageHeader title={state.view === 'create' ? 'Create Schema' : 'Edit Schema'} />
-            <div className="mb-4">
-              <p className="text-gray-600">
-                {state.view === 'create'
-                  ? 'Define a new content type schema with custom fields and validation rules'
-                  : 'Modify the existing content type schema'}
-              </p>
-            </div>
-          </div>
           <SchemaEditor
             schema={state.selectedSchema}
             onSave={handleSaveSchema}

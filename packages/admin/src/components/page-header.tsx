@@ -1,5 +1,7 @@
 'use client';
 
+import { ArrowLeft } from 'lucide-react';
+import Link from 'next/link';
 import { ReactNode } from 'react';
 
 interface PageHeaderProps {
@@ -19,7 +21,12 @@ interface PageHeaderProps {
 
 export function PageHeader({
   title,
-  leftElement,
+  leftElement = (
+    <Link href="/" className="flex items-center space-x-2 text-gray-600 hover:text-gray-900">
+      <ArrowLeft className="h-4 w-4 mr-1" />
+      Back to Dashboard
+    </Link>
+  ),
   rightElement,
   className = '',
   size = 'normal',
@@ -27,8 +34,8 @@ export function PageHeader({
 }: PageHeaderProps) {
   const paddingClass = size === 'large' ? 'py-6' : 'py-4';
   const titleClass = size === 'large' ? 'text-2xl font-bold' : 'text-xl font-semibold';
-  const backgroundClass = isStacked ? 'bg-gray-50' : 'bg-white';
-  const borderClass = isStacked ? 'border-b border-gray-100' : 'shadow-sm';
+  const backgroundClass = 'bg-white';
+  const borderClass = isStacked ? 'shadow-sm border-b border-gray-100' : 'shadow-sm';
 
   return (
     <header className={`${backgroundClass} ${borderClass} ${className}`}>
@@ -45,5 +52,40 @@ export function PageHeader({
         </div>
       </div>
     </header>
+  );
+}
+
+interface PageSubHeaderProps {
+  /** The main title to display in the center */
+  title: string;
+  /** Back name */
+  backName: string;
+  /** On Back action: [string <-> link URL] | [(() => void) <-> custom action] */
+  onBack: string | (() => void);
+  /** Optional right button/element */
+  rightElement?: ReactNode;
+}
+
+export function PageSubHeader({ title, backName, onBack, rightElement }: PageSubHeaderProps) {
+  const stdClassName = 'flex items-center space-x-2 text-gray-600 hover:text-gray-900';
+  return (
+    <PageHeader
+      title={title}
+      leftElement={
+        typeof onBack === 'string' ? (
+          <Link href={onBack} className={stdClassName}>
+            <ArrowLeft className="h-4 w-4 mr-1" />
+            {backName}
+          </Link>
+        ) : (
+          <button onClick={onBack} className={stdClassName}>
+            <ArrowLeft className="h-4 w-4 mr-1" />
+            {backName}
+          </button>
+        )
+      }
+      rightElement={rightElement}
+      isStacked={true}
+    />
   );
 }

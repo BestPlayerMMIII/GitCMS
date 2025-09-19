@@ -2,10 +2,11 @@
 
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { type GitCMSSchema } from '@gitcms/core';
 import { SchemaForm } from '@/components/content/schema-form';
 import { useRepoSchema, useContentItem, useContentMutations } from '@/lib/api-hooks';
 import { ProgressiveLoading } from '@/components/ui/loading';
+import { PageSubHeader } from '@/components/page-header';
+import { useNavigationHeader } from '@/contexts/navigation-context';
 
 interface ContentEditorProps {
   owner: string;
@@ -29,6 +30,7 @@ interface ContentData {
 
 export default function ContentEditor() {
   const searchParams = useSearchParams();
+  const { setHeader } = useNavigationHeader();
 
   // Get repository info from URL params or localStorage
   const [repoInfo, setRepoInfo] = useState<{ owner: string; repo: string } | null>(null);
@@ -181,6 +183,62 @@ export default function ContentEditor() {
     }
   };
 
+  useEffect(() => {
+    if (!schema) return;
+    setHeader(
+      'content',
+      <PageSubHeader
+        title={`${contentId ? 'Edit' : 'Create'} ${schema.id}`}
+        backName="Back to Content"
+        onBack="/content"
+        rightElement={
+          <div className="flex items-center space-x-3">
+            {contentId && (
+              <button
+                onClick={() => setEnableIdEdit(!enableIdEdit)}
+                className={`px-3 py-1 text-xs font-medium rounded-md border ${
+                  enableIdEdit
+                    ? 'bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100'
+                    : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
+                }`}
+                title={enableIdEdit ? 'Disable ID editing' : 'Enable ID editing'}
+              >
+                {enableIdEdit ? 'Disable ID Edit' : 'Enable ID Edit'}
+              </button>
+            )}
+            {savedMessage && (
+              <span className="text-sm text-green-600 flex items-center">
+                <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M5 13l4 4L19 7"
+                  />
+                </svg>
+                {savedMessage}
+              </span>
+            )}
+            {content?.metadata?.status && (
+              <span
+                className={`px-2 py-1 text-xs font-medium rounded-full ${
+                  content.metadata.status === 'published'
+                    ? 'bg-green-100 text-green-800'
+                    : content.metadata.status === 'draft'
+                      ? 'bg-yellow-100 text-yellow-800'
+                      : 'bg-gray-100 text-gray-800'
+                }`}
+              >
+                {content.metadata.status}
+              </span>
+            )}
+          </div>
+        }
+      />
+    );
+    return () => setHeader('schemas', null);
+  }, [setHeader, schema, contentId, content, enableIdEdit, newContentId, savedMessage]);
+
   // Determine the error to display (API errors take priority)
   const displayError = apiError?.message || saveError;
 
@@ -190,7 +248,7 @@ export default function ContentEditor() {
         loading={true}
         data={null}
         skeleton={
-          <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <div className="bg-gray-50 flex items-center justify-center">
             <div className="text-center">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
               <p className="mt-4 text-gray-600">Loading content editor...</p>
@@ -205,7 +263,7 @@ export default function ContentEditor() {
 
   if (displayError) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="bg-red-50 border border-red-200 rounded-lg p-6 max-w-md">
             <div className="flex items-center">
@@ -237,92 +295,14 @@ export default function ContentEditor() {
 
   if (!schema) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="bg-gray-50 flex items-center justify-center">
         <p className="text-gray-600">Schema not found</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center space-x-4">
-              <button
-                onClick={() => window.history.back()}
-                className="p-2 text-gray-400 hover:text-gray-600"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M15 19l-7-7 7-7"
-                  />
-                </svg>
-              </button>
-              <div>
-                <h1 className="text-lg font-semibold text-gray-900">
-                  {contentId ? 'Edit' : 'Create'} {schema.metadata.name}
-                </h1>
-                <p className="text-sm text-gray-500">
-                  {repoInfo?.owner}/{repoInfo?.repo} • {schema.id}
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center space-x-3">
-              {contentId && (
-                <button
-                  onClick={() => setEnableIdEdit(!enableIdEdit)}
-                  className={`px-3 py-1 text-xs font-medium rounded-md border ${
-                    enableIdEdit
-                      ? 'bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100'
-                      : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
-                  }`}
-                  title={enableIdEdit ? 'Disable ID editing' : 'Enable ID editing'}
-                >
-                  {enableIdEdit ? 'Disable ID Edit' : 'Enable ID Edit'}
-                </button>
-              )}
-              {savedMessage && (
-                <span className="text-sm text-green-600 flex items-center">
-                  <svg
-                    className="w-4 h-4 mr-1"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M5 13l4 4L19 7"
-                    />
-                  </svg>
-                  {savedMessage}
-                </span>
-              )}
-              {content?.metadata?.status && (
-                <span
-                  className={`px-2 py-1 text-xs font-medium rounded-full ${
-                    content.metadata.status === 'published'
-                      ? 'bg-green-100 text-green-800'
-                      : content.metadata.status === 'draft'
-                        ? 'bg-yellow-100 text-yellow-800'
-                        : 'bg-gray-100 text-gray-800'
-                  }`}
-                >
-                  {content.metadata.status}
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-
+    <div className="bg-gray-50">
       {/* Content */}
       <div className="max-w-4xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
         <SchemaForm
