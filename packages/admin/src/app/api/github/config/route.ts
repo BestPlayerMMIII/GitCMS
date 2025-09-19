@@ -1,13 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import {
-  GitHubApiClient,
-  defaultSchemas,
-  DEFAULT_GITCMS_CONFIG,
-  createGitCMSConfig,
-  GitCMSRepositoryConfig,
-} from '@gitcms/core';
+import { GitHubApiClient, defaultSchemas, createGitCMSConfig } from '@gitcms/core';
 
 export async function GET(request: NextRequest) {
   try {
@@ -122,7 +116,7 @@ This directory contains the GitCMS configuration for this repository.
 ## Files
 
 - \`config.json\`: Main configuration file
-- \`schemas/\`: Content type schemas  
+- \`schemas/\`: Content type schemas${config.includeDefaultSchemas ? ` (${Object.keys(defaultSchemas).length} default schemas included)` : ''}
 - \`collections/\`: Collection definitions
 
 ## Content Structure
@@ -130,7 +124,26 @@ This directory contains the GitCMS configuration for this repository.
 - Content Path: \`${defaultConfig.contentPath}\`
 - Media Path: \`${defaultConfig.mediaPath}\`
 
-Generated on ${new Date().toLocaleDateString()}
+${
+  config.includeDefaultSchemas
+    ? `
+
+## Default Schemas
+
+The following schemas have been created for you:
+
+${Object.entries(defaultSchemas)
+  .map(
+    ([id, schema]) =>
+      `- **${schema.metadata?.name || id}** (\`${id}\`): ${schema.metadata?.description || 'No description'}`
+  )
+  .join('\n')}
+
+You can edit these schemas or create new ones through the GitCMS admin interface.`
+    : ''
+}
+
+Generated on ${new Date().toLocaleDateString()} by GitCMS
 `,
       },
     ];
@@ -151,56 +164,28 @@ Generated on ${new Date().toLocaleDateString()}
       });
     }
 
+    // Create schemas directory
+    files.push({
+      path: '.gitcms/schemas/.gitkeep',
+      content:
+        '# GitCMS Schemas Directory\n\nThis directory contains content type schema definitions.\n',
+    });
+
+    // Create collections directory
+    files.push({
+      path: '.gitcms/collections/.gitkeep',
+      content:
+        '# GitCMS Collections Directory\n\nThis directory contains content type collection definitions.\n',
+    });
+
     // Create default schemas if requested
     if (config.includeDefaultSchemas) {
-      // Create schemas directory
-      files.push({
-        path: '.gitcms/schemas/.gitkeep',
-        content:
-          '# GitCMS Schemas Directory\n\nThis directory contains content type schema definitions.\n',
-      });
-
       // Add each default schema as a separate file
       for (const [schemaId, schema] of Object.entries(defaultSchemas)) {
         files.push({
           path: `.gitcms/schemas/${schemaId}.json`,
           content: JSON.stringify(schema, null, 2),
         });
-      }
-
-      // Update the README to mention schemas
-      const readmeIndex = files.findIndex(file => file.path === '.gitcms/README.md');
-      if (readmeIndex !== -1) {
-        files[readmeIndex].content = `# GitCMS Configuration
-
-This directory contains the GitCMS configuration for this repository.
-
-## Files
-
-- \`config.json\`: Main configuration file
-- \`schemas/\`: Content type schemas (${Object.keys(defaultSchemas).length} default schemas included)
-- \`collections/\`: Collection definitions
-
-## Content Structure
-
-- Content Path: \`${defaultConfig.contentPath}\`
-- Media Path: \`${defaultConfig.mediaPath}\`
-
-## Default Schemas
-
-The following schemas have been created for you:
-
-${Object.entries(defaultSchemas)
-  .map(
-    ([id, schema]) =>
-      `- **${schema.metadata?.name || id}** (\`${id}\`): ${schema.metadata?.description || 'No description'}`
-  )
-  .join('\n')}
-
-You can edit these schemas or create new ones through the GitCMS admin interface.
-
-Generated on ${new Date().toLocaleDateString()}
-`;
       }
     }
 
