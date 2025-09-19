@@ -85,14 +85,6 @@ export interface BaseFieldProps {
   allErrors?: Record<string, string>; // All form errors for nested error handling
   fieldPath?: string; // Current field path for error resolution
 }
-export interface BaseFieldProps {
-  field: FieldDefinition;
-  value: any;
-  onChange: (value: any) => void;
-  error?: string;
-  disabled?: boolean;
-  availableSchemas?: GitCMSSchema[]; // Available schemas for schema reference resolution
-}
 
 // String/Text Field Component
 export function StringField({ field, value, onChange, error, disabled }: BaseFieldProps) {
@@ -132,14 +124,7 @@ export function StringField({ field, value, onChange, error, disabled }: BaseFie
         {field.required && <span className="text-red-500 ml-1">*</span>}
       </label>
       {field.description && <p className="text-sm text-gray-500">{field.description}</p>}
-      {isTextarea ? (
-        <textarea {...inputProps} rows={4} />
-      ) : (
-        <input
-          {...inputProps}
-          type={field.type === 'email' ? 'email' : field.type === 'url' ? 'url' : 'text'}
-        />
-      )}
+      {isTextarea ? <textarea {...inputProps} rows={4} /> : <input {...inputProps} type={'text'} />}
       {error && <p className="text-sm text-red-500">{error}</p>}
       {stringField.maxLength && (
         <p className="text-xs text-gray-400">
@@ -242,7 +227,7 @@ export function DateField({ field, value, onChange, error, disabled }: BaseField
 // Select Field Component
 export function SelectField({ field, value, onChange, error, disabled }: BaseFieldProps) {
   const selectField = field as any;
-  const isMultiple = field.type === 'multi-select';
+  const isMultiple = selectField.multiple;
 
   const handleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     if (isMultiple) {
@@ -801,8 +786,6 @@ export function FieldRenderer({
   switch (field.type) {
     case 'string':
     case 'text':
-    case 'email':
-    case 'url':
       return (
         <StringField
           field={field}
@@ -848,7 +831,6 @@ export function FieldRenderer({
       );
 
     case 'select':
-    case 'multi-select':
       return (
         <SelectField
           field={field}
@@ -899,7 +881,6 @@ export function FieldRenderer({
       );
 
     case 'media':
-    case 'file':
       return (
         <MediaField
           field={field}
@@ -958,8 +939,6 @@ function getDefaultValue(field: FieldDefinition | undefined): any {
   switch (field.type) {
     case 'string':
     case 'text':
-    case 'email':
-    case 'url':
     case 'color':
     case 'rich-text':
       return '';
@@ -975,8 +954,7 @@ function getDefaultValue(field: FieldDefinition | undefined): any {
     case 'object':
       return {};
     case 'select':
-    case 'multi-select':
-      return field.type === 'multi-select' ? [] : '';
+      return '';
     default:
       return null;
   }

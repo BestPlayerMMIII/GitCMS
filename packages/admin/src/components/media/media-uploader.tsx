@@ -176,9 +176,7 @@ export function MediaUploader({
 
       // Update status to uploading
       setFiles(prev =>
-        prev.map(f =>
-          f.id === uploadFile.id ? { ...f, status: 'uploading', progress: 0 } : f
-        )
+        prev.map(f => (f.id === uploadFile.id ? { ...f, status: 'uploading', progress: 0 } : f))
       );
 
       return new Promise((resolve, reject) => {
@@ -204,9 +202,7 @@ export function MediaUploader({
             }
             setFiles(prev =>
               prev.map(f =>
-                f.id === uploadFile.id
-                  ? { ...f, status: 'success', progress: 100 }
-                  : f
+                f.id === uploadFile.id ? { ...f, status: 'success', progress: 100 } : f
               )
             );
             resolve(result.media);
@@ -215,7 +211,9 @@ export function MediaUploader({
             try {
               const errorData = JSON.parse(xhr.responseText);
               errorMessage = errorData.error || errorMessage;
-            } catch (e) {}
+            } catch (e) {
+              // already in error state
+            }
             setFiles(prev =>
               prev.map(f =>
                 f.id === uploadFile.id
@@ -243,7 +241,6 @@ export function MediaUploader({
     },
     [owner, repo, folder]
   );
-
 
   // Upload all files
   const uploadAllFiles = useCallback(async () => {

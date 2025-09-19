@@ -302,7 +302,7 @@ async function handleGetRepositoryMedia(
             type: getMimeTypeFromExtension(file.name),
           } as File) || 'other';
 
-        let imageUrl = GitHubMediaStorage.generateGitHubUrl(owner, repo, file.path);
+        const imageUrl = GitHubMediaStorage.generateGitHubUrl(owner, repo, file.path);
         let thumbnailUrl: string | undefined;
 
         // For images, optionally fetch content and create thumbnail data URL

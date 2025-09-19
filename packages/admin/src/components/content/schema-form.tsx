@@ -379,8 +379,6 @@ export function SchemaForm({
     switch (field.type) {
       case 'string':
       case 'text':
-      case 'email':
-      case 'url':
       case 'color':
       case 'rich-text':
         return '';
@@ -397,8 +395,6 @@ export function SchemaForm({
         return {};
       case 'select':
         return '';
-      case 'multi-select':
-        return [];
       default:
         return null;
     }

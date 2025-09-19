@@ -272,7 +272,7 @@ async function getContent(
 ): Promise<NextResponse> {
   try {
     const contentPath = await getContentPath(github, owner, repo, accessToken);
-    let filePath = `${contentPath}/${schemaId}/${contentId}.json`;
+    const filePath = `${contentPath}/${schemaId}/${contentId}.json`;
 
     const content = await github.getFileContent(filePath);
     const contentData = JSON.parse(content);
