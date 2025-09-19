@@ -573,3 +573,61 @@ export function usePublicSchemas(
     enabled: enabled && !!owner && !!repo,
   });
 }
+
+/**
+ * Enhanced Schema Import Hook
+ * Supports both public and private repositories with authentication
+ */
+export function useEnhancedSchemaImport(
+  owner: string | null,
+  repo: string | null,
+  options: { enabled?: boolean; includePrivate?: boolean; branch?: string } = {}
+): UseApiDataResult<{
+  schemas: GitCMSSchema[];
+  total: number;
+  repository?: {
+    owner: string;
+    repo: string;
+    branch: string;
+    fullName: string;
+    private: boolean;
+  };
+  warnings?: string[];
+  message?: string;
+}> {
+  const { enabled = true, includePrivate = true, branch = 'main' } = options;
+
+  return useApiData({
+    key:
+      owner && repo ? `enhanced:import:${owner}:${repo}:${branch}:${includePrivate}` : 'disabled',
+    fetcher: async () => {
+      if (!owner || !repo) {
+        throw new Error('Owner and repo are required');
+      }
+
+      const params = new URLSearchParams({
+        owner,
+        repo,
+        branch,
+        includePrivate: includePrivate.toString(),
+      });
+
+      const response = await fetch(`/api/schemas/import?${params}`);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `Failed to fetch schemas: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      return {
+        schemas: data.schemas || [],
+        total: data.total || 0,
+        repository: data.repository,
+        warnings: data.warnings,
+        message: data.message,
+      };
+    },
+    ttl: 300000, // Cache for 5 minutes
+    enabled: enabled && !!owner && !!repo,
+  });
+}

@@ -13,6 +13,8 @@ interface PageHeaderProps {
   className?: string;
   /** Size variant for the header */
   size?: 'normal' | 'large';
+  /** Whether this header should be stacked below navigation (affects styling) */
+  isStacked?: boolean;
 }
 
 export function PageHeader({
@@ -21,12 +23,15 @@ export function PageHeader({
   rightElement,
   className = '',
   size = 'normal',
+  isStacked = false,
 }: PageHeaderProps) {
   const paddingClass = size === 'large' ? 'py-6' : 'py-4';
   const titleClass = size === 'large' ? 'text-2xl font-bold' : 'text-xl font-semibold';
+  const backgroundClass = isStacked ? 'bg-gray-50' : 'bg-white';
+  const borderClass = isStacked ? 'border-b border-gray-100' : 'shadow-sm';
 
   return (
-    <header className={`bg-white shadow-sm ${className}`}>
+    <header className={`${backgroundClass} ${borderClass} ${className}`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className={`relative flex items-center justify-center ${paddingClass}`}>
           {/* Left Element - Absolutely positioned to not affect centering */}

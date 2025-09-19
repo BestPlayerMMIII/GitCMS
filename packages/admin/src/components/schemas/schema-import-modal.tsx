@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import type { GitCMSSchema } from '@gitcms/core';
-import { usePublicSchemas } from '../../lib/api-hooks';
+import { useEnhancedSchemaImport } from '../../lib/api-hooks';
 import { LoadingSpinner } from '../ui/loading';
 
 interface SchemaImportModalProps {
@@ -17,6 +17,15 @@ interface ImportState {
   schemas: GitCMSSchema[];
   selectedSchemas: Set<string>;
   error: string | null;
+  includePrivate: boolean;
+  repositoryInfo?: {
+    owner: string;
+    repo: string;
+    branch: string;
+    fullName: string;
+    private: boolean;
+  };
+  warnings?: string[];
 }
 
 export function SchemaImportModal({ isOpen, onClose, onImport }: SchemaImportModalProps) {
@@ -26,6 +35,7 @@ export function SchemaImportModal({ isOpen, onClose, onImport }: SchemaImportMod
     schemas: [],
     selectedSchemas: new Set(),
     error: null,
+    includePrivate: true,
   });
 
   const parseGitHubUrl = (url: string): { owner: string; repo: string } | null => {
@@ -52,14 +62,15 @@ export function SchemaImportModal({ isOpen, onClose, onImport }: SchemaImportMod
   // Parse repository info from URL
   const repoInfo = state.repoUrl ? parseGitHubUrl(state.repoUrl) : null;
 
-  // Use cached hook for fetching public schemas
+  // Use enhanced import hook for fetching schemas from both public and private repos
   const {
-    data: fetchedSchemas,
+    data: importData,
     loading: fetchingSchemas,
     error: fetchError,
     invalidate: refetchSchemas,
-  } = usePublicSchemas(repoInfo?.owner || null, repoInfo?.repo || null, {
+  } = useEnhancedSchemaImport(repoInfo?.owner || null, repoInfo?.repo || null, {
     enabled: false, // We'll trigger this manually
+    includePrivate: state.includePrivate,
   });
 
   const fetchSchemas = async () => {
@@ -77,12 +88,28 @@ export function SchemaImportModal({ isOpen, onClose, onImport }: SchemaImportMod
     setState(prev => ({ ...prev, step: 'loading', error: null }));
 
     try {
-      const response = await fetch(
-        `/api/schemas/public?owner=${repoInfo.owner}&repo=${repoInfo.repo}`
-      );
+      const params = new URLSearchParams({
+        owner: repoInfo.owner,
+        repo: repoInfo.repo,
+        includePrivate: state.includePrivate.toString(),
+      });
+
+      const response = await fetch(`/api/schemas/import?${params}`);
 
       if (!response.ok) {
         const errorData = await response.json();
+
+        // Handle specific error cases
+        if (errorData.requiresAuth) {
+          setState(prev => ({
+            ...prev,
+            step: 'error',
+            error:
+              'This repository is private. Please make sure you are authenticated and have access to this repository.',
+          }));
+          return;
+        }
+
         throw new Error(errorData.error || `Failed to fetch schemas: ${response.statusText}`);
       }
 
@@ -90,11 +117,13 @@ export function SchemaImportModal({ isOpen, onClose, onImport }: SchemaImportMod
       const schemas = data.schemas || [];
 
       if (schemas.length === 0) {
+        const message =
+          data.message ||
+          "No schemas found in this repository. Make sure it's a GitCMS-configured repository with schemas in the .gitcms/schemas/ directory.";
         setState(prev => ({
           ...prev,
           step: 'error',
-          error:
-            "No schemas found in this repository. Make sure it's a GitCMS-configured repository with schemas in the .gitcms/schemas/ directory.",
+          error: message,
         }));
         return;
       }
@@ -104,6 +133,8 @@ export function SchemaImportModal({ isOpen, onClose, onImport }: SchemaImportMod
         step: 'preview',
         schemas,
         selectedSchemas: new Set(schemas.map((s: GitCMSSchema) => s.id)),
+        repositoryInfo: data.repository,
+        warnings: data.warnings,
       }));
     } catch (error) {
       setState(prev => ({
@@ -151,6 +182,7 @@ export function SchemaImportModal({ isOpen, onClose, onImport }: SchemaImportMod
       schemas: [],
       selectedSchemas: new Set(),
       error: null,
+      includePrivate: true,
     });
   };
 
@@ -237,6 +269,25 @@ export function SchemaImportModal({ isOpen, onClose, onImport }: SchemaImportMod
                           className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                         />
                       </div>
+                      <div>
+                        <label className="flex items-center">
+                          <input
+                            type="checkbox"
+                            checked={state.includePrivate}
+                            onChange={e =>
+                              setState(prev => ({ ...prev, includePrivate: e.target.checked }))
+                            }
+                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                          />
+                          <span className="ml-2 text-sm text-gray-700">
+                            Include private repositories
+                          </span>
+                        </label>
+                        <p className="mt-1 text-xs text-gray-500">
+                          When enabled, you can import schemas from private repositories you have
+                          access to. You must be authenticated with GitHub for this to work.
+                        </p>
+                      </div>
                       <div className="text-xs text-gray-500">
                         <p className="font-medium">Supported formats:</p>
                         <ul className="mt-1 space-y-1">
@@ -259,6 +310,42 @@ export function SchemaImportModal({ isOpen, onClose, onImport }: SchemaImportMod
 
                 {state.step === 'preview' && (
                   <div className="mt-4">
+                    {/* Repository Information */}
+                    {state.repositoryInfo && (
+                      <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-md">
+                        <div className="flex items-center gap-2 mb-2">
+                          <h4 className="text-sm font-medium text-gray-900">
+                            Repository Information
+                          </h4>
+                          {state.repositoryInfo.private && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
+                              Private
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-sm text-gray-600">
+                          <p>
+                            <strong>Full Name:</strong> {state.repositoryInfo.fullName}
+                          </p>
+                          <p>
+                            <strong>Branch:</strong> {state.repositoryInfo.branch}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Warnings */}
+                    {state.warnings && state.warnings.length > 0 && (
+                      <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+                        <h4 className="text-sm font-medium text-yellow-800 mb-2">Warnings</h4>
+                        <ul className="text-sm text-yellow-700 space-y-1">
+                          {state.warnings.map((warning, index) => (
+                            <li key={index}>• {warning}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
                     <p className="text-sm text-gray-500 mb-4">
                       Found {state.schemas.length} schema{state.schemas.length !== 1 ? 's' : ''} in
                       the repository. Select which ones to import:

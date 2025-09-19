@@ -117,15 +117,18 @@ export const customValidators: Record<string, CustomValidator> = {
 // Legacy Zod schemas for backward compatibility
 export const FieldTypeSchema = z.enum([
   'string',
+  'text',
   'number',
   'boolean',
   'date',
   'datetime',
-  'media',
   'array',
   'object',
+  'media',
+  'reference',
+  'rich-text',
   'select',
-  'text',
+  'color',
 ]);
 
 export const ValidationRuleSchema = z.object({
@@ -255,8 +258,6 @@ export class ValidationEngine {
     switch (field.type) {
       case 'string':
       case 'text':
-      case 'email':
-      case 'url':
       case 'color':
         errors.push(...this.validateStringField(value, field, fieldName, path));
         break;
@@ -283,7 +284,6 @@ export class ValidationEngine {
         break;
 
       case 'media':
-      case 'file':
         errors.push(...this.validateMediaField(value, field, fieldName, path));
         break;
 
@@ -292,7 +292,6 @@ export class ValidationEngine {
         break;
 
       case 'select':
-      case 'multi-select':
         errors.push(...this.validateSelectField(value, field, fieldName, path));
         break;
 
@@ -371,17 +370,8 @@ export class ValidationEngine {
       }
     }
 
-    // Type-specific validation
-    if (field.type === 'email' && this.customValidators.email) {
-      const error = this.customValidators.email(value, field, {} as ValidationContext);
-      if (error) errors.push({ ...error, path });
-    }
-
-    if (field.type === 'url' && this.customValidators.url) {
-      const error = this.customValidators.url(value, field, {} as ValidationContext);
-      if (error) errors.push({ ...error, path });
-    }
-
+    // Type-specific validation for special string types
+    // Email and URL validation is now handled through pattern validation rules
     if (field.type === 'color' && this.customValidators.color) {
       const error = this.customValidators.color(value, field, {} as ValidationContext);
       if (error) errors.push({ ...error, path });
@@ -683,11 +673,11 @@ export class ValidationEngine {
 
     const validValues = selectField.options.map((opt: any) => opt.value || opt);
 
-    if (field.type === 'multi-select') {
+    if (selectField.multiple) {
       if (!Array.isArray(value)) {
         errors.push({
           field: fieldName,
-          message: `${field.label || fieldName} must be an array`,
+          message: `${fieldName} must be an array for multiple selection`,
           code: 'INVALID_TYPE',
           value,
           path,

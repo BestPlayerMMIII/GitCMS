@@ -16,17 +16,13 @@ export type FieldType =
   | 'boolean'
   | 'date'
   | 'datetime'
-  | 'email'
-  | 'url'
   | 'array'
   | 'object'
   | 'media'
   | 'reference'
   | 'rich-text'
   | 'select'
-  | 'multi-select'
-  | 'color'
-  | 'file';
+  | 'color';
 
 // Field validation rules
 export interface ValidationRule {
@@ -59,11 +55,13 @@ export interface BaseField {
 
 // String field with specific properties
 export interface StringField extends BaseField {
-  type: 'string' | 'text' | 'email' | 'url' | 'color';
+  type: 'string' | 'text' | 'color';
   minLength?: number;
   maxLength?: number;
   pattern?: string;
   format?: 'lowercase' | 'uppercase' | 'capitalize';
+  // For string fields with predefined patterns (email, url, etc.)
+  validation?: ValidationRule[];
 }
 
 // Number field with specific properties
@@ -99,9 +97,9 @@ export interface ObjectField extends BaseField {
   additionalProperties?: boolean;
 }
 
-// Media field for file uploads
+// Media field for file uploads (replaces both 'media' and 'file' types)
 export interface MediaField extends BaseField {
-  type: 'media' | 'file';
+  type: 'media';
   accept?: string[];
   maxSize?: number;
   multiple?: boolean;
@@ -125,11 +123,12 @@ export interface RichTextField extends BaseField {
   allowHtml?: boolean;
 }
 
-// Select field with options
+// Select field with options (supports both single and multiple selection)
 export interface SelectField extends BaseField {
-  type: 'select' | 'multi-select';
+  type: 'select';
   options: FieldOption[];
   allowCustom?: boolean;
+  multiple?: boolean; // Replaces separate 'multi-select' type
 }
 
 // Union type for all field definitions
@@ -354,14 +353,28 @@ export const projectSchema: GitCMSSchema = {
       description: 'Project status',
     },
     liveUrl: {
-      type: 'url',
+      type: 'string',
       label: 'Live URL',
       description: 'Live project URL',
+      validation: [
+        {
+          type: 'pattern',
+          value: '^https?://.*$',
+          message: 'Must be a valid URL starting with http:// or https://',
+        },
+      ],
     },
     githubUrl: {
-      type: 'url',
+      type: 'string',
       label: 'GitHub URL',
       description: 'GitHub repository URL',
+      validation: [
+        {
+          type: 'pattern',
+          value: '^https?://.*$',
+          message: 'Must be a valid URL starting with http:// or https://',
+        },
+      ],
     },
     startDate: {
       type: 'date',
@@ -760,8 +773,7 @@ export class SchemaUtils {
     switch (field.type) {
       case 'string':
       case 'text':
-      case 'email':
-      case 'url':
+      case 'color':
         const stringField = field as StringField;
         if (
           stringField.minLength &&
@@ -808,7 +820,6 @@ export class SchemaUtils {
         break;
 
       case 'select':
-      case 'multi-select':
         const selectField = field as SelectField;
         if (!selectField.options || selectField.options.length === 0) {
           errors.push('Select field must define options');
@@ -857,8 +868,6 @@ export class SchemaUtils {
     switch (field.type) {
       case 'string':
       case 'text':
-      case 'email':
-      case 'url':
       case 'color':
       case 'rich-text':
         return 'string';
@@ -882,18 +891,15 @@ export class SchemaUtils {
           .join('; ');
         return `{ ${props} }`;
       case 'media':
-      case 'file':
-        return 'string | File';
+        const mediaField = field as MediaField;
+        return mediaField.multiple ? 'string[]' : 'string'; // URL or array of URLs
       case 'reference':
         return 'string | string[]';
       case 'select':
         const selectField = field as SelectField;
         const values = selectField.options?.map(opt => `"${opt.value}"`).join(' | ');
-        return values || 'string';
-      case 'multi-select':
-        const multiSelectField = field as SelectField;
-        const multiValues = multiSelectField.options?.map(opt => `"${opt.value}"`).join(' | ');
-        return `(${multiValues || 'string'})[]`;
+        const baseType = values || 'string';
+        return selectField.multiple ? `(${baseType})[]` : baseType;
       default:
         return 'any';
     }

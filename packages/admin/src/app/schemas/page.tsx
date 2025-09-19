@@ -10,6 +10,7 @@ import { SchemaEditor } from '@/components/schemas/schema-editor';
 import { SchemaImportModal } from '@/components/schemas/schema-import-modal';
 import { ProgressiveLoading, SchemaListSkeleton } from '@/components/ui/loading';
 import { useRepoSchemas, useSchemaMutations, useCacheInvalidation } from '@/lib/api-hooks';
+import { useRepository } from '@/contexts/repository-context';
 import type { GitCMSSchema } from '@gitcms/core';
 
 interface SchemaPageState {
@@ -20,8 +21,8 @@ interface SchemaPageState {
 export default function SchemasPage() {
   const searchParams = useSearchParams();
   const [state, setState] = useState<SchemaPageState>({ view: 'list' });
-  const [repoInfo, setRepoInfo] = useState<{ owner: string; repo: string } | null>(null);
   const [importModalOpen, setImportModalOpen] = useState(false);
+  const { repositoryInfo, setRepositoryInfo } = useRepository();
 
   // Cache invalidation utilities
   const { invalidateRepoSchemas } = useCacheInvalidation();
@@ -32,41 +33,30 @@ export default function SchemasPage() {
     loading,
     error,
     refresh: refreshSchemas,
-  } = useRepoSchemas(repoInfo?.owner || null, repoInfo?.repo || null, {
-    enabled: Boolean(repoInfo),
+  } = useRepoSchemas(repositoryInfo?.owner || null, repositoryInfo?.repo || null, {
+    enabled: Boolean(repositoryInfo),
     fallbackToRegistry: true,
   });
 
   // Mutations with automatic cache invalidation
   const { saveSchema, deleteSchema } = useSchemaMutations(
-    repoInfo?.owner || null,
-    repoInfo?.repo || null
+    repositoryInfo?.owner || null,
+    repositoryInfo?.repo || null
   );
 
-  // Initialize repository info
+  // Initialize repository info from URL params if available
   useEffect(() => {
     const urlOwner = searchParams.get('owner');
     const urlRepo = searchParams.get('repo');
 
-    if (urlOwner && urlRepo) {
-      // Use URL parameters first
-      setRepoInfo({ owner: urlOwner, repo: urlRepo });
-    } else {
-      // Check localStorage for connected repository
-      const connectedRepo = localStorage.getItem('gitcms-connected-repo');
-      if (connectedRepo) {
-        try {
-          const repoData = JSON.parse(connectedRepo);
-          setRepoInfo({
-            owner: repoData.owner,
-            repo: repoData.name,
-          });
-        } catch (error) {
-          console.error('Failed to parse connected repository:', error);
-        }
-      }
+    if (
+      urlOwner &&
+      urlRepo &&
+      (!repositoryInfo || repositoryInfo.owner !== urlOwner || repositoryInfo.repo !== urlRepo)
+    ) {
+      setRepositoryInfo({ owner: urlOwner, repo: urlRepo });
     }
-  }, [searchParams]);
+  }, [searchParams, repositoryInfo, setRepositoryInfo]);
 
   const handleCreateSchema = () => {
     setState({ view: 'create' });
@@ -89,8 +79,56 @@ export default function SchemasPage() {
     }
   };
 
+  const handleDuplicateSchema = async (schema: GitCMSSchema) => {
+    if (!repositoryInfo) {
+      alert('Repository information not available. Please connect a repository first.');
+      return;
+    }
+
+    // Generate a unique ID for the duplicated schema
+    const generateUniqueId = (baseId: string): string => {
+      const existingIds = schemas?.map(s => s.id) || [];
+      let counter = 1;
+      let newId = `${baseId}-copy`;
+
+      while (existingIds.includes(newId)) {
+        counter++;
+        newId = `${baseId}-copy-${counter}`;
+      }
+
+      return newId;
+    };
+
+    const newId = generateUniqueId(schema.id);
+    const duplicatedSchema: GitCMSSchema = {
+      ...schema,
+      id: newId,
+      metadata: {
+        ...schema.metadata,
+        name: `${schema.metadata?.name || schema.id} (Copy)`,
+        description: schema.metadata?.description
+          ? `Copy of: ${schema.metadata.description}`
+          : `Copy of ${schema.id}`,
+      },
+    };
+
+    try {
+      await saveSchema(duplicatedSchema);
+      // The list will be automatically refreshed via cache invalidation
+    } catch (error) {
+      console.error('Failed to duplicate schema:', error);
+      if (error instanceof Error && error.message.includes('already exists')) {
+        alert('A schema with this ID already exists. Please try again.');
+        // Retry with a different ID
+        handleDuplicateSchema(schema);
+      } else {
+        alert(error instanceof Error ? error.message : 'Failed to duplicate schema');
+      }
+    }
+  };
+
   const handleSaveSchema = async (schema: GitCMSSchema) => {
-    if (!repoInfo) {
+    if (!repositoryInfo) {
       alert('Repository information not available. Please connect a repository first.');
       return;
     }
@@ -114,7 +152,7 @@ export default function SchemasPage() {
   };
 
   const handleImport = async (schemasToImport: GitCMSSchema[], repoUrl: string) => {
-    if (!repoInfo) {
+    if (!repositoryInfo) {
       throw new Error('Repository information not available. Please connect a repository first.');
     }
 
@@ -187,7 +225,7 @@ export default function SchemasPage() {
               <br />
               Create schemas first, then you can create content instances based on these templates.
             </p>
-            {!loading && schemas && schemas.length === 0 && !error && repoInfo && (
+            {!loading && schemas && schemas.length === 0 && !error && repositoryInfo && (
               <div className="mt-4 bg-blue-50 border border-blue-200 rounded-md p-4">
                 <div className="flex">
                   <div className="flex-shrink-0">
@@ -227,6 +265,7 @@ export default function SchemasPage() {
               onCreateSchema={handleCreateSchema}
               onEditSchema={handleEditSchema}
               onDeleteSchema={handleDeleteSchema}
+              onDuplicateSchema={handleDuplicateSchema}
               onImportSchemas={handleImportSchemas}
             />
           </ProgressiveLoading>
@@ -262,7 +301,7 @@ export default function SchemasPage() {
             schema={state.selectedSchema}
             onSave={handleSaveSchema}
             onCancel={handleCancel}
-            repoInfo={repoInfo}
+            repoInfo={repositoryInfo}
             onSchemaListChange={handleSchemaListChange}
           />
         </>

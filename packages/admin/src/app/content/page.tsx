@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ProgressiveLoading, ContentGridSkeleton } from '@/components/ui/loading';
 import { useContentList, useRepoSchemas, useContentMutations } from '@/lib/api-hooks';
+import { useRepository } from '@/contexts/repository-context';
 import type { GitCMSSchema } from '@gitcms/core';
 
 interface ContentItem {
@@ -23,16 +24,28 @@ interface ContentItem {
 function ContentListContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const { repositoryInfo, setRepositoryInfo } = useRepository();
 
-  // Get repository info from URL params or localStorage
-  const [repoInfo, setRepoInfo] = useState<{ owner: string; repo: string } | null>(null);
   const schemaId = searchParams.get('schemaId');
-
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
   // Schema selection modal state
   const [showSchemaModal, setShowSchemaModal] = useState(false);
+
+  // Update repository info from URL params if available
+  useEffect(() => {
+    const urlOwner = searchParams.get('owner');
+    const urlRepo = searchParams.get('repo');
+
+    if (
+      urlOwner &&
+      urlRepo &&
+      (!repositoryInfo || repositoryInfo.owner !== urlOwner || repositoryInfo.repo !== urlRepo)
+    ) {
+      setRepositoryInfo({ owner: urlOwner, repo: urlRepo });
+    }
+  }, [searchParams, repositoryInfo, setRepositoryInfo]);
 
   // Use cached hooks for data fetching
   const {
@@ -40,50 +53,33 @@ function ContentListContent() {
     loading,
     error,
     refresh: refreshContent,
-  } = useContentList(repoInfo?.owner || null, repoInfo?.repo || null, schemaId || undefined, {
-    enabled: Boolean(repoInfo),
-  });
+  } = useContentList(
+    repositoryInfo?.owner || null,
+    repositoryInfo?.repo || null,
+    schemaId || undefined,
+    {
+      enabled: Boolean(repositoryInfo),
+    }
+  );
 
   const { data: availableSchemas = [], loading: loadingSchemas } = useRepoSchemas(
-    repoInfo?.owner || null,
-    repoInfo?.repo || null,
-    { enabled: Boolean(repoInfo) }
+    repositoryInfo?.owner || null,
+    repositoryInfo?.repo || null,
+    { enabled: Boolean(repositoryInfo) }
   );
 
   // Mutations with automatic cache invalidation
-  const { deleteContent } = useContentMutations(repoInfo?.owner || null, repoInfo?.repo || null);
-
-  // Initialize repository info
-  useEffect(() => {
-    const urlOwner = searchParams.get('owner');
-    const urlRepo = searchParams.get('repo');
-
-    if (urlOwner && urlRepo) {
-      // Use URL parameters first
-      setRepoInfo({ owner: urlOwner, repo: urlRepo });
-    } else {
-      // Check localStorage for connected repository
-      const connectedRepo = localStorage.getItem('gitcms-connected-repo');
-      if (connectedRepo) {
-        try {
-          const repoData = JSON.parse(connectedRepo);
-          setRepoInfo({
-            owner: repoData.owner,
-            repo: repoData.name,
-          });
-        } catch (error) {
-          console.error('Failed to parse connected repository:', error);
-        }
-      }
-    }
-  }, [searchParams]);
+  const { deleteContent, saveContent } = useContentMutations(
+    repositoryInfo?.owner || null,
+    repositoryInfo?.repo || null
+  );
 
   // Ensure content and schemas are arrays
   const contentList = content || [];
   const schemasList = availableSchemas || [];
 
   const handleCreateContent = () => {
-    if (!repoInfo) {
+    if (!repositoryInfo) {
       alert('No repository connected. Please connect a repository first.');
       return;
     }
@@ -97,11 +93,11 @@ function ContentListContent() {
   };
 
   const handleSchemaSelect = (selectedSchema: GitCMSSchema) => {
-    if (!repoInfo) return;
+    if (!repositoryInfo) return;
 
     const params = new URLSearchParams({
-      owner: repoInfo.owner,
-      repo: repoInfo.repo,
+      owner: repositoryInfo.owner,
+      repo: repositoryInfo.repo,
       schemaId: selectedSchema.id,
     });
 
@@ -110,7 +106,7 @@ function ContentListContent() {
   };
 
   const handleDelete = async (contentId: string, itemSchemaId: string) => {
-    if (!repoInfo) return;
+    if (!repositoryInfo) return;
 
     if (!confirm('Are you sure you want to delete this content? This action cannot be undone.')) {
       return;
@@ -125,11 +121,61 @@ function ContentListContent() {
     }
   };
 
+  const handleDuplicate = async (item: ContentItem) => {
+    if (!repositoryInfo) return;
+
+    // Generate a unique ID for the duplicated content
+    const generateUniqueId = (baseId: string): string => {
+      const existingIds = contentList.map(c => c.id);
+      let counter = 1;
+      let newId = `${baseId}-copy`;
+
+      while (existingIds.includes(newId)) {
+        counter++;
+        newId = `${baseId}-copy-${counter}`;
+      }
+
+      return newId;
+    };
+
+    const newId = generateUniqueId(item.id);
+    const duplicatedContent = {
+      ...item,
+      id: newId,
+      metadata: {
+        ...item.metadata,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        status: 'draft' as const, // New content should start as draft
+      },
+      // Update title/name fields to indicate it's a copy
+      data: {
+        ...item.data,
+        ...(item.data.title && { title: `${item.data.title} (Copy)` }),
+        ...(item.data.name && { name: `${item.data.name} (Copy)` }),
+      },
+    };
+
+    try {
+      await saveContent(item.schemaId, duplicatedContent.data, newId);
+      // Content list will be automatically refreshed via cache invalidation
+    } catch (error) {
+      console.error('Failed to duplicate content:', error);
+      if (error instanceof Error && error.message.includes('already exists')) {
+        alert('A content item with this ID already exists. Please try again.');
+        // Retry with a different ID
+        handleDuplicate(item);
+      } else {
+        alert(error instanceof Error ? error.message : 'Failed to duplicate content');
+      }
+    }
+  };
+
   const getEditUrl = (item: ContentItem) => {
-    if (!repoInfo) return '/content';
+    if (!repositoryInfo) return '/content';
     const params = new URLSearchParams({
-      owner: repoInfo.owner,
-      repo: repoInfo.repo,
+      owner: repositoryInfo.owner,
+      repo: repositoryInfo.repo,
       schemaId: item.schemaId,
       contentId: item.id,
     });
@@ -228,7 +274,7 @@ function ContentListContent() {
   }
 
   // Empty state when no repository is connected
-  if (!repoInfo) {
+  if (!repositoryInfo) {
     return (
       <div className="min-h-screen bg-gray-50">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
@@ -328,7 +374,7 @@ function ContentListContent() {
                   Content {schemaId ? `• ${schemaId}` : ''}
                 </h1>
                 <p className="text-sm text-gray-500">
-                  {repoInfo?.owner}/{repoInfo?.repo}
+                  {repositoryInfo?.owner}/{repositoryInfo?.repo}
                 </p>
               </div>
             </div>
@@ -481,6 +527,13 @@ function ContentListContent() {
                         Edit
                       </Link>
                       <button
+                        onClick={() => handleDuplicate(item)}
+                        className="px-3 py-2 text-sm text-green-600 border border-green-200 rounded-md hover:bg-green-50"
+                        title="Duplicate content"
+                      >
+                        Duplicate
+                      </button>
+                      <button
                         onClick={() => handleDelete(item.id, item.schemaId)}
                         className="px-3 py-2 text-sm text-red-600 border border-red-200 rounded-md hover:bg-red-50"
                       >
@@ -553,7 +606,7 @@ function ContentListContent() {
                             Create Schema
                           </Link>
                           <div className="text-xs text-gray-400">
-                            Repository: {repoInfo?.owner}/{repoInfo?.repo}
+                            Repository: {repositoryInfo?.owner}/{repositoryInfo?.repo}
                           </div>
                         </div>
                       </div>

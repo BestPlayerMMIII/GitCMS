@@ -34,20 +34,23 @@ export interface SchemaField {
   itemType?: string; // for array fields
   mediaTypes?: string[]; // for media fields
   options?: string[]; // for select fields
+  multiple?: boolean; // for select and media fields
 }
 
-export type FieldType = 
-  | 'string' 
-  | 'number' 
-  | 'boolean' 
-  | 'date' 
-  | 'datetime' 
-  | 'markdown' 
-  | 'media' 
-  | 'array' 
+export type FieldType =
+  | 'string'
+  | 'text'
+  | 'number'
+  | 'boolean'
+  | 'date'
+  | 'datetime'
+  | 'array'
   | 'object'
+  | 'media'
+  | 'reference'
+  | 'rich-text'
   | 'select'
-  | 'text';
+  | 'color';
 
 export interface ValidationRule {
   type: 'required' | 'min' | 'max' | 'pattern' | 'custom';

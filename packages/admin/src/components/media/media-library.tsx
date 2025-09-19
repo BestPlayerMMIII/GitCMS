@@ -12,6 +12,8 @@ import {
 import CDNSettings from './cdn-settings';
 import AdvancedMediaSearch from './advanced-media-search';
 import BulkOperations from './bulk-operations';
+import { VirtualFolderManager } from './virtual-folder-manager';
+import { useVirtualFolders } from '@/hooks/use-virtual-folders';
 import {
   Camera,
   FolderOpen,
@@ -71,16 +73,43 @@ export function MediaLibrary({
   const [showBulkOperations, setShowBulkOperations] = useState(false);
   const [hasActiveSearch, setHasActiveSearch] = useState(false);
   const [showHidden, setShowHidden] = useState(false);
+  const [showVirtualFolders, setShowVirtualFolders] = useState(false);
+  const [selectedVirtualFolder, setSelectedVirtualFolder] = useState<string | null>(null);
+
+  // Virtual folder management
+  const {
+    folders: virtualFolders,
+    updateFolders: updateVirtualFolders,
+    addMediaToFolder,
+    removeMediaFromFolder,
+    getMediaFolder,
+    getFolderMedia,
+    getUnorganizedMedia,
+  } = useVirtualFolders();
 
   // Determine what media to display
   const displayedMedia = useMemo(() => {
-    if (hasActiveSearch) {
-      return searchResults;
+    let result = hasActiveSearch ? searchResults : media;
+
+    // Filter by media type if specified
+    if (filters.mediaType) {
+      result = result.filter(item => item.mediaType === filters.mediaType);
+    }
+
+    // Filter by virtual folder if selected
+    if (selectedVirtualFolder) {
+      if (selectedVirtualFolder === 'unorganized') {
+        const unorganizedIds = getUnorganizedMedia(result.map(m => m.id));
+        result = result.filter(item => unorganizedIds.includes(item.id));
+      } else {
+        const folderMediaIds = getFolderMedia(selectedVirtualFolder);
+        result = result.filter(item => folderMediaIds.includes(item.id));
+      }
     }
 
     // When not in search mode, filter hidden files based on showHidden state
     if (!showHidden) {
-      return media.filter(item => {
+      result = result.filter(item => {
         const filename = item.filename;
         const pathParts = item.path.split('/');
         // Filter out files that start with . or are in folders that start with .
@@ -88,8 +117,17 @@ export function MediaLibrary({
       });
     }
 
-    return media;
-  }, [hasActiveSearch, searchResults, media, showHidden]);
+    return result;
+  }, [
+    hasActiveSearch,
+    searchResults,
+    media,
+    showHidden,
+    filters.mediaType,
+    selectedVirtualFolder,
+    getFolderMedia,
+    getUnorganizedMedia,
+  ]);
 
   // Load media files
   const loadMedia = useCallback(async () => {
@@ -398,6 +436,103 @@ export function MediaLibrary({
         {/* Advanced Search + Filters */}
         <div className="mb-6">
           <AdvancedMediaSearch media={media} onSearchResults={handleSearchResults} />
+
+          {/* Quick Filter Buttons */}
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => handleFilterChange('mediaType', undefined)}
+              className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                !filters.mediaType
+                  ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              All Files ({displayedMedia.length})
+            </button>
+            {Object.entries(MEDIA_TYPES).map(([type, config]) => {
+              const count = displayedMedia.filter(m => m.mediaType === type).length;
+              if (count === 0) return null;
+
+              return (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => handleFilterChange('mediaType', type as MediaType)}
+                  className={`px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center ${
+                    filters.mediaType === type
+                      ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  {getMediaTypeIcon(type as MediaType)}
+                  <span className="ml-1 capitalize">
+                    {type}s ({count})
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Virtual Folder Organization */}
+          <div className="mt-6">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-medium text-gray-900">Virtual Folders</h3>
+              <button
+                type="button"
+                onClick={() => setShowVirtualFolders(true)}
+                className="px-3 py-1 text-xs bg-gray-600 text-white rounded hover:bg-gray-700 flex items-center gap-1"
+              >
+                <Settings className="w-3 h-3" />
+                Manage
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setSelectedVirtualFolder(null)}
+                className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                  !selectedVirtualFolder
+                    ? 'bg-green-100 text-green-800 border border-green-200'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                All Media ({media.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedVirtualFolder('unorganized')}
+                className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                  selectedVirtualFolder === 'unorganized'
+                    ? 'bg-green-100 text-green-800 border border-green-200'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                Unorganized ({getUnorganizedMedia(media.map(m => m.id)).length})
+              </button>
+              {virtualFolders.map(folder => {
+                const count = folder.mediaIds.length;
+                return (
+                  <button
+                    key={folder.id}
+                    type="button"
+                    onClick={() => setSelectedVirtualFolder(folder.id)}
+                    className={`px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center ${
+                      selectedVirtualFolder === folder.id
+                        ? 'bg-green-100 text-green-800 border border-green-200'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    <div
+                      className="w-3 h-3 rounded mr-2"
+                      style={{ backgroundColor: folder.color }}
+                    />
+                    {folder.name} ({count})
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -409,6 +544,39 @@ export function MediaLibrary({
             onClearSelection={handleClearSelection}
             onOperationComplete={handleBulkOperationComplete}
           />
+        </div>
+      )}
+
+      {/* Media Stats */}
+      {media.length > 0 && (
+        <div className="mb-6 grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-white p-4 rounded-lg shadow-sm border">
+            <div className="text-2xl font-bold text-gray-900">
+              {displayedMedia.length}
+              {filters.mediaType || hasActiveSearch ? ` / ${media.length}` : ''}
+            </div>
+            <div className="text-sm text-gray-500">
+              {filters.mediaType || hasActiveSearch ? 'Filtered / Total Files' : 'Total Files'}
+            </div>
+          </div>
+          <div className="bg-white p-4 rounded-lg shadow-sm border">
+            <div className="text-2xl font-bold text-blue-600">
+              {media.filter(m => m.mediaType === 'image').length}
+            </div>
+            <div className="text-sm text-gray-500">Images</div>
+          </div>
+          <div className="bg-white p-4 rounded-lg shadow-sm border">
+            <div className="text-2xl font-bold text-green-600">
+              {media.filter(m => m.mediaType === 'document').length}
+            </div>
+            <div className="text-sm text-gray-500">Documents</div>
+          </div>
+          <div className="bg-white p-4 rounded-lg shadow-sm border">
+            <div className="text-2xl font-bold text-purple-600">
+              {media.filter(m => m.mediaType === 'video' || m.mediaType === 'audio').length}
+            </div>
+            <div className="text-sm text-gray-500">Media</div>
+          </div>
         </div>
       )}
 
@@ -451,6 +619,11 @@ export function MediaLibrary({
                   isSelected={selectedMedia.has(mediaFile.id)}
                   selectable={mode === 'picker'}
                   showActions={mode === 'library'}
+                  virtualFolder={(() => {
+                    const folder = getMediaFolder(mediaFile.id);
+                    return folder ? { name: folder.name, color: folder.color || '#6b7280' } : null;
+                  })()}
+                  onMoveToFolder={addMediaToFolder}
                 />
               ))}
             </div>
@@ -534,6 +707,14 @@ export function MediaLibrary({
           </div>
         </div>
       )}
+
+      {/* Virtual Folder Manager Modal */}
+      <VirtualFolderManager
+        isOpen={showVirtualFolders}
+        onClose={() => setShowVirtualFolders(false)}
+        onFoldersChange={updateVirtualFolders}
+        mediaFiles={media.map(m => ({ id: m.id, filename: m.filename, mediaType: m.mediaType }))}
+      />
     </div>
   );
 }
@@ -546,6 +727,8 @@ interface MediaCardProps {
   isSelected: boolean;
   selectable: boolean;
   showActions: boolean;
+  virtualFolder?: { name: string; color: string } | null;
+  onMoveToFolder?: (mediaId: string, folderId: string) => void;
 }
 
 function MediaCard({
@@ -555,6 +738,8 @@ function MediaCard({
   isSelected,
   selectable,
   showActions,
+  virtualFolder,
+  onMoveToFolder,
 }: MediaCardProps) {
   const getMediaTypeIcon = (mediaType: MediaType) => {
     switch (mediaType) {
@@ -620,6 +805,15 @@ function MediaCard({
           <p className="text-xs text-gray-400 flex items-center">
             <FolderOpen className="w-3 h-3 mr-1" />
             {media.metadata.folder}
+          </p>
+        )}
+        {virtualFolder && (
+          <p className="text-xs flex items-center">
+            <div
+              className="w-2 h-2 rounded-full mr-1"
+              style={{ backgroundColor: virtualFolder.color }}
+            />
+            <span style={{ color: virtualFolder.color }}>{virtualFolder.name}</span>
           </p>
         )}
       </div>

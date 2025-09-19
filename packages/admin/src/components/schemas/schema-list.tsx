@@ -8,6 +8,7 @@ interface SchemaListProps {
   onCreateSchema: () => void;
   onEditSchema: (schema: GitCMSSchema) => void;
   onDeleteSchema: (schemaId: string) => void;
+  onDuplicateSchema?: (schema: GitCMSSchema) => void;
   onImportSchemas?: () => void;
 }
 
@@ -16,6 +17,7 @@ export function SchemaList({
   onCreateSchema,
   onEditSchema,
   onDeleteSchema,
+  onDuplicateSchema,
   onImportSchemas,
 }: SchemaListProps) {
   const [searchTerm, setSearchTerm] = useState('');
@@ -49,8 +51,10 @@ export function SchemaList({
         return 'Rich Text';
       case 'select':
         return 'Select';
+      case 'color':
+        return 'Color';
       default:
-        return fieldType;
+        return fieldType.charAt(0).toUpperCase() + fieldType.slice(1);
     }
   };
 
@@ -277,6 +281,27 @@ export function SchemaList({
                         />
                       </svg>
                     </button>
+                    {onDuplicateSchema && (
+                      <button
+                        onClick={() => onDuplicateSchema(schema)}
+                        className="text-green-600 hover:text-green-500"
+                        title="Duplicate schema"
+                      >
+                        <svg
+                          className="w-5 h-5"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                          />
+                        </svg>
+                      </button>
+                    )}
                     <button
                       onClick={() => onDeleteSchema(schema.id)}
                       className="text-red-600 hover:text-red-500"

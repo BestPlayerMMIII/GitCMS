@@ -3,6 +3,8 @@ import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import { SessionProvider } from '@/components/session-provider';
 import { Navigation } from '@/components/navigation';
+import { RepositoryProvider } from '@/contexts/repository-context';
+import { NavigationWrapper } from '@/components/navigation-wrapper';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -16,10 +18,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body className={inter.className} suppressHydrationWarning={true}>
         <SessionProvider>
-          <div className="min-h-screen bg-gray-50 font-sans antialiased">
-            <Navigation />
-            {children}
-          </div>
+          <RepositoryProvider>
+            <div className="min-h-screen bg-gray-50 font-sans antialiased">
+              <NavigationWrapper />
+              {children}
+            </div>
+          </RepositoryProvider>
         </SessionProvider>
       </body>
     </html>

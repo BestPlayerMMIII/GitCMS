@@ -20,6 +20,9 @@ export interface SchemaFormProps {
   saveLabel?: string;
   onSaveSuccess?: () => void; // Callback when save is successful
   showIdField?: boolean; // Show custom ID field for content creation
+  allowIdEdit?: boolean; // Allow editing of existing content ID
+  currentContentId?: string; // Current content ID (for validation when editing)
+  onIdChange?: (newId: string) => void; // Callback when ID changes
   externalErrors?: Record<string, string>; // External field errors (e.g., from API)
   repoInfo?: { owner: string; repo: string } | null; // Repository info for fetching schemas
 }
@@ -43,6 +46,9 @@ export function SchemaForm({
   saveLabel = 'Save',
   onSaveSuccess,
   showIdField = false,
+  allowIdEdit = false,
+  currentContentId,
+  onIdChange,
   externalErrors = {},
   repoInfo,
 }: SchemaFormProps) {
@@ -105,6 +111,51 @@ export function SchemaForm({
       onSaveSuccess();
     }
   }, [formData, onSaveSuccess]);
+
+  // Real-time ID validation for content
+  const validateContentId = useCallback(
+    (newId: string): string | null => {
+      if (!newId.trim() && showIdField && !allowIdEdit) {
+        return null; // Empty is OK for new content - will be auto-generated
+      }
+
+      if (newId.trim() && !/^[a-zA-Z0-9_-]+$/.test(newId)) {
+        return 'Content ID must contain only letters, numbers, hyphens, and underscores';
+      }
+
+      // TODO: Add validation against existing content IDs
+      // This would require a new hook to fetch existing content IDs
+
+      return null;
+    },
+    [showIdField, allowIdEdit]
+  );
+
+  const handleIdChange = useCallback(
+    (newId: string) => {
+      // Update form data
+      setFormData(prev => ({
+        ...prev,
+        _metadata: {
+          ...prev._metadata,
+          id: newId,
+        },
+      }));
+
+      // Validate the new ID
+      const idError = validateContentId(newId);
+      setErrors(prev => ({
+        ...prev,
+        '_metadata.id': idError || '',
+      }));
+
+      // Call external handler if provided
+      if (onIdChange) {
+        onIdChange(newId);
+      }
+    },
+    [validateContentId, onIdChange]
+  );
 
   // Auto-save effect - separate from the main update effect
   useEffect(() => {
@@ -439,21 +490,36 @@ export function SchemaForm({
               </div>
             )}
 
-            {/* Custom ID field for content creation */}
-            {showIdField && (
+            {/* Custom ID field for content creation/editing */}
+            {(showIdField || allowIdEdit) && (
               <div className="mb-6 pb-6 border-b border-gray-200">
                 <div className="space-y-2">
                   <label className="block text-sm font-medium text-gray-700">
                     Content ID
-                    <span className="text-gray-500 ml-1">(optional)</span>
+                    {!allowIdEdit && <span className="text-gray-500 ml-1">(optional)</span>}
+                    {allowIdEdit && (
+                      <span className="text-amber-600 ml-1">(editable - be careful!)</span>
+                    )}
                   </label>
                   <input
                     type="text"
-                    value={formData._metadata?.id || ''}
-                    onChange={e => handleMetadataChange('id', e.target.value)}
-                    placeholder="e.g., my-awesome-post (leave empty to auto-generate)"
-                    className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                      allErrors['_metadata.id'] ? 'border-red-500' : ''
+                    value={allowIdEdit ? currentContentId || '' : formData._metadata?.id || ''}
+                    onChange={e =>
+                      allowIdEdit
+                        ? handleIdChange(e.target.value)
+                        : handleMetadataChange('id', e.target.value)
+                    }
+                    placeholder={
+                      allowIdEdit
+                        ? 'Content ID'
+                        : 'e.g., my-awesome-post (leave empty to auto-generate)'
+                    }
+                    className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                      allErrors['_metadata.id']
+                        ? 'border-red-500'
+                        : allowIdEdit
+                          ? 'border-amber-300'
+                          : 'border-gray-300'
                     }`}
                     disabled={disabled}
                   />
@@ -461,9 +527,18 @@ export function SchemaForm({
                     <p className="text-sm text-red-600">{allErrors['_metadata.id']}</p>
                   )}
                   <p className="text-xs text-gray-500">
-                    Used as the filename for your content. Must contain only letters, numbers,
-                    hyphens, and underscores. If not provided, an ID will be automatically generated
-                    from the title or other fields.
+                    {allowIdEdit ? (
+                      <>
+                        <strong>Warning:</strong> Changing the content ID will create a new file and
+                        may break existing links. The old file will need to be manually deleted.
+                      </>
+                    ) : (
+                      <>
+                        Used as the filename for your content. Must contain only letters, numbers,
+                        hyphens, and underscores. If not provided, an ID will be automatically
+                        generated from the title or other fields.
+                      </>
+                    )}
                   </p>
                 </div>
               </div>

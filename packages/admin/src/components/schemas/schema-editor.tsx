@@ -5,6 +5,8 @@ import type { GitCMSSchema, FieldDefinition, FieldType } from '@gitcms/core';
 import { SchemaReferenceSelector } from './schema-reference-selector';
 import { useRegistrySchemas, useRepoSchemas } from '../../lib/api-hooks';
 import { ProgressiveLoading } from '../ui/loading';
+import { CategoryManager } from './category-manager';
+import { useCategories } from '@/hooks/use-categories';
 
 // Extended object field definition to support schema references
 interface ObjectFieldWithSchemaRef {
@@ -39,13 +41,69 @@ const FIELD_TYPES = [
   'datetime',
   'array',
   'object',
-  'file',
+  'media',
   'rich-text',
   'select',
   'color',
   'reference',
 ] as const;
 type FieldTypeValue = (typeof FIELD_TYPES)[number];
+
+// Predefined validation patterns
+const VALIDATION_PATTERNS = [
+  {
+    label: 'None (No validation)',
+    value: '',
+    description: 'No pattern validation',
+  },
+  {
+    label: 'Email',
+    value: '^[\\w.-]+@[\\w.-]+\\.[a-zA-Z]{2,}$',
+    description: 'Valid email address format',
+  },
+  {
+    label: 'URL',
+    value: '^https?://.*$',
+    description: 'Valid URL starting with http:// or https://',
+  },
+  {
+    label: 'Phone (US)',
+    value: '^\\+?1?[-.\\s]?\\(?[0-9]{3}\\)?[-.\\s]?[0-9]{3}[-.\\s]?[0-9]{4}$',
+    description: 'US phone number format',
+  },
+  {
+    label: 'Slug',
+    value: '^[a-z0-9]+(?:-[a-z0-9]+)*$',
+    description: 'URL-friendly slug (lowercase, hyphens)',
+  },
+  {
+    label: 'Alphanumeric',
+    value: '^[a-zA-Z0-9]+$',
+    description: 'Only letters and numbers',
+  },
+  {
+    label: 'Alphanumeric + Spaces',
+    value: '^[a-zA-Z0-9\\s]+$',
+    description: 'Letters, numbers, and spaces',
+  },
+  {
+    label: 'Custom',
+    value: 'custom',
+    description: 'Enter your own regex pattern',
+  },
+] as const;
+
+// Helper function to get validation rule for pattern
+const getValidationRuleForPattern = (patternValue: string, patternLabel: string) => {
+  if (!patternValue || patternValue === 'custom') return null;
+
+  const pattern = VALIDATION_PATTERNS.find(p => p.value === patternValue);
+  return {
+    type: 'pattern' as const,
+    value: patternValue,
+    message: pattern ? `Must match ${pattern.label.toLowerCase()} format` : 'Invalid format',
+  };
+};
 
 export function SchemaEditor({
   schema,
@@ -71,6 +129,10 @@ export function SchemaEditor({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [advancedSettingsOpen, setAdvancedSettingsOpen] = useState<Record<string, boolean>>({});
   const [editingFieldNames, setEditingFieldNames] = useState<Record<string, string>>({});
+  const [categoryManagerOpen, setCategoryManagerOpen] = useState(false);
+
+  // Category management
+  const { categories, updateCategories } = useCategories();
 
   // Use cached hooks for schema fetching
   const { data: registrySchemas = [], loading: registryLoading } = useRegistrySchemas();
@@ -97,6 +159,39 @@ export function SchemaEditor({
     }
   }, [schema]);
 
+  // Real-time ID validation
+  const validateSchemaId = (newId: string): string | null => {
+    if (!newId.trim()) {
+      return null; // Don't show error for empty field until form submission
+    }
+
+    if (!/^[a-z0-9-]+$/.test(newId)) {
+      return 'Schema ID must contain only lowercase letters, numbers, and hyphens';
+    }
+
+    // Check for ID conflicts with existing schemas (only when creating or changing ID)
+    const isNewSchema = !schema || schema.id !== newId;
+    if (isNewSchema && availableSchemas) {
+      const existingSchema = availableSchemas.find(s => s.id === newId);
+      if (existingSchema) {
+        return `A schema with ID "${newId}" already exists. Please choose a different ID.`;
+      }
+    }
+
+    return null;
+  };
+
+  const handleIdChange = (newId: string) => {
+    setFormData(prev => ({ ...prev, id: newId }));
+
+    // Update real-time validation
+    const idError = validateSchemaId(newId);
+    setErrors(prev => ({
+      ...prev,
+      id: idError || '',
+    }));
+  };
+
   // Helper function to get available schemas for object field references
   const getAvailableSchemas = (): Array<{ id: string; name: string }> => {
     // Filter out the current schema to prevent direct self-reference
@@ -115,6 +210,15 @@ export function SchemaEditor({
       newErrors.id = 'Schema ID is required';
     } else if (!/^[a-z0-9-]+$/.test(formData.id)) {
       newErrors.id = 'Schema ID must contain only lowercase letters, numbers, and hyphens';
+    } else {
+      // Check for ID conflicts with existing schemas (only when creating or changing ID)
+      const isNewSchema = !schema || schema.id !== formData.id;
+      if (isNewSchema && availableSchemas) {
+        const existingSchema = availableSchemas.find(s => s.id === formData.id);
+        if (existingSchema) {
+          newErrors.id = `A schema with ID "${formData.id}" already exists. Please choose a different ID.`;
+        }
+      }
     }
 
     if (!formData.metadata?.name?.trim()) {
@@ -254,7 +358,7 @@ export function SchemaEditor({
             )}
 
             {/* Default Value */}
-            {!['array', 'object', 'file', 'rich-text', 'reference', 'select'].includes(
+            {!['array', 'object', 'media', 'rich-text', 'reference', 'select'].includes(
               field.type
             ) && (
               <div>
@@ -372,17 +476,79 @@ export function SchemaEditor({
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">Pattern (RegEx)</label>
-              <input
-                type="text"
-                value={field.pattern || ''}
-                onChange={e => updateCallback({ pattern: e.target.value || undefined })}
+              <label className="block text-sm font-medium text-gray-700">Validation Pattern</label>
+              <select
+                value={
+                  field.pattern
+                    ? VALIDATION_PATTERNS.find(p => p.value === field.pattern)?.value || 'custom'
+                    : ''
+                }
+                onChange={e => {
+                  const selectedPattern = e.target.value;
+                  if (selectedPattern === '') {
+                    updateCallback({ pattern: undefined });
+                  } else if (selectedPattern === 'custom') {
+                    // Keep existing pattern but user can now edit it
+                    return;
+                  } else {
+                    // Set the pattern and add validation rule
+                    const validationRule = getValidationRuleForPattern(
+                      selectedPattern,
+                      VALIDATION_PATTERNS.find(p => p.value === selectedPattern)?.label || ''
+                    );
+                    const currentValidation = field.validation || [];
+
+                    // Remove any existing pattern validation
+                    const filteredValidation = currentValidation.filter(
+                      (rule: any) => rule.type !== 'pattern'
+                    );
+
+                    // Add new pattern validation if we have one
+                    const newValidation = validationRule
+                      ? [...filteredValidation, validationRule]
+                      : filteredValidation;
+
+                    updateCallback({
+                      pattern: selectedPattern,
+                      validation: newValidation.length > 0 ? newValidation : undefined,
+                    });
+                  }
+                }}
                 className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="e.g., ^[\\w.-]+@[\\w.-]+\\.[a-zA-Z]{2,}$ (email) or ^https?://.*$ (URL)"
-              />
-              <p className="mt-1 text-xs text-gray-500">
-                Common patterns: Email validation, URL validation, slug format, etc.
-              </p>
+              >
+                {VALIDATION_PATTERNS.map(pattern => (
+                  <option key={pattern.value} value={pattern.value}>
+                    {pattern.label}
+                  </option>
+                ))}
+              </select>
+
+              {/* Show custom pattern input when custom is selected or when there's a pattern that doesn't match presets */}
+              {field.pattern &&
+                !VALIDATION_PATTERNS.find(
+                  p => p.value === field.pattern && p.value !== 'custom'
+                ) && (
+                  <div className="mt-2">
+                    <label className="block text-sm font-medium text-gray-700">
+                      Custom Pattern (RegEx)
+                    </label>
+                    <input
+                      type="text"
+                      value={field.pattern || ''}
+                      onChange={e => updateCallback({ pattern: e.target.value || undefined })}
+                      className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Enter your custom regex pattern"
+                    />
+                  </div>
+                )}
+
+              {/* Show description for selected pattern */}
+              {field.pattern && (
+                <p className="mt-1 text-xs text-gray-500">
+                  {VALIDATION_PATTERNS.find(p => p.value === field.pattern)?.description ||
+                    'Custom validation pattern'}
+                </p>
+              )}
             </div>
           </>
         );
@@ -464,7 +630,7 @@ export function SchemaEditor({
           </div>
         );
 
-      case 'file':
+      case 'media':
         return (
           <>
             <div>
@@ -639,13 +805,21 @@ export function SchemaEditor({
           <>
             <div>
               <label className="block text-sm font-medium text-gray-700">Collection</label>
-              <input
-                type="text"
+              <select
                 value={field.collection || ''}
                 onChange={e => updateCallback({ collection: e.target.value })}
                 className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Referenced collection name"
-              />
+              >
+                <option value="">Select a collection...</option>
+                {repoSchemas?.map(schema => (
+                  <option key={schema.id} value={schema.id}>
+                    {schema.metadata.name} ({schema.id})
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-gray-500">
+                Choose from available schemas/collections in this repository
+              </p>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700">Display Field</label>
@@ -1141,7 +1315,7 @@ export function SchemaEditor({
                   type="text"
                   id="schema-id"
                   value={formData.id}
-                  onChange={e => setFormData(prev => ({ ...prev, id: e.target.value }))}
+                  onChange={e => handleIdChange(e.target.value)}
                   className={`mt-1 block w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                     errors.id ? 'border-red-300' : 'border-gray-300'
                   }`}
@@ -1196,9 +1370,21 @@ export function SchemaEditor({
             </div>
 
             <div>
-              <label htmlFor="schema-category" className="block text-sm font-medium text-gray-700">
-                Category
-              </label>
+              <div className="flex items-center justify-between">
+                <label
+                  htmlFor="schema-category"
+                  className="block text-sm font-medium text-gray-700"
+                >
+                  Category
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setCategoryManagerOpen(true)}
+                  className="text-xs text-blue-600 hover:text-blue-800 underline"
+                >
+                  Manage Categories
+                </button>
+              </div>
               <select
                 id="schema-category"
                 value={formData.metadata?.category || 'content'}
@@ -1210,13 +1396,11 @@ export function SchemaEditor({
                 }
                 className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <option value="content">Content</option>
-                <option value="page">Page</option>
-                <option value="blog">Blog</option>
-                <option value="product">Product</option>
-                <option value="portfolio">Portfolio</option>
-                <option value="documentation">Documentation</option>
-                <option value="other">Other</option>
+                {categories.map(category => (
+                  <option key={category.id} value={category.name}>
+                    {category.label}
+                  </option>
+                ))}
               </select>
             </div>
           </div>
@@ -1358,6 +1542,13 @@ export function SchemaEditor({
           </div>
         </form>
       </div>
+
+      {/* Category Manager Modal */}
+      <CategoryManager
+        isOpen={categoryManagerOpen}
+        onClose={() => setCategoryManagerOpen(false)}
+        onCategoriesChange={updateCategories}
+      />
     </div>
   );
 }

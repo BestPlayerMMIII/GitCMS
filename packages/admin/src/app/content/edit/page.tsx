@@ -38,6 +38,8 @@ export default function ContentEditor() {
   const [saving, setSaving] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
+  const [enableIdEdit, setEnableIdEdit] = useState(false);
+  const [newContentId, setNewContentId] = useState<string>('');
 
   // Use cached hooks for data fetching
   const {
@@ -104,16 +106,25 @@ export default function ContentEditor() {
       // Extract metadata from form data
       const { _metadata, ...data } = formData;
 
+      // Determine if we're changing the content ID
+      const targetContentId =
+        enableIdEdit && newContentId && newContentId !== contentId ? newContentId : contentId;
+
       // Use the cached mutation hook
-      const result = await saveContent(schemaId, data, contentId || undefined);
+      const result = await saveContent(schemaId, data, targetContentId || undefined);
 
       setSavedMessage('Content saved successfully!');
       setTimeout(() => setSavedMessage(null), 3000);
 
-      // Update URL with contentId if creating new content
+      // Update URL with contentId if creating new content or if ID changed
       if (!contentId && result.content?.id) {
         const newUrl = new URL(window.location.href);
         newUrl.searchParams.set('contentId', result.content.id);
+        window.history.replaceState({}, '', newUrl.toString());
+      } else if (enableIdEdit && newContentId && newContentId !== contentId) {
+        // ID was changed - update URL
+        const newUrl = new URL(window.location.href);
+        newUrl.searchParams.set('contentId', newContentId);
         window.history.replaceState({}, '', newUrl.toString());
       }
     } catch (error) {
@@ -263,6 +274,19 @@ export default function ContentEditor() {
             </div>
 
             <div className="flex items-center space-x-3">
+              {contentId && (
+                <button
+                  onClick={() => setEnableIdEdit(!enableIdEdit)}
+                  className={`px-3 py-1 text-xs font-medium rounded-md border ${
+                    enableIdEdit
+                      ? 'bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100'
+                      : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
+                  }`}
+                  title={enableIdEdit ? 'Disable ID editing' : 'Enable ID editing'}
+                >
+                  {enableIdEdit ? 'Disable ID Edit' : 'Enable ID Edit'}
+                </button>
+              )}
               {savedMessage && (
                 <span className="text-sm text-green-600 flex items-center">
                   <svg
@@ -311,6 +335,9 @@ export default function ContentEditor() {
           saveLabel={saving ? 'Saving...' : 'Save Draft'}
           submitLabel={saving ? 'Publishing...' : 'Publish'}
           showIdField={!contentId} // Show ID field only when creating new content
+          allowIdEdit={contentId ? enableIdEdit : false} // Allow ID editing for existing content when enabled
+          currentContentId={contentId || ''}
+          onIdChange={setNewContentId}
           externalErrors={fieldErrors}
           repoInfo={repoInfo}
         />
