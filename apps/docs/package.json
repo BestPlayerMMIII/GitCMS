@@ -1,5 +1,5 @@
 {
-  "name": "@gitcms/docs",
+  "name": "@git-cms/docs",
   "version": "0.1.0",
   "description": "GitCMS Documentation",
   "private": true,
@@ -12,7 +12,7 @@
     "clean": "rimraf .next dist"
   },
   "dependencies": {
-    "@gitcms/core": "*",
+    "@git-cms/core": "*",
     "next": "^15.0.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"

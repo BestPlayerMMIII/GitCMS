@@ -1,5 +1,5 @@
 {
-  "name": "@gitcms/admin",
+  "name": "@git-cms/admin",
   "version": "0.1.0",
   "description": "GitCMS Admin Interface",
   "main": "index.js",
@@ -12,7 +12,7 @@
     "clean": "rimraf .next dist"
   },
   "dependencies": {
-    "@gitcms/core": "*",
+    "@git-cms/core": "*",
     "@tiptap/extension-character-count": "^3.4.2",
     "@tiptap/extension-code-block-lowlight": "^3.4.2",
     "@tiptap/extension-highlight": "^3.4.2",

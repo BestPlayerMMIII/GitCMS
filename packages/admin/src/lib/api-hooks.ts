@@ -6,7 +6,7 @@
  */
 
 import { useCallback } from 'react';
-import type { GitCMSSchema } from '@gitcms/core';
+import type { GitCMSSchema } from '@git-cms/core';
 import {
   useApiData,
   createCacheKey,

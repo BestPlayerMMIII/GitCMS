@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import type { GitCMSSchema } from '@gitcms/core';
+import type { GitCMSSchema } from '@git-cms/core';
 
 interface SchemaListProps {
   schemas: GitCMSSchema[];

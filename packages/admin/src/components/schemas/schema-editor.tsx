@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import type { GitCMSSchema, FieldDefinition, FieldType } from '@gitcms/core';
+import type { GitCMSSchema, FieldDefinition, FieldType } from '@git-cms/core';
 import { SchemaReferenceSelector } from './schema-reference-selector';
 import { useRegistrySchemas, useRepoSchemas } from '../../lib/api-hooks';
 import { ProgressiveLoading } from '../ui/loading';

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useCallback, useEffect } from 'react';
-import { GitCMSMediaFile, MediaType } from '@gitcms/core';
+import { GitCMSMediaFile, MediaType } from '@git-cms/core';
 import { MediaLibrary } from './media-library';
 import { MediaUploader } from './media-uploader';
 import { X, Upload, Grid3X3 } from 'lucide-react';

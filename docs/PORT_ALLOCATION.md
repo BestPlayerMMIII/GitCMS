@@ -7,9 +7,9 @@ GitCMS monorepo to avoid conflicts.
 
 | Port | Service                | Description            | URL                   |
 | ---- | ---------------------- | ---------------------- | --------------------- |
-| 3000 | @gitcms/web            | Marketing Website      | http://localhost:3000 |
-| 3001 | @gitcms/admin          | Admin Interface        | http://localhost:3001 |
-| 3002 | @gitcms/docs           | Documentation Site     | http://localhost:3002 |
+| 3000 | @git-cms/web           | Marketing Website      | http://localhost:3000 |
+| 3001 | @git-cms/admin         | Admin Interface        | http://localhost:3001 |
+| 3002 | @git-cms/docs          | Documentation Site     | http://localhost:3002 |
 | 3003 | nextjs-blog-example    | Blog Example App       | http://localhost:3003 |
 | 3004 | nuxt-portfolio-example | Nuxt Portfolio Example | http://localhost:3004 |
 
@@ -17,9 +17,9 @@ GitCMS monorepo to avoid conflicts.
 
 | Service                  | Type             | Notes                        |
 | ------------------------ | ---------------- | ---------------------------- |
-| @gitcms/core             | TypeScript Build | No server, builds to `dist/` |
-| @gitcms/client           | TypeScript Build | No server, builds to `dist/` |
-| @gitcms/cli              | TypeScript Build | No server, builds CLI tools  |
+| @git-cms/core            | TypeScript Build | No server, builds to `dist/` |
+| @git-cms/client          | TypeScript Build | No server, builds to `dist/` |
+| @git-cms/cli             | TypeScript Build | No server, builds CLI tools  |
 | react-native-app-example | Placeholder      | Not implemented yet          |
 
 ## Starting All Services

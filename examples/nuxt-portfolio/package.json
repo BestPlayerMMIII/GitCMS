@@ -9,7 +9,7 @@
     "start": "nuxt start"
   },
   "dependencies": {
-    "@gitcms/client": "*",
+    "@git-cms/client": "*",
     "nuxt": "^3.8.4"
   },
   "devDependencies": {

@@ -5,7 +5,7 @@ import {
   GitHubApiClient,
   getGitCMSConfig,
   getContentPath as getCentralizedContentPath,
-} from '@gitcms/core';
+} from '@git-cms/core';
 
 // Content item interface
 interface ContentItem {

@@ -1,5 +1,5 @@
 {
-  "name": "@gitcms/cli",
+  "name": "@git-cms/cli",
   "version": "0.1.0",
   "description": "Command line tools for GitCMS",
   "bin": {
@@ -15,7 +15,7 @@
     "clean": "rimraf dist"
   },
   "dependencies": {
-    "@gitcms/core": "*"
+    "@git-cms/core": "*"
   },
   "devDependencies": {
     "@types/node": "^20.10.4",

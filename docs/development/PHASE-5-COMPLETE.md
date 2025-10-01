@@ -149,7 +149,7 @@ File Selection → Validation → Upload API → GitHub Storage → Media Regist
 
 ```
 Media Management System
-├── Core Media Utilities (@gitcms/core)
+├── Core Media Utilities (@git-cms/core)
 │   ├── MediaValidator (file validation)
 │   ├── MediaPathManager (path generation)
 │   ├── GitHubMediaStorage (GitHub integration)

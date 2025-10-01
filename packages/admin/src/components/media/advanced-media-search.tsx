@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, memo, useMemo } from 'react';
-import { type GitCMSMediaFile, type MediaType } from '@gitcms/core';
+import { type GitCMSMediaFile, type MediaType } from '@git-cms/core';
 import {
   Search,
   Filter,

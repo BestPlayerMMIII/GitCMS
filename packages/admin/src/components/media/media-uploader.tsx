@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useCallback } from 'react';
-import { MediaType, MediaValidator, MEDIA_TYPES } from '@gitcms/core';
+import { MediaType, MediaValidator, MEDIA_TYPES } from '@git-cms/core';
 import ImageOptimizer from './image-optimizer';
 import {
   Upload,

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { formatFileSize } from '@gitcms/core';
+import { formatFileSize } from '@git-cms/core';
 
 interface ImageOptimizationConfig {
   quality: number;

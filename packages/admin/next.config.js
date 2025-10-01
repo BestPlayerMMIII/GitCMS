@@ -4,7 +4,7 @@ const nextConfig = {
   images: {
     domains: ['github.com', 'avatars.githubusercontent.com', 'raw.githubusercontent.com'],
   },
-  transpilePackages: ['@gitcms/core'],
+  transpilePackages: ['@git-cms/core'],
 };
 
 module.exports = nextConfig;

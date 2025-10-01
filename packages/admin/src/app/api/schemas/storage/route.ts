@@ -8,8 +8,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { GitHubApiClient } from '@gitcms/core';
-import type { GitCMSSchema, GitHubFileContent } from '@gitcms/core';
+import { GitHubApiClient } from '@git-cms/core';
+import type { GitCMSSchema, GitHubFileContent } from '@git-cms/core';
 
 export async function GET(request: NextRequest) {
   try {

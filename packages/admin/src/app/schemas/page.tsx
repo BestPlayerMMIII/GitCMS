@@ -9,7 +9,7 @@ import { SchemaImportModal } from '@/components/schemas/schema-import-modal';
 import { ProgressiveLoading, SchemaListSkeleton } from '@/components/ui/loading';
 import { useRepoSchemas, useSchemaMutations, useCacheInvalidation } from '@/lib/api-hooks';
 import { useRepository } from '@/contexts/repository-context';
-import type { GitCMSSchema } from '@gitcms/core';
+import type { GitCMSSchema } from '@git-cms/core';
 import { useNavigationHeader } from '@/contexts/navigation-context';
 
 interface SchemaPageState {

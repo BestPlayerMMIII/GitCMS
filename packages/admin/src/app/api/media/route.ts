@@ -14,7 +14,7 @@ import {
   GitHubApiClient,
   getGitCMSConfig,
   getMediaPath as getCentralizedMediaPath,
-} from '@gitcms/core';
+} from '@git-cms/core';
 
 // Thumbnail configuration
 const THUMBNAIL_SIZES = {

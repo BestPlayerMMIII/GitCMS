@@ -1,17 +1,17 @@
-# @gitcms/client
+# @git-cms/client
 
 TypeScript SDK for GitCMS - Universal GitHub-Based Content Management System.
 
 ## Installation
 
 ```bash
-npm install @gitcms/client
+npm install @git-cms/client
 ```
 
 ## Quick Start
 
 ```typescript
-import { GitCMS } from '@gitcms/client';
+import { GitCMS } from '@git-cms/client';
 
 // Initialize the client
 const cms = new GitCMS({
@@ -41,10 +41,10 @@ const aboutPage = await cms.doc('about').get();
 
 ```typescript
 interface GitCMSConfig {
-  repository: string;    // GitHub repository in format 'owner/repo'
-  branch?: string;       // Git branch (default: 'main')
-  token?: string;        // GitHub personal access token
-  baseUrl?: string;      // Custom API base URL
+  repository: string; // GitHub repository in format 'owner/repo'
+  branch?: string; // Git branch (default: 'main')
+  token?: string; // GitHub personal access token
+  baseUrl?: string; // Custom API base URL
 }
 ```
 
@@ -126,6 +126,7 @@ repository/
 GitCMS supports both JSON and Markdown files:
 
 ### JSON Content
+
 ```json
 {
   "id": "my-post",
@@ -137,6 +138,7 @@ GitCMS supports both JSON and Markdown files:
 ```
 
 ### Markdown with Frontmatter
+
 ```markdown
 ---
 title: My Blog Post
@@ -160,5 +162,5 @@ interface BlogPost {
   publishedAt: string;
 }
 
-const posts = await cms.collection('blog-posts').get() as BlogPost[];
+const posts = (await cms.collection('blog-posts').get()) as BlogPost[];
 ```

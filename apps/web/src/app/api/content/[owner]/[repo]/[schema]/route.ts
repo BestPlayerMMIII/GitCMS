@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { GitHubApiClient, getGitCMSConfig, getContentPath as getCentralizedContentPath } from '@gitcms/core';
+import {
+  GitHubApiClient,
+  getGitCMSConfig,
+  getContentPath as getCentralizedContentPath,
+} from '@git-cms/core';
 
 function getAuthToken(request: NextRequest): string | null {
   const auth = request.headers.get('authorization') || request.headers.get('Authorization');
@@ -28,7 +32,9 @@ function applyQuery(items: any[], url: URL): any[] {
     try {
       const filters = JSON.parse(whereParam) as Record<string, any>;
       result = result.filter(item => {
-        return Object.entries(filters).every(([key, val]) => item.data?.[key] === val || item[key] === val);
+        return Object.entries(filters).every(
+          ([key, val]) => item.data?.[key] === val || item[key] === val
+        );
       });
     } catch {}
   }
@@ -59,7 +65,10 @@ function applyQuery(items: any[], url: URL): any[] {
   return result;
 }
 
-export async function GET(request: NextRequest, context: { params: { owner: string; repo: string; schema: string } }) {
+export async function GET(
+  request: NextRequest,
+  context: { params: { owner: string; repo: string; schema: string } }
+) {
   try {
     const { owner, repo, schema } = context.params;
     const url = new URL(request.url);
@@ -123,5 +132,3 @@ export async function GET(request: NextRequest, context: { params: { owner: stri
     return NextResponse.json({ error: 'Failed to fetch content' }, { status: 500 });
   }
 }
-
-

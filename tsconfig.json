@@ -16,16 +16,9 @@
     "incremental": true,
     "baseUrl": ".",
     "paths": {
-      "@gitcms/*": ["./packages/*/src", "./packages/*"]
+      "@git-cms/*": ["./packages/*/src", "./packages/*"]
     }
   },
-  "include": [
-    "packages/**/*",
-    "apps/**/*"
-  ],
-  "exclude": [
-    "node_modules",
-    "dist",
-    ".next"
-  ]
+  "include": ["packages/**/*", "apps/**/*"],
+  "exclude": ["node_modules", "dist", ".next"]
 }

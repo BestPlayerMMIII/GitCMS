@@ -25,7 +25,7 @@
 
 ### 4. GitHub API Client Foundation
 
-- ✅ Created comprehensive GitHub API wrapper in `@gitcms/core`
+- ✅ Created comprehensive GitHub API wrapper in `@git-cms/core`
 - ✅ Implemented file operations (read, write, delete, batch operations)
 - ✅ Added repository management (list repos, get repo info)
 - ✅ Built user authentication and information retrieval

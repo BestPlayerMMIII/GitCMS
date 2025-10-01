@@ -302,7 +302,7 @@ performance with caching, beautiful UI/UX with comprehensive user feedback
   - Create API rate limiting and security
 
 - [ ] **TypeScript SDK Development**
-  - Build `@gitcms/client` package for consuming content
+  - Build `@git-cms/client` package for consuming content
   - Add TypeScript type generation from schemas
   - Implement query builder with type safety
   - Create offline support and caching
@@ -345,7 +345,7 @@ performance with caching, beautiful UI/UX with comprehensive user feedback
 **Why Valuable**: Improves adoption and developer experience.
 
 - [ ] **CLI Tools**
-  - Build `@gitcms/cli` for setup and migration
+  - Build `@git-cms/cli` for setup and migration
   - Add schema generation from existing content
   - Implement content import/export tools
   - Create development server for local testing

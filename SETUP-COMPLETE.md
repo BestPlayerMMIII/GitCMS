@@ -1,6 +1,7 @@
 # 🚀 GitCMS Project Initialization Complete!
 
-Your GitCMS project has been fully initialized with a comprehensive monorepo structure following the project brief specifications.
+Your GitCMS project has been fully initialized with a comprehensive monorepo
+structure following the project brief specifications.
 
 ## 📁 Project Structure
 
@@ -43,11 +44,13 @@ GitCMS/
 ## 🚀 Next Steps
 
 ### 1. Install Dependencies
+
 ```bash
 npm install
 ```
 
 ### 2. Start Development
+
 ```bash
 # Start all development servers
 npm run dev
@@ -59,57 +62,67 @@ cd apps/docs && npm run dev       # Documentation (port 3002)
 ```
 
 ### 3. Build Everything
+
 ```bash
 npm run build
 ```
 
 ### 4. CLI Usage
+
 ```bash
 # Build CLI first
 cd packages/cli && npm run build
 
 # Initialize a new GitCMS project
-npx @gitcms/cli init my-blog --template blog
+npx @git-cms/cli init my-blog --template blog
 
 # Set up GitCMS in existing repository
-npx @gitcms/cli setup --repository username/repo
+npx @git-cms/cli setup --repository username/repo
 
 # Generate content types
-npx @gitcms/cli generate schema --name "Product"
+npx @git-cms/cli generate schema --name "Product"
 ```
 
 ## 📦 Package Overview
 
-### @gitcms/admin
+### @git-cms/admin
+
 The main admin interface built with Next.js 14, featuring:
+
 - Visual content editor with TipTap
 - Dynamic form generation
 - GitHub OAuth integration
 - Media management
 - Real-time preview
 
-### @gitcms/client
+### @git-cms/client
+
 TypeScript SDK for consumer projects:
+
 ```typescript
-import { GitCMS } from '@gitcms/client';
+import { GitCMS } from '@git-cms/client';
 
 const cms = new GitCMS({
   repository: 'username/repo',
-  token: 'github-token' // optional for public repos
+  token: 'github-token', // optional for public repos
 });
 
 const posts = await cms.collection('blog-posts').get();
 ```
 
-### @gitcms/core
+### @git-cms/core
+
 Shared utilities and types:
+
 - Content schemas and validation
 - Pre-built content type templates
 - Utility functions for Git operations
 - TypeScript type definitions
 
-### @gitcms/cli
+### @git-cms/cli
+
 Command line tools for:
+
 - Project initialization
 - Repository setup
 - Schema generation
@@ -118,6 +131,7 @@ Command line tools for:
 ## 🎨 Content Types
 
 Pre-built schemas included:
+
 - **Blog Post**: Title, content, tags, published status
 - **Project**: Portfolio projects with technologies and links
 - **Product**: E-commerce products with pricing and inventory
@@ -126,7 +140,9 @@ Pre-built schemas included:
 ## 🔧 Configuration
 
 ### Repository Structure
+
 GitCMS expects this structure in your GitHub repository:
+
 ```
 your-repo/
 ├── .gitcms/
@@ -140,6 +156,7 @@ your-repo/
 ```
 
 ### Environment Variables
+
 ```bash
 # .env.local
 GITHUB_TOKEN=your_github_token
@@ -150,9 +167,9 @@ NEXTAUTH_URL=http://localhost:3001
 ## 📚 Documentation
 
 - **Getting Started**: See individual package READMEs
-- **API Reference**: Check `@gitcms/client` documentation
+- **API Reference**: Check `@git-cms/client` documentation
 - **Examples**: Explore the `examples/` directory
-- **CLI Commands**: Run `npx @gitcms/cli --help`
+- **CLI Commands**: Run `npx @git-cms/cli --help`
 
 ## 🤝 Development Workflow
 
@@ -172,7 +189,7 @@ NEXTAUTH_URL=http://localhost:3001
 ✅ **Marketing Site**: Professional landing page  
 ✅ **Documentation**: Structured docs site  
 ✅ **Examples**: Sample implementations  
-✅ **Development Tools**: ESLint, Prettier, TypeScript  
+✅ **Development Tools**: ESLint, Prettier, TypeScript
 
 ## 📝 License
 
@@ -182,4 +199,5 @@ MIT License - see LICENSE file for details.
 
 **Ready to revolutionize content management with GitCMS!** 🎉
 
-For questions or contributions, please refer to the individual package documentation or the main project README.
+For questions or contributions, please refer to the individual package
+documentation or the main project README.

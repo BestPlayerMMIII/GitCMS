@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { GitHubApiClient, defaultSchemas, createGitCMSConfig } from '@gitcms/core';
+import { GitHubApiClient, defaultSchemas, createGitCMSConfig } from '@git-cms/core';
 
 export async function GET(request: NextRequest) {
   try {

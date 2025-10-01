@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { ProgressiveLoading, ContentGridSkeleton } from '@/components/ui/loading';
 import { useContentList, useRepoSchemas, useContentMutations } from '@/lib/api-hooks';
 import { useRepository } from '@/contexts/repository-context';
-import type { GitCMSSchema } from '@gitcms/core';
+import type { GitCMSSchema } from '@git-cms/core';
 import { PageSubHeader } from '@/components/page-header';
 import { useNavigationHeader } from '@/contexts/navigation-context';
 

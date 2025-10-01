@@ -11,7 +11,7 @@ import React, {
 } from 'react';
 import { MediaPickerModal } from '../media/media-picker-modal';
 import { File as FileIcon } from 'lucide-react';
-import { type FieldDefinition, type FieldOption, type GitCMSSchema } from '@gitcms/core';
+import { type FieldDefinition, type FieldOption, type GitCMSSchema } from '@git-cms/core';
 import RichTextEditor from './rich-text-editor';
 
 // Context for tracking schema rendering stack to prevent circular dependencies

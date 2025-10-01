@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
-import { type GitCMSSchema, type FieldDefinition, defaultValidationEngine } from '@gitcms/core';
+import { type GitCMSSchema, type FieldDefinition, defaultValidationEngine } from '@git-cms/core';
 import { FieldRenderer, SchemaRenderingProvider } from './field-components';
 import { useRepoSchemas } from '../../lib/api-hooks';
 import { LoadingSpinner } from '../ui/loading';

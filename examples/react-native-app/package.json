@@ -7,6 +7,6 @@
     "start": "echo 'React Native example not yet implemented'"
   },
   "dependencies": {
-    "@gitcms/client": "*"
+    "@git-cms/client": "*"
   }
 }

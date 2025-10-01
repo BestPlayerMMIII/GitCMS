@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { CDN_PROVIDERS, CDNUrlGenerator, createCDNConfig } from '@gitcms/core';
+import { CDN_PROVIDERS, CDNUrlGenerator, createCDNConfig } from '@git-cms/core';
 
 // POST /api/cdn/test - Test CDN provider performance
 export async function POST(request: NextRequest) {

@@ -221,7 +221,7 @@ packages/admin/src/
 ### Creating a Custom Schema
 
 ```typescript
-import { defaultRegistry } from '@gitcms/core';
+import { defaultRegistry } from '@git-cms/core';
 
 const eventSchema: GitCMSSchema = {
   id: 'event',
@@ -265,7 +265,7 @@ defaultRegistry.register(eventSchema);
 ### Validating Content
 
 ```typescript
-import { defaultValidationEngine } from '@gitcms/core';
+import { defaultValidationEngine } from '@git-cms/core';
 
 const eventData = {
   title: 'Annual Conference 2024',

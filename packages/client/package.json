@@ -1,5 +1,5 @@
 {
-  "name": "@gitcms/client",
+  "name": "@git-cms/client",
   "version": "0.1.0",
   "description": "TypeScript SDK for GitCMS",
   "main": "dist/index.js",
@@ -20,7 +20,7 @@
     "clean": "rimraf dist"
   },
   "dependencies": {
-    "@gitcms/core": "*"
+    "@git-cms/core": "^0.1.0"
   },
   "devDependencies": {
     "@types/node": "^20.10.4",
@@ -38,5 +38,22 @@
     "typescript",
     "content-management",
     "sdk"
-  ]
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/BestPlayerMMIII/GitCMS.git",
+    "directory": "packages/client"
+  },
+  "bugs": {
+    "url": "https://github.com/BestPlayerMMIII/GitCMS/issues"
+  },
+  "homepage": "https://github.com/BestPlayerMMIII/GitCMS#readme",
+  "license": "MIT",
+  "author": {
+    "name": "BestPlayerMMIII",
+    "url": "https://github.com/BestPlayerMMIII"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
 }

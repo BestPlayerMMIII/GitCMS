@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, ArrowRight, CheckCircle, AlertCircle, Folder, Settings } from 'lucide-react';
 import { useGitHubConfig, useGitHubConfigMutations } from '../lib/api-hooks';
 import { LoadingSpinner } from './ui/loading';
-import { DEFAULT_GITCMS_CONFIG } from '@gitcms/core';
+import { DEFAULT_GITCMS_CONFIG } from '@git-cms/core';
 
 interface Repository {
   owner: string;

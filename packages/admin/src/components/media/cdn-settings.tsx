@@ -11,7 +11,7 @@ import {
   type CDNConfig,
   type CDNProvider,
   type CDNUrlOptions,
-} from '@gitcms/core';
+} from '@git-cms/core';
 import {
   Globe,
   Zap,

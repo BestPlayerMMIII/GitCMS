@@ -2,18 +2,28 @@
 
 ## 🎯 Project Vision
 
-Create a universal, GitHub-based Content Management System that provides a beautiful, intuitive web interface for managing any type of structured content stored as files in GitHub repositories. This system should be generic enough to work for any project type (web development, mobile apps, documentation, blogs, portfolios, etc.) while maintaining the benefits of file-based storage with Git version control.
+Create a universal, GitHub-based Content Management System that provides a
+beautiful, intuitive web interface for managing any type of structured content
+stored as files in GitHub repositories. This system should be generic enough to
+work for any project type (web development, mobile apps, documentation, blogs,
+portfolios, etc.) while maintaining the benefits of file-based storage with Git
+version control.
 
 ## 🚀 Core Concept
 
-**GitCMS** bridges the gap between the simplicity of file-based content management and the user-friendliness of traditional CMS interfaces. Instead of using databases, all content is stored as structured files (JSON, Markdown, YAML) in GitHub repositories, with a powerful web interface for non-technical users to manage content seamlessly.
+**GitCMS** bridges the gap between the simplicity of file-based content
+management and the user-friendliness of traditional CMS interfaces. Instead of
+using databases, all content is stored as structured files (JSON, Markdown,
+YAML) in GitHub repositories, with a powerful web interface for non-technical
+users to manage content seamlessly.
 
 ## 🎪 Key Problems to Solve
 
 ### Current File-Based CMS Pain Points
 
 1. **Technical Barrier**: Requires Git/coding knowledge to update content
-2. **No Visual Interface**: Editing raw JSON/Markdown is intimidating for non-developers
+2. **No Visual Interface**: Editing raw JSON/Markdown is intimidating for
+   non-developers
 3. **Complex Setup**: Each project needs custom admin interfaces
 4. **Media Management**: No easy way to handle images, videos, documents
 5. **Content Structure**: Difficult to modify content types without coding
@@ -26,7 +36,8 @@ Create a universal, GitHub-based Content Management System that provides a beaut
 3. **Zero Configuration**: Auto-detect content structure or easy setup wizard
 4. **Integrated Media CDN**: GitHub-based asset management with CDN delivery
 5. **Dynamic Schema**: Add/modify content types through the UI
-6. **Collaboration Tools**: User management, approval workflows, real-time editing
+6. **Collaboration Tools**: User management, approval workflows, real-time
+   editing
 
 ## 🏗️ System Architecture
 
@@ -114,7 +125,7 @@ Create a universal, GitHub-based Content Management System that provides a beaut
 #### 3. **Developer Integration Flow**
 
 ```
-1. Install SDK: npm install @gitcms/client
+1. Install SDK: npm install @git-cms/client
 2. Configure endpoint: const cms = new GitCMS('username/repo')
 3. Fetch content: const posts = await cms.get('blog-posts')
 4. Use TypeScript types: content is fully typed
@@ -193,26 +204,26 @@ repository/
 
 ```typescript
 // Consumer project usage
-import { GitCMS } from "@gitcms/client";
+import { GitCMS } from '@git-cms/client';
 
 const cms = new GitCMS({
-  repository: "username/my-blog",
-  branch: "main", // optional
+  repository: 'username/my-blog',
+  branch: 'main', // optional
 });
 
 // Type-safe content fetching
 const blogPosts = await cms
-  .collection("blog-posts")
-  .where("published", true)
-  .orderBy("publishedAt", "desc")
+  .collection('blog-posts')
+  .where('published', true)
+  .orderBy('publishedAt', 'desc')
   .limit(10)
   .get();
 
 // Individual content item
-const post = await cms.collection("blog-posts").doc("my-first-post").get();
+const post = await cms.collection('blog-posts').doc('my-first-post').get();
 
 // Real-time updates (webhook-based)
-cms.collection("blog-posts").onUpdate((posts) => {
+cms.collection('blog-posts').onUpdate(posts => {
   // Handle content updates
 });
 ```
@@ -283,23 +294,28 @@ cms.collection("blog-posts").onUpdate((posts) => {
 
 ### Challenge 1: GitHub API Rate Limits
 
-**Solution**: Intelligent caching, batch operations, and GitHub App authentication for higher limits
+**Solution**: Intelligent caching, batch operations, and GitHub App
+authentication for higher limits
 
 ### Challenge 2: Large File Handling
 
-**Solution**: Git LFS integration, external CDN support, and progressive media loading
+**Solution**: Git LFS integration, external CDN support, and progressive media
+loading
 
 ### Challenge 3: Real-time Collaboration
 
-**Solution**: Operational Transformation (OT) or Conflict-free Replicated Data Types (CRDTs) for concurrent editing
+**Solution**: Operational Transformation (OT) or Conflict-free Replicated Data
+Types (CRDTs) for concurrent editing
 
 ### Challenge 4: Content Indexing & Search
 
-**Solution**: Generated index files, Elasticsearch integration, or client-side search with Fuse.js
+**Solution**: Generated index files, Elasticsearch integration, or client-side
+search with Fuse.js
 
 ### Challenge 5: Schema Evolution
 
-**Solution**: Versioned schemas with automatic migration tools and backward compatibility
+**Solution**: Versioned schemas with automatic migration tools and backward
+compatibility
 
 ## 🌟 Competitive Advantages
 
@@ -316,8 +332,8 @@ cms.collection("blog-posts").onUpdate((posts) => {
 
 ```typescript
 // Schema: projects, blog-posts, about
-const projects = await cms.collection("projects").get();
-const aboutMe = await cms.doc("about").get();
+const projects = await cms.collection('projects').get();
+const aboutMe = await cms.doc('about').get();
 ```
 
 ### 2. E-commerce Catalog
@@ -325,9 +341,9 @@ const aboutMe = await cms.doc("about").get();
 ```typescript
 // Schema: products, categories, collections
 const products = await cms
-  .collection("products")
-  .where("category", "electronics")
-  .where("inStock", true)
+  .collection('products')
+  .where('category', 'electronics')
+  .where('inStock', true)
   .get();
 ```
 
@@ -335,17 +351,17 @@ const products = await cms
 
 ```typescript
 // Schema: docs, guides, api-reference
-const guides = await cms.collection("guides").orderBy("order").get();
+const guides = await cms.collection('guides').orderBy('order').get();
 ```
 
 ### 4. Mobile App Content
 
 ```typescript
 // Schema: app-config, announcements, feature-flags
-const appConfig = await cms.doc("app-config").get();
+const appConfig = await cms.doc('app-config').get();
 const announcements = await cms
-  .collection("announcements")
-  .where("active", true)
+  .collection('announcements')
+  .where('active', true)
   .get();
 ```
 
@@ -382,4 +398,6 @@ gitcms/
 - **API Client**: Custom TypeScript SDK
 - **Validation**: Zod for runtime schema validation
 
-This document provides a comprehensive foundation for building GitCMS - a revolutionary approach to content management that combines the reliability of Git with the usability of modern CMS interfaces.
+This document provides a comprehensive foundation for building GitCMS - a
+revolutionary approach to content management that combines the reliability of
+Git with the usability of modern CMS interfaces.

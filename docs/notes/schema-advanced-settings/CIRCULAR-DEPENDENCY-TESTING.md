@@ -69,7 +69,7 @@ import {
   buildDependencyGraph,
   wouldCreateCircularDependency,
   getSafeSchemaReferences,
-} from '@gitcms/core';
+} from '@git-cms/core';
 
 describe('Circular Dependency Detection', () => {
   const schemas = [

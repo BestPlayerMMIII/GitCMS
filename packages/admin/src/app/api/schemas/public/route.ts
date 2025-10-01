@@ -5,7 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import type { GitCMSSchema } from '@gitcms/core';
+import type { GitCMSSchema } from '@git-cms/core';
 
 export async function GET(request: NextRequest) {
   try {

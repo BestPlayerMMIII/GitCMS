@@ -8,7 +8,7 @@ import {
   MediaValidator,
   MEDIA_TYPES,
   type CDNConfig,
-} from '@gitcms/core';
+} from '@git-cms/core';
 import CDNSettings from './cdn-settings';
 import AdvancedMediaSearch from './advanced-media-search';
 import BulkOperations from './bulk-operations';

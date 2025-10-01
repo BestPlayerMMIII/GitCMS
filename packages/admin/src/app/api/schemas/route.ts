@@ -7,7 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { defaultRegistry, defaultSchemas, type GitCMSSchema } from '@gitcms/core';
+import { defaultRegistry, defaultSchemas, type GitCMSSchema } from '@git-cms/core';
 
 export async function GET(request: NextRequest) {
   try {

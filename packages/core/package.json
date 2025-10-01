@@ -1,5 +1,5 @@
 {
-  "name": "@gitcms/core",
+  "name": "@git-cms/core",
   "version": "0.1.0",
   "description": "Core utilities and types for GitCMS",
   "main": "dist/index.js",
@@ -41,5 +41,22 @@
     "github",
     "typescript",
     "utilities"
-  ]
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/BestPlayerMMIII/GitCMS.git",
+    "directory": "packages/core"
+  },
+  "bugs": {
+    "url": "https://github.com/BestPlayerMMIII/GitCMS/issues"
+  },
+  "homepage": "https://github.com/BestPlayerMMIII/GitCMS#readme",
+  "license": "MIT",
+  "author": {
+    "name": "BestPlayerMMIII",
+    "url": "https://github.com/BestPlayerMMIII"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
 }

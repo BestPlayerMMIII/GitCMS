@@ -6,7 +6,7 @@ import {
   serializeContent,
   validateContentAgainstSchema,
   getContentMetadata,
-} from '@gitcms/core';
+} from '@git-cms/core';
 
 export async function POST(request: NextRequest) {
   try {

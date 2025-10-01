@@ -12,7 +12,7 @@ import {
   getSafeSchemaReferences,
   buildDependencyGraph,
   wouldCreateCircularDependency,
-} from '@gitcms/core';
+} from '@git-cms/core';
 
 interface SchemaReferenceSelectorProps {
   currentSchemaId: string;

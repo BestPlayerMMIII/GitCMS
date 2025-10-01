@@ -1,6 +1,7 @@
 # GitCMS - Universal GitHub-Based Content Management System
 
-A revolutionary approach to content management that combines the reliability of Git with the usability of modern CMS interfaces.
+A revolutionary approach to content management that combines the reliability of
+Git with the usability of modern CMS interfaces.
 
 ## 🚀 Features
 
@@ -9,7 +10,8 @@ A revolutionary approach to content management that combines the reliability of 
 - **Zero Configuration**: Auto-detect content structure or easy setup wizard
 - **Integrated Media CDN**: GitHub-based asset management with CDN delivery
 - **Dynamic Schema**: Add/modify content types through the UI
-- **Collaboration Tools**: User management, approval workflows, real-time editing
+- **Collaboration Tools**: User management, approval workflows, real-time
+  editing
 
 ## 🏗️ Architecture
 
@@ -44,16 +46,20 @@ npm run type-check
 
 ## 📦 Packages
 
-### @gitcms/admin
+### @git-cms/admin
+
 The main admin interface for managing content through a web UI.
 
-### @gitcms/client
+### @git-cms/client
+
 TypeScript SDK for integrating GitCMS with consumer projects.
 
-### @gitcms/core
+### @git-cms/core
+
 Shared utilities, types, and schemas used across the GitCMS ecosystem.
 
-### @gitcms/cli
+### @git-cms/cli
+
 Command line tools for setup, migration, and management.
 
 ## 🎯 Getting Started
@@ -65,11 +71,13 @@ Command line tools for setup, migration, and management.
 
 ## 📖 Documentation
 
-Visit our [documentation site](./apps/docs) for detailed guides and API references.
+Visit our [documentation site](./apps/docs) for detailed guides and API
+references.
 
 ## 🤝 Contributing
 
-We welcome contributions! Please see our contributing guidelines for more information.
+We welcome contributions! Please see our contributing guidelines for more
+information.
 
 ## 📄 License
 
