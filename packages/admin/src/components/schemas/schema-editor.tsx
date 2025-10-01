@@ -7,6 +7,7 @@ import { useRegistrySchemas, useRepoSchemas } from '../../lib/api-hooks';
 import { ProgressiveLoading } from '../ui/loading';
 import { CategoryManager } from './category-manager';
 import { useCategories } from '@/hooks/use-categories';
+import { IdValidationInput } from '../ui/id-validation-input';
 
 // Extended object field definition to support schema references
 interface ObjectFieldWithSchemaRef {
@@ -26,7 +27,7 @@ interface ObjectFieldWithSchemaRef {
 
 interface SchemaEditorProps {
   schema?: GitCMSSchema;
-  onSave: (schema: GitCMSSchema) => void;
+  onSave: (schema: GitCMSSchema, originalSchemaId?: string) => void;
   onCancel: () => void;
   repoInfo?: { owner: string; repo: string } | null;
   onSchemaListChange?: () => void; // Callback to trigger schema list refresh
@@ -274,7 +275,8 @@ export function SchemaEditor({
 
   const handleSave = () => {
     if (validateForm()) {
-      onSave(formData);
+      const originalSchemaId = schema?.id;
+      onSave(formData, originalSchemaId !== formData.id ? originalSchemaId : undefined);
       // Trigger schema list refresh after save
       if (onSchemaListChange) {
         onSchemaListChange();
@@ -1311,15 +1313,13 @@ export function SchemaEditor({
                 <label htmlFor="schema-id" className="block text-sm font-medium text-gray-700">
                   Schema ID *
                 </label>
-                <input
-                  type="text"
-                  id="schema-id"
+                <IdValidationInput
                   value={formData.id}
-                  onChange={e => handleIdChange(e.target.value)}
-                  className={`mt-1 block w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                    errors.id ? 'border-red-300' : 'border-gray-300'
-                  }`}
+                  onChange={handleIdChange}
+                  type="schema"
+                  currentId={schema?.id}
                   placeholder="e.g., blog-post"
+                  className="mt-1 block w-full"
                 />
                 {errors.id && <p className="mt-1 text-sm text-red-600">{errors.id}</p>}
               </div>

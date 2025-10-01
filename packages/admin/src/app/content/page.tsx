@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ProgressiveLoading, ContentGridSkeleton } from '@/components/ui/loading';
@@ -25,10 +25,6 @@ interface ContentItem {
 
 function ContentListContent() {
   const { setHeader } = useNavigationHeader();
-  useEffect(() => {
-    setHeader('content', <PageSubHeader title="Content" backName="Back to Dashboard" onBack="/" />);
-    return () => setHeader('content', null);
-  }, [setHeader]);
 
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -86,7 +82,7 @@ function ContentListContent() {
   const contentList = content || [];
   const schemasList = availableSchemas || [];
 
-  const handleCreateContent = () => {
+  const handleCreateContent = useCallback(() => {
     if (!repositoryInfo) {
       alert('No repository connected. Please connect a repository first.');
       return;
@@ -98,7 +94,37 @@ function ContentListContent() {
     } else {
       setShowSchemaModal(true);
     }
-  };
+  }, [repositoryInfo, schemasList.length]);
+
+  useEffect(() => {
+    setHeader(
+      'content',
+      <PageSubHeader
+        title="Content"
+        backName="Back to Dashboard"
+        onBack="/"
+        rightElement={
+          repositoryInfo && (
+            <button
+              onClick={handleCreateContent}
+              className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm font-medium"
+            >
+              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 4v16m8-8H4"
+                />
+              </svg>
+              Create Content
+            </button>
+          )
+        }
+      />
+    );
+    return () => setHeader('content', null);
+  }, [setHeader, repositoryInfo, handleCreateContent]);
 
   const handleSchemaSelect = (selectedSchema: GitCMSSchema) => {
     if (!repositoryInfo) return;
@@ -444,7 +470,7 @@ function ContentListContent() {
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
               {filteredContent.map(item => (
                 <div
-                  key={item.id}
+                  key={`${item.schemaId}-${item.id}`}
                   className="bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow"
                 >
                   <div className="p-6">

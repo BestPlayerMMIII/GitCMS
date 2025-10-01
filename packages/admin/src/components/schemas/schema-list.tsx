@@ -10,6 +10,7 @@ interface SchemaListProps {
   onDeleteSchema: (schemaId: string) => void;
   onDuplicateSchema?: (schema: GitCMSSchema) => void;
   onImportSchemas?: () => void;
+  repoInfo?: { owner: string; repo: string } | null;
 }
 
 export function SchemaList({
@@ -19,6 +20,7 @@ export function SchemaList({
   onDeleteSchema,
   onDuplicateSchema,
   onImportSchemas,
+  repoInfo,
 }: SchemaListProps) {
   const [searchTerm, setSearchTerm] = useState('');
 

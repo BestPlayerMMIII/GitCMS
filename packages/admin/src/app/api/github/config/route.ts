@@ -14,6 +14,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const owner = searchParams.get('owner');
     const repo = searchParams.get('repo');
+    const path = searchParams.get('path'); // Optional: specific file path
 
     if (!owner || !repo) {
       return NextResponse.json(
@@ -24,7 +25,31 @@ export async function GET(request: NextRequest) {
 
     const client = new GitHubApiClient(session.accessToken, owner, repo);
 
-    // Check if .gitcms/config.json exists
+    // If path is specified, return just that file
+    if (path) {
+      try {
+        const fileExists = await client.fileExists(path);
+        if (!fileExists) {
+          return NextResponse.json({ error: 'File not found' }, { status: 404 });
+        }
+
+        const content = await client.getFileContent(path);
+        return NextResponse.json({
+          path,
+          content,
+          exists: true,
+        });
+      } catch (error) {
+        return NextResponse.json({
+          path,
+          content: null,
+          exists: false,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+      }
+    }
+
+    // Original logic for repository setup check
     const configExists = await client.fileExists('.gitcms/config.json');
 
     let config = null;
@@ -91,13 +116,49 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { owner, repo, config } = body;
+    const { owner, repo, path, content, message, config } = body;
 
-    if (!owner || !repo || !config) {
-      return NextResponse.json({ error: 'Owner, repo, and config are required' }, { status: 400 });
+    if (!owner || !repo) {
+      return NextResponse.json({ error: 'Owner and repo are required' }, { status: 400 });
     }
 
     const client = new GitHubApiClient(session.accessToken, owner, repo);
+
+    // If path and content are specified, create/update individual file
+    if (path && content !== undefined) {
+      try {
+        const commitMessage = message || `Update ${path}`;
+
+        // Check if file exists to determine if this is an update
+        let existingSha: string | undefined;
+        try {
+          const existing = await client.getFile(path);
+          existingSha = existing.sha;
+        } catch (error) {
+          // File doesn't exist, that's fine for creation
+        }
+
+        const result = await client.updateFile(path, content, commitMessage, existingSha);
+
+        return NextResponse.json({
+          success: true,
+          path,
+          message: existingSha ? 'File updated successfully' : 'File created successfully',
+          commit: result,
+        });
+      } catch (error) {
+        console.error('Failed to save file:', error);
+        return NextResponse.json(
+          { error: error instanceof Error ? error.message : 'Failed to save file' },
+          { status: 500 }
+        );
+      }
+    }
+
+    // Original logic for repository setup
+    if (!config) {
+      return NextResponse.json({ error: 'Config is required for setup' }, { status: 400 });
+    }
 
     // Create default GitCMS configuration using centralized defaults
     const defaultConfig = createGitCMSConfig(config);

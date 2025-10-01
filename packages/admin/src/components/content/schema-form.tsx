@@ -5,6 +5,7 @@ import { type GitCMSSchema, type FieldDefinition, defaultValidationEngine } from
 import { FieldRenderer, SchemaRenderingProvider } from './field-components';
 import { useRepoSchemas } from '../../lib/api-hooks';
 import { LoadingSpinner } from '../ui/loading';
+import { IdValidationInput } from '../ui/id-validation-input';
 
 export interface SchemaFormProps {
   schema: GitCMSSchema;
@@ -489,53 +490,57 @@ export function SchemaForm({
             {/* Custom ID field for content creation/editing */}
             {(showIdField || allowIdEdit) && (
               <div className="mb-6 pb-6 border-b border-gray-200">
-                <div className="space-y-2">
+                <div className="space-y-3">
                   <label className="block text-sm font-medium text-gray-700">
                     Content ID
                     {!allowIdEdit && <span className="text-gray-500 ml-1">(optional)</span>}
-                    {allowIdEdit && (
-                      <span className="text-amber-600 ml-1">(editable - be careful!)</span>
-                    )}
                   </label>
-                  <input
-                    type="text"
-                    value={allowIdEdit ? currentContentId || '' : formData._metadata?.id || ''}
-                    onChange={e =>
-                      allowIdEdit
-                        ? handleIdChange(e.target.value)
-                        : handleMetadataChange('id', e.target.value)
-                    }
-                    placeholder={
-                      allowIdEdit
-                        ? 'Content ID'
-                        : 'e.g., my-awesome-post (leave empty to auto-generate)'
-                    }
-                    className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                      allErrors['_metadata.id']
-                        ? 'border-red-500'
-                        : allowIdEdit
-                          ? 'border-amber-300'
-                          : 'border-gray-300'
-                    }`}
-                    disabled={disabled}
-                  />
-                  {allErrors['_metadata.id'] && (
-                    <p className="text-sm text-red-600">{allErrors['_metadata.id']}</p>
-                  )}
-                  <p className="text-xs text-gray-500">
-                    {allowIdEdit ? (
-                      <>
-                        <strong>Warning:</strong> Changing the content ID will create a new file and
-                        may break existing links. The old file will need to be manually deleted.
-                      </>
-                    ) : (
-                      <>
+
+                  {allowIdEdit ? (
+                    <div className="space-y-3">
+                      <div className="flex items-center space-x-3">
+                        <IdValidationInput
+                          value={formData._metadata?.id || ''}
+                          onChange={newValue => {
+                            handleIdChange(newValue);
+                            handleMetadataChange('id', newValue);
+                          }}
+                          type="content"
+                          schemaId={schema.id}
+                          currentId={currentContentId}
+                          placeholder="Enter new content ID"
+                          disabled={disabled}
+                          className="flex-1"
+                        />
+                        <div className="flex items-center space-x-2">
+                          <span className="text-xs text-gray-500">Current: {currentContentId}</span>
+                        </div>
+                      </div>
+                      {allErrors['_metadata.id'] && (
+                        <p className="text-sm text-red-600">{allErrors['_metadata.id']}</p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <IdValidationInput
+                        value={formData._metadata?.id || ''}
+                        onChange={newValue => handleMetadataChange('id', newValue)}
+                        type="content"
+                        schemaId={schema.id}
+                        placeholder="e.g., my-awesome-post (leave empty to auto-generate)"
+                        disabled={disabled}
+                        className="w-full"
+                      />
+                      {allErrors['_metadata.id'] && (
+                        <p className="text-sm text-red-600">{allErrors['_metadata.id']}</p>
+                      )}
+                      <p className="text-xs text-gray-500">
                         Used as the filename for your content. Must contain only letters, numbers,
                         hyphens, and underscores. If not provided, an ID will be automatically
                         generated from the title or other fields.
-                      </>
-                    )}
-                  </p>
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
             )}

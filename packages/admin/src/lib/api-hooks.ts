@@ -5,7 +5,7 @@
  * with appropriate loading states and cache invalidation strategies.
  */
 
-import { useCallback } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import type { GitCMSSchema } from '@git-cms/core';
 import {
   useApiData,
@@ -160,6 +160,72 @@ export function useContentList(
   });
 }
 
+// Hook for content list with automatic schema ID conversion
+export function useContentListWithMapping(
+  owner: string | null,
+  repo: string | null,
+  userSchemaId?: string,
+  options: { enabled?: boolean } = {}
+): UseApiDataResult<ContentItem[]> {
+  const { enabled = true } = options;
+
+  // First get the system schema ID if userSchemaId is provided
+  const [systemSchemaId, setSystemSchemaId] = useState<string | undefined>(userSchemaId);
+
+  useEffect(() => {
+    if (!userSchemaId || !owner || !repo) {
+      setSystemSchemaId(userSchemaId);
+      return;
+    }
+
+    const convertId = async () => {
+      try {
+        const systemId = await getSystemSchemaId(owner, repo, userSchemaId);
+        setSystemSchemaId(systemId);
+      } catch {
+        setSystemSchemaId(userSchemaId); // Fallback to original ID
+      }
+    };
+
+    convertId();
+  }, [userSchemaId, owner, repo]);
+
+  const rawContentResult = useContentList(owner, repo, systemSchemaId, options);
+
+  // Convert the content items to show user-friendly schema IDs
+  const [convertedData, setConvertedData] = useState<ContentItem[]>([]);
+  const [isConverting, setIsConverting] = useState(false);
+
+  useEffect(() => {
+    const convertContent = async () => {
+      if (!rawContentResult.data || !owner || !repo) {
+        setConvertedData([]);
+        return;
+      }
+
+      setIsConverting(true);
+      try {
+        const { convertContentListToUserFormat } = await import('./schema-id-converter');
+        const converted = await convertContentListToUserFormat(rawContentResult.data, owner, repo);
+        setConvertedData(converted);
+      } catch (error) {
+        console.error('Failed to convert content schema IDs:', error);
+        setConvertedData(rawContentResult.data); // Fallback to original data
+      } finally {
+        setIsConverting(false);
+      }
+    };
+
+    convertContent();
+  }, [rawContentResult.data, owner, repo]);
+
+  return {
+    ...rawContentResult,
+    data: convertedData,
+    loading: rawContentResult.loading || isConverting,
+  };
+}
+
 // Hook for individual content item
 export function useContentItem(
   owner: string | null,
@@ -299,7 +365,7 @@ export function useRepoSetup(
 // Mutation hooks with automatic cache invalidation
 export function useSchemaMutations(owner: string | null, repo: string | null) {
   const saveSchema = useCallback(
-    async (schema: GitCMSSchema) => {
+    async (schema: GitCMSSchema, originalSchemaId?: string) => {
       if (!owner || !repo) {
         throw new Error('Owner and repo are required');
       }
@@ -309,7 +375,14 @@ export function useSchemaMutations(owner: string | null, repo: string | null) {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ schema }),
+        body: JSON.stringify({
+          schema,
+          originalSchemaId,
+          commitMessage:
+            originalSchemaId && originalSchemaId !== schema.id
+              ? `Rename schema: ${originalSchemaId} → ${schema.id}`
+              : `Update schema: ${schema.metadata?.name || schema.id}`,
+        }),
       });
 
       if (!response.ok) {
@@ -360,7 +433,14 @@ export function useSchemaMutations(owner: string | null, repo: string | null) {
 
 export function useContentMutations(owner: string | null, repo: string | null) {
   const saveContent = useCallback(
-    async (schemaId: string, contentData: Record<string, any>, contentId?: string) => {
+    async (
+      schemaId: string,
+      contentData: Record<string, any>,
+      contentId?: string,
+      metadata?: Record<string, any>,
+      publish?: boolean,
+      originalContentId?: string
+    ) => {
       if (!owner || !repo) {
         throw new Error('Owner and repo are required');
       }
@@ -377,10 +457,17 @@ export function useContentMutations(owner: string | null, repo: string | null) {
       const payload: any = {
         schemaId,
         data: contentData,
+        metadata: metadata || {},
+        publish: Boolean(publish),
       };
 
       if (contentId) {
         payload.contentId = contentId;
+      }
+
+      // Include originalContentId if this is a rename operation
+      if (originalContentId && originalContentId !== contentId) {
+        payload.originalContentId = originalContentId;
       }
 
       const response = await fetch(`/api/content?${params}`, {
@@ -458,6 +545,7 @@ export function useCacheInvalidation() {
     invalidateContentItem: cacheInvalidation.invalidateContentItem,
     invalidateRepoSetup: cacheInvalidation.invalidateRepoSetup,
     invalidateRegistrySchemas: cacheInvalidation.invalidateRegistrySchemas,
+    invalidateSchemaMapping: cacheInvalidation.invalidateSchemaMapping,
     clearAll: cacheInvalidation.clearAll,
   };
 }
@@ -630,4 +718,216 @@ export function useEnhancedSchemaImport(
     ttl: 300000, // Cache for 5 minutes
     enabled: enabled && !!owner && !!repo,
   });
+}
+
+// ID Validation Hooks
+
+/**
+ * Validate content ID uniqueness
+ */
+export async function validateContentId(
+  owner: string,
+  repo: string,
+  schemaId: string,
+  contentId: string,
+  currentContentId?: string
+): Promise<{ valid: boolean; exists: boolean; message: string }> {
+  const params = new URLSearchParams({
+    action: 'validate-id',
+    owner,
+    repo,
+    schemaId,
+    id: contentId,
+  });
+
+  if (currentContentId) {
+    params.set('currentId', currentContentId);
+  }
+
+  const response = await fetch(`/api/content?${params}`);
+  if (!response.ok) {
+    throw new Error('Failed to validate content ID');
+  }
+
+  return await response.json();
+}
+
+/**
+ * Validate schema ID uniqueness
+ */
+export async function validateSchemaId(
+  owner: string,
+  repo: string,
+  schemaId: string,
+  currentSchemaId?: string
+): Promise<{ valid: boolean; exists: boolean; message: string }> {
+  const params = new URLSearchParams({
+    action: 'validate-id',
+    owner,
+    repo,
+    id: schemaId,
+  });
+
+  if (currentSchemaId) {
+    params.set('currentId', currentSchemaId);
+  }
+
+  const response = await fetch(`/api/schemas/storage?${params}`);
+  if (!response.ok) {
+    throw new Error('Failed to validate schema ID');
+  }
+
+  return await response.json();
+}
+
+/**
+ * Enhanced save schema function with support for renaming
+ */
+export async function saveSchemaWithRename(
+  owner: string,
+  repo: string,
+  schema: GitCMSSchema,
+  originalSchemaId?: string,
+  commitMessage?: string
+): Promise<{ message: string; schema: GitCMSSchema; path: string }> {
+  const params = new URLSearchParams({
+    action: 'save',
+    owner,
+    repo,
+  });
+
+  const body = {
+    schema,
+    commitMessage,
+    originalSchemaId,
+  };
+
+  const response = await fetch(`/api/schemas/storage?${params}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.error || 'Failed to save schema');
+  }
+
+  return await response.json();
+}
+
+// Schema ID Mapping Hooks
+
+/**
+ * Hook to get schema mappings for a repository
+ */
+export function useSchemaMapping(
+  owner: string | null,
+  repo: string | null,
+  options: { enabled?: boolean } = {}
+) {
+  const { enabled = true } = options;
+
+  return useApiData({
+    key: owner && repo ? `schema-mapping:${owner}:${repo}` : 'disabled',
+    fetcher: async () => {
+      if (!owner || !repo) {
+        throw new Error('Owner and repo are required');
+      }
+
+      const { schemaIdMappingService } = await import('./schema-mapping');
+      return await schemaIdMappingService.loadMapping(owner, repo);
+    },
+    ttl: 300000, // Cache for 5 minutes
+    enabled: enabled && !!owner && !!repo,
+  });
+}
+
+/**
+ * Get user-defined schema ID from system ID
+ */
+export async function getUserSchemaId(
+  owner: string,
+  repo: string,
+  systemId: string
+): Promise<string> {
+  const { schemaIdMappingService } = await import('./schema-mapping');
+  return await schemaIdMappingService.getUserSchemaId(owner, repo, systemId);
+}
+
+/**
+ * Get system schema ID from user-defined ID
+ */
+export async function getSystemSchemaId(
+  owner: string,
+  repo: string,
+  userDefinedId: string
+): Promise<string> {
+  const { schemaIdMappingService } = await import('./schema-mapping');
+  return await schemaIdMappingService.getSystemSchemaId(owner, repo, userDefinedId);
+}
+
+/**
+ * Schema mapping mutations
+ */
+export function useSchemaMappingMutations(owner: string | null, repo: string | null) {
+  const createMapping = useCallback(
+    async (userDefinedId: string, systemId?: string) => {
+      if (!owner || !repo) {
+        throw new Error('Owner and repo are required');
+      }
+
+      const { schemaIdMappingService } = await import('./schema-mapping');
+      const result = await schemaIdMappingService.createSchemaMapping(
+        owner,
+        repo,
+        userDefinedId,
+        systemId
+      );
+
+      // Invalidate cache
+      cacheInvalidation.invalidateSchemaMapping(owner, repo);
+
+      return result;
+    },
+    [owner, repo]
+  );
+
+  const updateMapping = useCallback(
+    async (systemId: string, newUserDefinedId: string) => {
+      if (!owner || !repo) {
+        throw new Error('Owner and repo are required');
+      }
+
+      const { schemaIdMappingService } = await import('./schema-mapping');
+      await schemaIdMappingService.updateSchemaMapping(owner, repo, systemId, newUserDefinedId);
+
+      // Invalidate cache
+      cacheInvalidation.invalidateSchemaMapping(owner, repo);
+    },
+    [owner, repo]
+  );
+
+  const removeMapping = useCallback(
+    async (systemId: string) => {
+      if (!owner || !repo) {
+        throw new Error('Owner and repo are required');
+      }
+
+      const { schemaIdMappingService } = await import('./schema-mapping');
+      await schemaIdMappingService.removeSchemaMapping(owner, repo, systemId);
+
+      // Invalidate cache
+      cacheInvalidation.invalidateSchemaMapping(owner, repo);
+    },
+    [owner, repo]
+  );
+
+  return {
+    createMapping,
+    updateMapping,
+    removeMapping,
+  };
 }

@@ -533,6 +533,26 @@ export class ValidationEngine {
       });
     }
 
+    // Check for unique items if uniqueItems is true
+    if (arrayField.uniqueItems) {
+      const seen = new Map();
+      value.forEach((item, index) => {
+        const itemKey = JSON.stringify(item);
+        if (seen.has(itemKey)) {
+          const firstIndex = seen.get(itemKey);
+          errors.push({
+            field: fieldName,
+            message: `${field.label || fieldName} contains duplicate items at positions ${firstIndex} and ${index}`,
+            code: 'DUPLICATE_ITEMS',
+            value: item,
+            path: [...path, index.toString()],
+          });
+        } else {
+          seen.set(itemKey, index);
+        }
+      });
+    }
+
     return errors;
   }
 

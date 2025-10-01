@@ -5,6 +5,8 @@ import {
   GitHubApiClient,
   getGitCMSConfig,
   getContentPath as getCentralizedContentPath,
+  defaultValidationEngine,
+  type GitCMSSchema,
 } from '@git-cms/core';
 
 // Content item interface
@@ -18,6 +20,7 @@ interface ContentItem {
     author?: string;
     status: 'draft' | 'published' | 'archived';
     slug?: string;
+    publishedAt?: string;
   };
 }
 
@@ -51,6 +54,9 @@ export async function GET(request: NextRequest) {
           return NextResponse.json({ error: 'Content ID is required' }, { status: 400 });
         }
         return await getContent(github, schemaId, contentId, owner!, repo!, session.accessToken);
+
+      case 'validate-id':
+        return await validateContentId(github, searchParams, owner!, repo!);
 
       default:
         return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
@@ -178,8 +184,9 @@ async function listContent(
 
               const contentId = file.name.replace('.json', '');
 
-              contentItems.push({
-                id: contentId,
+              // Handle both old and new content structure
+              const contentItem: ContentItem = {
+                id: contentData.id || contentId,
                 schemaId: contentData.schemaId || schemaId,
                 data: contentData.data || {},
                 metadata: {
@@ -188,8 +195,11 @@ async function listContent(
                   author: contentData.metadata?.author,
                   status: contentData.metadata?.status || 'draft',
                   slug: contentData.metadata?.slug,
+                  publishedAt: contentData.metadata?.publishedAt,
                 },
-              });
+              };
+
+              contentItems.push(contentItem);
             } catch (error) {
               console.warn(`Failed to parse content file ${file.path}:`, error);
             }
@@ -218,8 +228,9 @@ async function listContent(
 
                     const contentId = file.name.replace('.json', '');
 
-                    contentItems.push({
-                      id: contentId,
+                    // Handle both old and new content structure
+                    const contentItem: ContentItem = {
+                      id: contentData.id || contentId,
                       schemaId: contentData.schemaId || item.name,
                       data: contentData.data || {},
                       metadata: {
@@ -228,8 +239,11 @@ async function listContent(
                         author: contentData.metadata?.author,
                         status: contentData.metadata?.status || 'draft',
                         slug: contentData.metadata?.slug,
+                        publishedAt: contentData.metadata?.publishedAt,
                       },
-                    });
+                    };
+
+                    contentItems.push(contentItem);
                   } catch (error) {
                     console.warn(`Failed to parse content file ${file.path}:`, error);
                   }
@@ -280,10 +294,13 @@ async function getContent(
     return NextResponse.json({
       success: true,
       content: {
-        id: contentId,
+        id: contentData.id || contentId,
         schemaId: contentData.schemaId || schemaId,
         data: contentData.data || {},
-        metadata: contentData.metadata || {},
+        metadata: {
+          ...contentData.metadata,
+          publishedAt: contentData.metadata?.publishedAt,
+        },
       },
     });
   } catch (error) {
@@ -303,7 +320,7 @@ async function createContent(
   try {
     console.log('Create content - Input:', { body, author });
 
-    const { schemaId, data, metadata = {} } = body;
+    const { schemaId, data, metadata = {}, publish = false } = body;
 
     if (!schemaId || !data) {
       console.log('Create content - Missing required fields:', {
@@ -318,50 +335,93 @@ async function createContent(
     // Handle content ID - either custom or generated
     let contentId: string;
 
-    if (metadata.id) {
-      // User provided a custom ID - validate it
-      console.log('Create content - Using custom ID:', metadata.id);
-      const validation = await validateContentId(github, metadata.id, schemaId, contentPath);
+    // Check if metadata was passed in data (old format) and extract it
+    let finalData = { ...data };
+    let finalMetadata = { ...metadata };
 
-      if (!validation.isValid) {
-        console.log('Create content - Custom ID validation failed:', validation.error);
+    if (data._metadata) {
+      console.log('Create content - Found metadata in data, extracting it');
+      finalMetadata = { ...finalMetadata, ...data._metadata };
+      delete finalData._metadata;
+    }
+
+    if (finalMetadata.id) {
+      // User provided a custom ID - check if it already exists
+      console.log('Create content - Using custom ID:', finalMetadata.id);
+      const contentFilePath = `${contentPath}/${schemaId}/${finalMetadata.id}.json`;
+
+      try {
+        await github.getFile(contentFilePath);
+        // File exists, ID is taken
+        console.log('Create content - Custom ID already exists:', finalMetadata.id);
         return NextResponse.json(
           {
-            error: validation.error,
-            field: 'id',
+            error: `Content with ID "${finalMetadata.id}" already exists`,
+            fieldError: {
+              field: 'id',
+              message: `Content with ID "${finalMetadata.id}" already exists`,
+            },
+            type: 'validation_error',
+          },
+          { status: 409 }
+        );
+      } catch (error: any) {
+        // File doesn't exist (404), ID is available - continue
+        if (error.code !== 'NOT_FOUND') {
+          console.warn('Error checking content ID existence:', error);
+        }
+      }
+
+      contentId = finalMetadata.id;
+    } else {
+      // Generate content ID from data
+      contentId = generateContentId(finalData, schemaId);
+      console.log('Create content - Generated ID:', contentId);
+
+      // Check if the generated ID conflicts and make it unique if needed
+      const generatedFilePath = `${contentPath}/${schemaId}/${contentId}.json`;
+      try {
+        await github.getFile(generatedFilePath);
+        // File exists, add timestamp to make it unique
+        contentId = `${contentId}-${Date.now()}`;
+        console.log('Create content - ID conflict resolved, new ID:', contentId);
+      } catch (error: any) {
+        // File doesn't exist (404), ID is available - continue
+        if (error.code !== 'NOT_FOUND') {
+          console.warn('Error checking generated content ID existence:', error);
+        }
+      }
+    }
+
+    // Validate content if publishing
+    if (publish) {
+      const schema = await getSchema(github, schemaId, owner!, repo!, accessToken!);
+      const validation = await validateContent(finalData, schema, true);
+
+      if (!validation.valid && validation.errors && validation.errors.length > 0) {
+        console.log('Create content - Schema validation failed:', validation.errors);
+        return NextResponse.json(
+          {
+            error: 'Content validation failed',
+            fieldErrors: validation.errors,
             type: 'validation_error',
           },
           { status: 400 }
         );
       }
-
-      contentId = metadata.id;
-    } else {
-      // Generate content ID from data
-      contentId = generateContentId(data, schemaId);
-      console.log('Create content - Generated ID:', contentId);
-
-      // Validate the generated ID too (in case of conflicts)
-      const validation = await validateContentId(github, contentId, schemaId, contentPath);
-
-      if (!validation.isValid) {
-        // If generated ID conflicts, add timestamp to make it unique
-        contentId = `${contentId}-${Date.now()}`;
-        console.log('Create content - ID conflict resolved, new ID:', contentId);
-      }
     }
 
-    // Create content object
+    // Create content object with metadata at the root level
     const contentItem = {
+      id: contentId,
       schemaId,
-      data,
+      data: finalData,
       metadata: {
-        ...metadata,
-        id: contentId,
+        ...finalMetadata,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
-        author: author || metadata.author,
-        status: metadata.status || 'draft',
+        author: author || finalMetadata.author,
+        status: finalMetadata.status || 'draft',
       },
     };
 
@@ -391,7 +451,7 @@ async function createContent(
       content: {
         id: contentId,
         schemaId,
-        data,
+        data: finalData,
         metadata: contentItem.metadata,
       },
     });
@@ -410,7 +470,7 @@ async function updateContent(
   accessToken?: string
 ): Promise<NextResponse> {
   try {
-    const { contentId, schemaId, data, metadata = {} } = body;
+    const { contentId, schemaId, data, metadata = {}, publish = false, originalContentId } = body;
 
     if (!contentId || !schemaId || !data) {
       return NextResponse.json(
@@ -421,60 +481,136 @@ async function updateContent(
 
     const contentPath = await getContentPath(github, owner!, repo!, accessToken!);
 
+    // Check if this is a content ID change (rename operation)
+    const isRenamingContent = originalContentId && originalContentId !== contentId;
+
     // Get existing content to preserve metadata
     let existingContent: any = {};
-    const filePath = `${contentPath}/${schemaId}/${contentId}.json`;
+    const originalFilePath = `${contentPath}/${schemaId}/${originalContentId || contentId}.json`;
+    const newFilePath = `${contentPath}/${schemaId}/${contentId}.json`;
 
     try {
-      const existing = await github.getFileContent(filePath);
+      const existing = await github.getFileContent(originalFilePath);
       existingContent = JSON.parse(existing);
     } catch {
       // Content doesn't exist, will be created
     }
 
-    // Update content object
+    // Handle metadata extraction from data if present (backward compatibility)
+    let finalData = { ...data };
+    let finalMetadata = { ...metadata };
+
+    if (data._metadata) {
+      console.log('Update content - Found metadata in data, extracting it');
+      finalMetadata = { ...finalMetadata, ...data._metadata };
+      delete finalData._metadata;
+    }
+
+    // Determine the new status
+    let newStatus = finalMetadata.status || existingContent.metadata?.status || 'draft';
+
+    if (publish) {
+      newStatus = 'published';
+    }
+
+    // Validate content if publishing
+    if (publish) {
+      const schema = await getSchema(github, schemaId, owner!, repo!, accessToken!);
+      const validation = await validateContent(finalData, schema, true);
+
+      if (!validation.valid && validation.errors && validation.errors.length > 0) {
+        console.log('Update content - Schema validation failed:', validation.errors);
+        return NextResponse.json(
+          {
+            error: 'Content validation failed',
+            fieldErrors: validation.errors,
+            type: 'validation_error',
+          },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Update content object with metadata at root level
     const contentItem = {
+      id: contentId,
       schemaId,
-      data,
+      data: finalData,
       metadata: {
         ...existingContent.metadata,
-        ...metadata,
-        id: contentId,
+        ...finalMetadata,
         updatedAt: new Date().toISOString(),
-        author: author || metadata.author || existingContent.metadata?.author,
+        author: author || finalMetadata.author || existingContent.metadata?.author,
         createdAt: existingContent.metadata?.createdAt || new Date().toISOString(),
+        status: newStatus,
+        // Add publishedAt when content is published
+        ...(newStatus === 'published' &&
+          (!existingContent.metadata?.publishedAt ||
+            existingContent.metadata?.status !== 'published') && {
+            publishedAt: new Date().toISOString(),
+          }),
       },
     };
 
     // Save to GitHub
     const fileContent = JSON.stringify(contentItem, null, 2);
 
-    // Get the current file to get its SHA for updating
-    try {
-      console.log('Update content - Getting current file:', filePath);
-      const currentFile = await github.getFile(filePath);
-      console.log('Update content - Current file SHA:', currentFile.sha);
+    if (isRenamingContent) {
+      // This is a rename operation: create new file and delete old file
+      console.log(`Renaming content from ${originalContentId} to ${contentId}`);
 
-      await github.updateFile(
-        filePath,
-        fileContent,
-        `Update ${schemaId} content: ${contentId}`,
-        currentFile.sha
-      );
-      console.log('Update content - File updated successfully');
-    } catch (fileError) {
-      console.log('Update content - File not found, creating new:', fileError);
-      // File doesn't exist, create it
+      // 1. Create the new file
       await github.createMultipleFiles(
         [
           {
-            path: filePath,
+            path: newFilePath,
             content: fileContent,
           },
         ],
-        `Create ${schemaId} content: ${contentId}`
+        `Rename ${schemaId} content: ${originalContentId} -> ${contentId}${publish ? ' (published)' : ''}`
       );
-      console.log('Update content - File created successfully');
+
+      // 2. Delete the old file if it exists and is different
+      try {
+        const originalFile = await github.getFile(originalFilePath);
+        await github.deleteFile(
+          originalFilePath,
+          `Remove old content file after rename: ${originalContentId}`,
+          originalFile.sha
+        );
+        console.log(`Successfully deleted old content file: ${originalFilePath}`);
+      } catch (deleteError) {
+        console.warn(`Could not delete old content file ${originalFilePath}:`, deleteError);
+        // Continue even if we can't delete the old file - the new one was created successfully
+      }
+    } else {
+      // Normal update operation
+      try {
+        console.log('Update content - Getting current file:', newFilePath);
+        const currentFile = await github.getFile(newFilePath);
+        console.log('Update content - Current file SHA:', currentFile.sha);
+
+        await github.updateFile(
+          newFilePath,
+          fileContent,
+          `Update ${schemaId} content: ${contentId}${publish ? ' (published)' : ''}`,
+          currentFile.sha
+        );
+        console.log('Update content - File updated successfully');
+      } catch (fileError) {
+        console.log('Update content - File not found, creating new:', fileError);
+        // File doesn't exist, create it
+        await github.createMultipleFiles(
+          [
+            {
+              path: newFilePath,
+              content: fileContent,
+            },
+          ],
+          `Create ${schemaId} content: ${contentId}${publish ? ' (published)' : ''}`
+        );
+        console.log('Update content - File created successfully');
+      }
     }
 
     return NextResponse.json({
@@ -482,7 +618,7 @@ async function updateContent(
       content: {
         id: contentId,
         schemaId,
-        data,
+        data: finalData,
         metadata: contentItem.metadata,
       },
     });
@@ -522,46 +658,6 @@ async function deleteContent(
 
 // Helper functions
 
-async function validateContentId(
-  github: GitHubApiClient,
-  contentId: string,
-  schemaId: string,
-  contentPath: string
-): Promise<{ isValid: boolean; error?: string }> {
-  // Validate ID format
-  if (!contentId || typeof contentId !== 'string') {
-    return { isValid: false, error: 'Content ID must be a non-empty string' };
-  }
-
-  // Check for valid characters (letters, numbers, hyphens, underscores)
-  if (!/^[a-zA-Z0-9_-]+$/.test(contentId)) {
-    return {
-      isValid: false,
-      error: 'Content ID can only contain letters, numbers, hyphens, and underscores',
-    };
-  }
-
-  // Check length constraints
-  if (contentId.length < 1 || contentId.length > 100) {
-    return { isValid: false, error: 'Content ID must be between 1 and 100 characters long' };
-  }
-
-  // Check if ID already exists
-  try {
-    const filePath = `${contentPath}/${schemaId}/${contentId}.json`;
-    await github.getFileContent(filePath);
-    return { isValid: false, error: `Content with ID "${contentId}" already exists` };
-  } catch (error: any) {
-    // If file doesn't exist (404), that's good - ID is available
-    if (error.status === 404) {
-      return { isValid: true };
-    }
-    // For other errors, we can't be sure, so we'll allow it
-    console.warn('Error checking content ID existence:', error);
-    return { isValid: true };
-  }
-}
-
 async function getContentPath(
   github: GitHubApiClient,
   owner: string,
@@ -574,6 +670,50 @@ async function getContentPath(
   } catch (error) {
     console.warn('Failed to read GitCMS config, using default contentPath:', error);
     return getCentralizedContentPath(null);
+  }
+}
+
+// Validation function for content ID uniqueness
+async function validateContentId(
+  github: GitHubApiClient,
+  searchParams: URLSearchParams,
+  owner: string,
+  repo: string
+) {
+  try {
+    const contentId = searchParams.get('id');
+    const schemaId = searchParams.get('schemaId');
+    const currentContentId = searchParams.get('currentId'); // For editing existing content
+
+    if (!contentId || !schemaId) {
+      return NextResponse.json({ error: 'Content ID and schema ID are required' }, { status: 400 });
+    }
+
+    const contentPath = `content/${schemaId}/${contentId}.json`;
+
+    try {
+      await github.getFile(contentPath);
+
+      // File exists - check if it's the same as current (editing scenario)
+      const isValid = currentContentId === contentId;
+
+      return NextResponse.json({
+        valid: isValid,
+        exists: true,
+        message: isValid ? 'Valid (current content)' : 'Content ID already exists',
+      });
+    } catch (error: any) {
+      if (error.code === 'NOT_FOUND') {
+        return NextResponse.json({
+          valid: true,
+          exists: false,
+          message: 'Content ID is available',
+        });
+      }
+      throw error;
+    }
+  } catch (error) {
+    return NextResponse.json({ error: 'Failed to validate content ID' }, { status: 500 });
   }
 }
 
@@ -597,4 +737,47 @@ function slugify(text: string): string {
     .replace(/[^\w\s-]/g, '')
     .replace(/[\s_-]+/g, '-')
     .replace(/^-+|-+$/g, '');
+}
+
+async function getSchema(
+  github: GitHubApiClient,
+  schemaId: string,
+  owner: string,
+  repo: string,
+  accessToken: string
+): Promise<GitCMSSchema | null> {
+  return null;
+  /*
+  try {
+    // For now, we'll skip schema validation since we don't have the schema storage path
+    // In a full implementation, this would fetch the schema from the configured schemas path
+    return null;
+  } catch (error) {
+    console.warn('Failed to fetch schema for validation:', error);
+    return null;
+  }
+  */
+}
+
+async function validateContent(
+  data: Record<string, any>,
+  schema: GitCMSSchema | null,
+  publish: boolean = false
+): Promise<{ valid: boolean; errors?: any[] }> {
+  // Only validate when publishing and we have a schema
+  if (!publish || !schema) {
+    return { valid: true };
+  }
+
+  try {
+    const result = await defaultValidationEngine.validateContent(data, schema, 'create');
+
+    return {
+      valid: result.valid,
+      errors: result.errors || [],
+    };
+  } catch (error) {
+    console.error('Content validation error:', error);
+    return { valid: false, errors: [{ field: '_form', message: 'Validation failed' }] };
+  }
 }

@@ -44,6 +44,9 @@ export async function GET(request: NextRequest) {
       case 'check-setup':
         return handleCheckSetup(github);
 
+      case 'validate-id':
+        return handleValidateSchemaId(github, searchParams);
+
       default:
         return NextResponse.json({ error: 'Invalid action parameter' }, { status: 400 });
     }
@@ -258,6 +261,46 @@ async function handleCheckSetup(github: GitHubApiClient) {
   }
 }
 
+/**
+ * Validate schema ID uniqueness
+ */
+async function handleValidateSchemaId(github: GitHubApiClient, searchParams: URLSearchParams) {
+  try {
+    const schemaId = searchParams.get('id');
+    const currentSchemaId = searchParams.get('currentId'); // For editing existing schemas
+
+    if (!schemaId) {
+      return NextResponse.json({ error: 'Schema ID is required' }, { status: 400 });
+    }
+
+    const schemaPath = `.gitcms/schemas/${schemaId}.json`;
+
+    try {
+      await github.getFile(schemaPath);
+
+      // File exists - check if it's the same as current (editing scenario)
+      const isValid = currentSchemaId === schemaId;
+
+      return NextResponse.json({
+        valid: isValid,
+        exists: true,
+        message: isValid ? 'Valid (current schema)' : 'Schema ID already exists',
+      });
+    } catch (error: any) {
+      if (error.code === 'NOT_FOUND') {
+        return NextResponse.json({
+          valid: true,
+          exists: false,
+          message: 'Schema ID is available',
+        });
+      }
+      throw error;
+    }
+  } catch (error) {
+    return NextResponse.json({ error: 'Failed to validate schema ID' }, { status: 500 });
+  }
+}
+
 // POST handlers
 
 /**
@@ -266,7 +309,7 @@ async function handleCheckSetup(github: GitHubApiClient) {
 async function handleSaveSchema(github: GitHubApiClient, request: NextRequest) {
   try {
     const body = await request.json();
-    const { schema, commitMessage } = body;
+    const { schema, commitMessage, originalSchemaId } = body;
 
     if (!schema || !schema.id) {
       return NextResponse.json({ error: 'Schema with ID is required' }, { status: 400 });
@@ -276,7 +319,43 @@ async function handleSaveSchema(github: GitHubApiClient, request: NextRequest) {
     const content = JSON.stringify(schema, null, 2);
     const message = commitMessage || `Update schema: ${schema.metadata?.name || schema.id}`;
 
-    // Check if file exists to determine if this is an update
+    // Handle schema renaming (when originalSchemaId is provided and different from schema.id)
+    if (originalSchemaId && originalSchemaId !== schema.id) {
+      const originalPath = `.gitcms/schemas/${originalSchemaId}.json`;
+
+      // Check if original schema exists
+      try {
+        await github.getFile(originalPath);
+
+        // Create new schema file and delete the old one (rename operation)
+        const createResult = await github.updateFile(schemaPath, content, message);
+
+        try {
+          // Delete the old schema file
+          const originalFile = await github.getFile(originalPath);
+          await github.deleteFile(
+            originalPath,
+            `Remove renamed schema: ${originalSchemaId}`,
+            originalFile.sha
+          );
+        } catch (deleteError) {
+          console.warn('Failed to delete original schema file:', deleteError);
+        }
+
+        return NextResponse.json({
+          message: 'Schema renamed successfully',
+          schema,
+          path: schemaPath,
+          originalPath,
+          commit: createResult,
+        });
+      } catch (error: any) {
+        if (error.code !== 'NOT_FOUND') throw error;
+        // Original doesn't exist, treat as new creation
+      }
+    }
+
+    // Regular save/update operation
     let isUpdate = false;
     let existingSha: string | undefined;
 

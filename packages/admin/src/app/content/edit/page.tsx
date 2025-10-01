@@ -105,15 +105,30 @@ export default function ContentEditor() {
       setSaving(true);
       setSaveError(null);
 
-      // Extract metadata from form data
+      // Extract metadata from form data (it should no longer be in _metadata)
       const { _metadata, ...data } = formData;
 
       // Determine if we're changing the content ID
       const targetContentId =
         enableIdEdit && newContentId && newContentId !== contentId ? newContentId : contentId;
 
+      // Prepare the request payload with metadata in the proper location
+      const payload = {
+        schemaId,
+        data,
+        metadata: _metadata || {},
+        ...(targetContentId && { contentId: targetContentId }),
+      };
+
       // Use the cached mutation hook
-      const result = await saveContent(schemaId, data, targetContentId || undefined);
+      const result = await saveContent(
+        payload.schemaId,
+        payload.data,
+        payload.contentId,
+        payload.metadata,
+        false, // publish = false for save
+        contentId || undefined // originalContentId
+      );
 
       setSavedMessage('Content saved successfully!');
       setTimeout(() => setSavedMessage(null), 3000);
@@ -162,19 +177,44 @@ export default function ContentEditor() {
       setSaving(true);
       setSaveError(null);
 
-      // Save first if not already saved
-      if (!contentId) {
-        await handleSave(formData);
-      }
-
       // Extract metadata from form data
       const { _metadata, ...data } = formData;
 
-      // Use the cached mutation hook to publish
-      const result = await saveContent(schemaId, data, contentId || content?.id);
+      // Determine the target content ID
+      const targetContentId =
+        enableIdEdit && newContentId && newContentId !== contentId ? newContentId : contentId;
+
+      // Prepare the request payload with metadata and publish flag
+      const payload = {
+        schemaId,
+        data,
+        metadata: _metadata || {},
+        ...(targetContentId && { contentId: targetContentId }),
+      };
+
+      // Use the cached mutation hook to publish (set publish flag to true)
+      const result = await saveContent(
+        payload.schemaId,
+        payload.data,
+        payload.contentId,
+        payload.metadata,
+        true, // publish = true
+        contentId || undefined // originalContentId
+      );
 
       setSavedMessage('Content published successfully!');
       setTimeout(() => setSavedMessage(null), 3000);
+
+      // Update URL if needed
+      if (!contentId && result.content?.id) {
+        const newUrl = new URL(window.location.href);
+        newUrl.searchParams.set('contentId', result.content.id);
+        window.history.replaceState({}, '', newUrl.toString());
+      } else if (enableIdEdit && newContentId && newContentId !== contentId) {
+        const newUrl = new URL(window.location.href);
+        newUrl.searchParams.set('contentId', newContentId);
+        window.history.replaceState({}, '', newUrl.toString());
+      }
     } catch (error) {
       console.error('Publish error:', error);
       setSaveError(error instanceof Error ? error.message : 'Failed to publish content');
@@ -182,6 +222,80 @@ export default function ContentEditor() {
       setSaving(false);
     }
   };
+
+  // Helper function to archive content
+  const handleArchive = async (formData: Record<string, any>) => {
+    if (!repoInfo?.owner || !repoInfo?.repo || !schemaId) return;
+
+    try {
+      setSaving(true);
+      setSaveError(null);
+
+      const { _metadata, ...data } = formData;
+      const targetContentId =
+        enableIdEdit && newContentId && newContentId !== contentId ? newContentId : contentId;
+
+      const archiveMetadata = {
+        ...(_metadata || {}),
+        status: 'archived',
+      };
+
+      await saveContent(
+        schemaId,
+        data,
+        targetContentId || undefined,
+        archiveMetadata,
+        false, // publish = false
+        contentId || undefined // originalContentId
+      );
+
+      setSavedMessage('Content archived successfully!');
+      setTimeout(() => setSavedMessage(null), 3000);
+    } catch (error) {
+      console.error('Archive error:', error);
+      setSaveError(error instanceof Error ? error.message : 'Failed to archive content');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Helper function to get the right action buttons based on current status
+  const getActionButtons = () => {
+    const currentStatus = content?.metadata?.status || 'draft';
+
+    if (currentStatus === 'draft') {
+      return {
+        saveLabel: saving ? 'Saving...' : 'Save Draft',
+        submitLabel: saving ? 'Publishing...' : 'Publish',
+        onSubmit: handleSubmit,
+        showArchive: false,
+      };
+    } else if (currentStatus === 'published') {
+      return {
+        saveLabel: saving ? 'Updating...' : 'Update',
+        submitLabel: saving ? 'Archiving...' : 'Archive',
+        onSubmit: handleArchive,
+        showArchive: true,
+      };
+    } else if (currentStatus === 'archived') {
+      return {
+        saveLabel: saving ? 'Updating...' : 'Update',
+        submitLabel: saving ? 'Publishing...' : 'Publish',
+        onSubmit: handleSubmit,
+        showArchive: false,
+      };
+    }
+
+    // Default case
+    return {
+      saveLabel: saving ? 'Saving...' : 'Save Draft',
+      submitLabel: saving ? 'Publishing...' : 'Publish',
+      onSubmit: handleSubmit,
+      showArchive: false,
+    };
+  };
+
+  const actionButtons = getActionButtons();
 
   useEffect(() => {
     if (!schema) return;
@@ -309,11 +423,11 @@ export default function ContentEditor() {
           schema={schema}
           initialData={content?.data || {}}
           onSave={handleSave}
-          onSubmit={handleSubmit}
+          onSubmit={actionButtons.onSubmit}
           disabled={saving}
           autoSave={false}
-          saveLabel={saving ? 'Saving...' : 'Save Draft'}
-          submitLabel={saving ? 'Publishing...' : 'Publish'}
+          saveLabel={actionButtons.saveLabel}
+          submitLabel={actionButtons.submitLabel}
           showIdField={!contentId} // Show ID field only when creating new content
           allowIdEdit={contentId ? enableIdEdit : false} // Allow ID editing for existing content when enabled
           currentContentId={contentId || ''}
