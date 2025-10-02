@@ -1,7 +1,6 @@
 import { Octokit } from '@octokit/rest';
-import type { GitCMSConfig, ContentItem, QueryOptions } from './types';
-
-export type Operator = '==' | '!=' | '>' | '>=' | '<' | '<=' | 'in' | 'contains';
+import type { GitCMSConfig, ContentItem } from './types';
+import { Operator, applyOperator } from '@git-cms/core';
 
 export class CollectionRef {
   constructor(
@@ -247,7 +246,7 @@ export class CollectionQuery {
       this.filters._where.forEach((filter: any) => {
         items = items.filter(item => {
           const fieldValue = item.data?.[filter.field] ?? item[filter.field];
-          return this.applyOperator(fieldValue, filter.operator, filter.value);
+          return applyOperator(fieldValue, filter.operator, filter.value);
         });
       });
     }
@@ -280,31 +279,6 @@ export class CollectionQuery {
     }
 
     return items;
-  }
-
-  private applyOperator(fieldValue: any, operator: Operator, value: any): boolean {
-    switch (operator) {
-      case '==':
-        return fieldValue === value;
-      case '!=':
-        return fieldValue !== value;
-      case '>':
-        return fieldValue > value;
-      case '>=':
-        return fieldValue >= value;
-      case '<':
-        return fieldValue < value;
-      case '<=':
-        return fieldValue <= value;
-      case 'in':
-        return Array.isArray(value) && value.includes(fieldValue);
-      case 'contains':
-        return typeof fieldValue === 'string' && typeof value === 'string'
-          ? fieldValue.toLowerCase().includes(value.toLowerCase())
-          : false;
-      default:
-        return false;
-    }
   }
 }
 

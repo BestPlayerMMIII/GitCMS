@@ -1,15 +1,21 @@
-# Enhanced GitCMS Client Examples
+# GitCMS Client - Simple Media Embedding
+
+## Basic Setup
+
+```typescript
+import { GitCMSClient, MediaEmbedder } from '@git-cms/client';
+
+const config = {
+  repository: 'your-username/your-repo',
+  token: 'your-github-token',
+};
+
+const client = new GitCMSClient(config);
+```
 
 ## Advanced Querying
 
 ```typescript
-import { GitCMSClient } from '@git-cms/client';
-
-const client = new GitCMSClient({
-  repository: 'your-username/your-repo',
-  token: 'your-github-token',
-});
-
 // Get a collection with advanced querying
 const posts = client.collection('posts');
 
@@ -42,287 +48,263 @@ const popularPosts = await posts
   .exists();
 ```
 
-## Media Embedding
+## Simple Media Embedding
+
+The GitCMS media embedding system is designed to be **simple and fast**:
+
+1. **Fast thumbnails**: Show immediately using embedded base64 data
+2. **Progressive enhancement**: Load full resolution images asynchronously
+3. **User control**: You decide when and how to load full images
+
+### GitCMS Media Tags
+
+The admin rich text editor creates special tags with embedded thumbnails:
+
+```html
+<gitcms-media
+  data-path="media/images/hero.jpg"
+  data-filename="hero.jpg"
+  data-thumbnail="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQ..."
+  alt="Hero image"
+  title="Main hero image"
+>
+</gitcms-media>
+```
+
+### Basic Usage
 
 ```typescript
-import {
-  MediaEmbedder,
-  embedMediaUrl,
-  generateResponsiveImageSources,
-  processRichTextContent,
-} from '@git-cms/client';
-
-const config = {
-  repository: 'your-username/your-repo',
-  token: 'your-github-token',
-};
-
-// Create a media embedder
-const embedder = new MediaEmbedder(config);
-
-// Embed a single image
-const embeddedImage = embedder.embedMedia(
-  'https://api.github.com/repos/user/repo/contents/media/thumbnail.jpg',
-  {
-    size: 'large',
-    format: 'webp',
-    lazy: true,
-  }
-);
-
-console.log(embeddedImage);
-// {
-//   url: 'https://api.github.com/repos/user/repo/contents/media/thumbnail_large.webp',
-//   alt: 'thumbnail.jpg',
-//   loading: 'lazy',
-//   thumbnail: 'https://...',
-//   original: 'https://...',
-//   metadata: { filename: 'thumbnail.jpg', size: 'large', type: 'image' }
-// }
-
-// Generate responsive sources
-const responsiveSources = embedder.generateResponsiveSources(thumbnailUrl);
-
-console.log(responsiveSources);
-// {
-//   default: 'medium.webp',
-//   sources: [
-//     { media: '(max-width: 640px)', srcset: 'thumbnail.webp', type: 'image/webp' },
-//     { media: '(max-width: 1024px)', srcset: 'medium.webp', type: 'image/webp' },
-//     { media: '(min-width: 1025px)', srcset: 'large.webp', type: 'image/webp' }
-//   ],
-//   fallback: 'medium.jpeg'
-// }
-
-// Process rich text content with embedded media
-const richTextHtml = `
+// Your HTML content with GitCMS media tags
+const htmlContent = `
   <h1>My Blog Post</h1>
-  <p>Here's an image:</p>
-  <img src="https://api.github.com/repos/user/repo/contents/media/hero.jpg" alt="Hero image">
+  <p>Here's our featured image:</p>
+  <gitcms-media 
+    data-path="media/images/hero.jpg" 
+    data-filename="hero.jpg" 
+    data-thumbnail="data:image/jpeg;base64,..." 
+    alt="Hero image" 
+    title="Main hero image">
+  </gitcms-media>
   <p>More content here...</p>
 `;
 
-const processedHtml = embedder.processRichTextContent(richTextHtml);
-// Returns HTML with <picture> elements and responsive sources
+// Create media embedder
+const embedder = new MediaEmbedder(config, htmlContent);
+
+// Get fast version with thumbnails (immediate)
+const fastHtml = embedder.getFast();
+console.log(fastHtml);
+// Output:
+// <h1>My Blog Post</h1>
+// <p>Here's our featured image:</p>
+// <img id="gitcms-media-1" src="data:image/jpeg;base64,..." alt="Hero image" title="Main hero image" data-gitcms-placeholder="true">
+// <p>More content here...</p>
+
+// Load full resolution images progressively
+await embedder.getFull(updatedHtml => {
+  console.log('Updated HTML with full resolution image:', updatedHtml);
+  // Each time an image loads, this callback is called with the latest HTML
+  // You can update your UI progressively as images load
+});
 ```
 
-## React Integration
+### React Example
 
 ```typescript
-// For React applications
-import React from 'react';
-import {
-  createUseMediaEmbedder,
-  createResponsiveImageComponent,
-  createRichTextContentComponent,
-  embedMediaUrl
-} from '@git-cms/client';
+import React, { useState, useEffect } from 'react';
+import { MediaEmbedder } from '@git-cms/client';
 
-const config = {
-  repository: 'your-username/your-repo',
-  token: 'your-github-token'
-};
+function BlogPost({ post, config }) {
+  const [content, setContent] = useState('');
 
-// Create hooks and components
-const useMediaEmbedder = createUseMediaEmbedder(config);
-const ResponsiveImage = createResponsiveImageComponent(config);
-const RichTextContent = createRichTextContentComponent(config);
+  useEffect(() => {
+    // Create embedder with post content
+    const embedder = new MediaEmbedder(config, post.content);
 
-// Use in a React component
-function BlogPost({ post }) {
-  const { embedMedia, processRichTextContent } = useMediaEmbedder();
+    // Show thumbnails immediately
+    setContent(embedder.getFast());
 
-  // Embed featured image
-  const featuredImage = embedMedia(post.featuredImage, {
-    size: 'large',
-    format: 'webp'
-  });
+    // Load full resolution images progressively
+    embedder.getFull((updatedHtml) => {
+      setContent(updatedHtml);
+    });
+  }, [post.content, config]);
 
   return (
     <article>
       <h1>{post.title}</h1>
-
-      {/* Responsive image */}
-      <ResponsiveImage
-        src={post.featuredImage}
-        alt={post.title}
-        className="featured-image"
-        loading="eager"
-      />
-
-      {/* Rich text content with embedded media */}
-      <RichTextContent
-        content={post.content}
-        className="prose"
-      />
+      <div dangerouslySetInnerHTML={{ __html: content }} />
     </article>
   );
 }
+```
 
-// Or use utility functions directly
-function SimpleImage({ src, alt }) {
-  const embedded = embedMediaUrl(config, src, { size: 'medium', format: 'webp' });
+### Vue Example
 
-  return (
-    <img
-      src={embedded.url}
-      alt={embedded.alt || alt}
-      loading={embedded.loading}
-    />
-  );
+```typescript
+import { ref, onMounted } from 'vue';
+import { MediaEmbedder } from '@git-cms/client';
+
+export default {
+  props: ['post', 'config'],
+  setup(props) {
+    const content = ref('');
+
+    onMounted(async () => {
+      const embedder = new MediaEmbedder(props.config, props.post.content);
+
+      // Show thumbnails immediately
+      content.value = embedder.getFast();
+
+      // Load full resolution images progressively
+      await embedder.getFull(updatedHtml => {
+        content.value = updatedHtml;
+      });
+    });
+
+    return { content };
+  },
+  template: `
+    <article>
+      <h1>{{ post.title }}</h1>
+      <div v-html="content"></div>
+    </article>
+  `,
+};
+```
+
+### Progressive Loading Example
+
+```typescript
+// Example: Blog with progressive image loading
+async function renderBlogPost(postId) {
+  // Get post content
+  const posts = client.collection('posts');
+  const post = await posts.where('id', '==', postId).first();
+
+  if (!post) return;
+
+  // Create embedder
+  const embedder = new MediaEmbedder(config, post.content);
+
+  // Show fast version immediately
+  const container = document.getElementById('blog-content');
+  container.innerHTML = embedder.getFast();
+
+  // Track loading progress
+  let loadedImages = 0;
+  const totalImages = (post.content.match(/<gitcms-media/g) || []).length;
+
+  if (totalImages > 0) {
+    // Show loading indicator
+    showLoadingIndicator(`Loading images... (0/${totalImages})`);
+
+    // Load full resolution images
+    await embedder.getFull(updatedHtml => {
+      loadedImages++;
+      container.innerHTML = updatedHtml;
+      updateLoadingIndicator(
+        `Loading images... (${loadedImages}/${totalImages})`
+      );
+
+      if (loadedImages === totalImages) {
+        hideLoadingIndicator();
+      }
+    });
+  }
+}
+
+function showLoadingIndicator(text) {
+  const indicator = document.getElementById('loading-indicator');
+  indicator.textContent = text;
+  indicator.style.display = 'block';
+}
+
+function updateLoadingIndicator(text) {
+  const indicator = document.getElementById('loading-indicator');
+  indicator.textContent = text;
+}
+
+function hideLoadingIndicator() {
+  const indicator = document.getElementById('loading-indicator');
+  indicator.style.display = 'none';
 }
 ```
 
-## Video Embedding
-
-```typescript
-// Embed videos
-const embeddedVideo = embedder.embedVideo(
-  'https://api.github.com/repos/user/repo/contents/media/demo.mp4',
-  {
-    autoplay: false,
-    controls: true,
-    muted: true,
-    loop: false,
-    poster: 'https://api.github.com/repos/user/repo/contents/media/poster.jpg',
-  }
-);
-
-console.log(embeddedVideo);
-// {
-//   url: 'https://...',
-//   autoplay: false,
-//   controls: true,
-//   muted: true,
-//   loop: false,
-//   poster: 'https://...',
-//   type: 'video/mp4'
-// }
-```
-
-## Complete Example: Blog with Media
+## Complete Blog Example
 
 ```typescript
 import { GitCMSClient, MediaEmbedder } from '@git-cms/client';
 
 const config = {
-  repository: 'my-blog/content',
+  repository: 'my-username/my-repo',
   token: process.env.GITHUB_TOKEN,
 };
 
 const client = new GitCMSClient(config);
-const embedder = new MediaEmbedder(config);
 
 async function getBlogData() {
-  // Get blog posts with advanced querying
+  // Get published posts
   const posts = await client
     .collection('posts')
     .where('status', '==', 'published')
-    .where('publishDate', '<=', new Date().toISOString())
     .orderBy('publishDate', 'desc')
     .limit(10)
     .get();
 
-  // Process each post to embed media
-  const processedPosts = posts.map(post => ({
-    ...post,
-    featuredImage: embedder.embedMedia(post.featuredImage, {
-      size: 'large',
-      format: 'webp',
-    }),
-    content: embedder.processRichTextContent(post.content),
-    responsiveImage: embedder.generateResponsiveSources(post.featuredImage),
-  }));
-
-  // Get blog stats
+  // Stats
   const stats = {
     totalPosts: await client.collection('posts').count(),
     publishedPosts: await client
       .collection('posts')
       .where('status', '==', 'published')
       .count(),
-    hasDrafts: await client
-      .collection('posts')
-      .where('status', '==', 'draft')
-      .exists(),
   };
 
-  return {
-    posts: processedPosts,
-    stats,
-  };
+  return { posts, stats };
 }
 
-// Usage
-getBlogData().then(({ posts, stats }) => {
+async function renderBlog() {
+  const { posts, stats } = await getBlogData();
+
   console.log(
-    `Found ${stats.publishedPosts} published posts out of ${stats.totalPosts} total`
+    `Showing ${posts.length} of ${stats.publishedPosts} published posts`
   );
-  console.log(`Has drafts: ${stats.hasDrafts}`);
 
-  posts.forEach(post => {
-    console.log(`Post: ${post.title}`);
-    console.log(`Featured image: ${post.featuredImage.url}`);
-    console.log(`Responsive sources: ${post.responsiveImage.sources.length}`);
-  });
-});
-```
+  // Render each post
+  for (const post of posts) {
+    const container = document.createElement('article');
+    container.innerHTML = `<h2>${post.title}</h2><div class="content"></div>`;
 
-## Advanced Features
+    const contentDiv = container.querySelector('.content');
 
-### Custom Media Processing
+    // Create embedder for this post
+    const embedder = new MediaEmbedder(config, post.content);
 
-```typescript
-// Extend the MediaEmbedder for custom processing
-class CustomMediaEmbedder extends MediaEmbedder {
-  constructor(
-    config,
-    private cdnBase?: string
-  ) {
-    super(config);
-  }
+    // Show thumbnails immediately
+    contentDiv.innerHTML = embedder.getFast();
 
-  // Override to use CDN
-  protected generateMediaUrl(
-    baseUrl: string,
-    fileInfo: any,
-    size: string,
-    format: string
-  ): string {
-    if (this.cdnBase) {
-      return `${this.cdnBase}/${fileInfo.filename}?size=${size}&format=${format}`;
-    }
-    return super.generateMediaUrl(baseUrl, fileInfo, size, format);
+    // Load full images progressively, asynchronously without await
+    embedder.getFull(updatedHtml => {
+      contentDiv.innerHTML = updatedHtml;
+    });
+
+    document.getElementById('blog-posts').appendChild(container);
   }
 }
 
-const customEmbedder = new CustomMediaEmbedder(config, 'https://my-cdn.com');
+// Initialize blog
+renderBlog();
 ```
 
-### Caching Query Results
+## Key Benefits
 
-```typescript
-// Simple caching wrapper
-class CachedGitCMSClient extends GitCMSClient {
-  private cache = new Map();
+✅ **Simple API**: Just two methods - `getFast()` and `getFull()`  
+✅ **Fast Initial Load**: Thumbnails show immediately  
+✅ **Progressive Enhancement**: Full images load asynchronously  
+✅ **User Control**: You decide when and how to load images  
+✅ **Clean Code**: Minimal, focused implementation  
+✅ **Framework Agnostic**: Works with React, Vue, vanilla JS, etc.
 
-  async collection(name: string) {
-    const cacheKey = `collection:${name}`;
-
-    if (this.cache.has(cacheKey)) {
-      return this.cache.get(cacheKey);
-    }
-
-    const collection = await super.collection(name);
-    this.cache.set(cacheKey, collection);
-
-    // Cache for 5 minutes
-    setTimeout(() => this.cache.delete(cacheKey), 5 * 60 * 1000);
-
-    return collection;
-  }
-}
-```
-
-These examples demonstrate the full power of the enhanced GitCMS client with
-advanced querying, media embedding, and React integration capabilities.
+This approach gives you maximum control over the loading experience while
+keeping the code simple and maintainable!

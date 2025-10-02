@@ -3,6 +3,8 @@ import {
   GitHubApiClient,
   getGitCMSConfig,
   getContentPath as getCentralizedContentPath,
+  Operator,
+  applyOperator,
 } from '@git-cms/core';
 
 function getAuthToken(request: NextRequest): string | null {
@@ -30,11 +32,13 @@ function applyQuery(items: any[], url: URL): any[] {
   const whereParam = url.searchParams.get('where');
   if (whereParam) {
     try {
-      const filters = JSON.parse(whereParam) as Record<string, any>;
+      const filters = JSON.parse(whereParam) as { field: string; operator: Operator; value: any }[];
       result = result.filter(item => {
-        return Object.entries(filters).every(
-          ([key, val]) => item.data?.[key] === val || item[key] === val
-        );
+        return filters.every(filter => {
+          const { field, operator, value } = filter;
+          const itemValue = item.data?.[field] ?? item[field];
+          return applyOperator(itemValue, operator, value);
+        });
       });
     } catch {}
   }

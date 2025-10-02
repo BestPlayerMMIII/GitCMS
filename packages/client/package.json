@@ -20,7 +20,8 @@
     "clean": "rimraf dist"
   },
   "dependencies": {
-    "@git-cms/core": "^0.1.0"
+    "@git-cms/core": "^0.1.0",
+    "@octokit/rest": "^20.0.2"
   },
   "devDependencies": {
     "@types/node": "^20.10.4",

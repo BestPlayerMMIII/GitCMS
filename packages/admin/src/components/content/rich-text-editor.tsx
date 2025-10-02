@@ -14,6 +14,7 @@ import Typography from '@tiptap/extension-typography';
 import Highlight from '@tiptap/extension-highlight';
 import TextAlign from '@tiptap/extension-text-align';
 import CharacterCount from '@tiptap/extension-character-count';
+import { Node, mergeAttributes } from '@tiptap/core';
 import { createLowlight } from 'lowlight';
 import {
   Bold,
@@ -36,8 +37,127 @@ import {
   Highlighter,
 } from 'lucide-react';
 import { useCallback, useState } from 'react';
-import { MediaPickerDialog } from './media-picker-dialog';
+import { useMediaPicker } from '../media/media-picker-modal';
 import { type GitCMSMediaFile } from '@git-cms/core';
+
+// Utility function to generate thumbnail data URL
+const generateThumbnailDataUrl = async (imageUrl: string): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const img = new globalThis.Image();
+    img.crossOrigin = 'anonymous';
+
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        reject(new Error('Could not get canvas context'));
+        return;
+      }
+
+      // Set thumbnail size (max 200x200)
+      const maxSize = 200;
+      let { width, height } = img;
+
+      if (width > height) {
+        if (width > maxSize) {
+          height = (height * maxSize) / width;
+          width = maxSize;
+        }
+      } else {
+        if (height > maxSize) {
+          width = (width * maxSize) / height;
+          height = maxSize;
+        }
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+
+      // Draw and convert to data URL
+      ctx.drawImage(img, 0, 0, width, height);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+      resolve(dataUrl);
+    };
+
+    img.onerror = () => {
+      reject(new Error('Failed to load image'));
+    };
+
+    img.src = imageUrl;
+  });
+};
+
+// Custom TipTap extension for GitCMS media embedding
+const GitCMSMedia = Node.create({
+  name: 'gitcmsMedia',
+
+  group: 'block',
+
+  atom: true,
+
+  addAttributes() {
+    return {
+      'data-path': {
+        default: null,
+      },
+      'data-filename': {
+        default: null,
+      },
+      'data-thumbnail': {
+        default: null,
+      },
+      alt: {
+        default: null,
+      },
+      title: {
+        default: null,
+      },
+    };
+  },
+
+  parseHTML() {
+    return [
+      {
+        tag: 'gitcms-media',
+      },
+    ];
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    return ['gitcms-media', mergeAttributes(HTMLAttributes)];
+  },
+
+  addNodeView() {
+    return ({ node }) => {
+      const wrapper = document.createElement('div');
+      wrapper.classList.add('gitcms-media-wrapper');
+
+      const img = document.createElement('img');
+      img.src = node.attrs['data-thumbnail'] || '';
+      img.alt = node.attrs.alt || node.attrs['data-filename'] || '';
+      img.title = node.attrs.title || node.attrs['data-filename'] || '';
+      img.classList.add('gitcms-media-thumbnail');
+      img.draggable = false;
+
+      // Add media info overlay
+      const overlay = document.createElement('div');
+      overlay.classList.add('gitcms-media-overlay');
+      overlay.innerHTML = `
+        <div class="gitcms-media-info">
+          <span class="gitcms-media-filename">${node.attrs['data-filename'] || 'Media File'}</span>
+          <span class="gitcms-media-badge">GitCMS Media</span>
+        </div>
+      `;
+
+      wrapper.appendChild(img);
+      wrapper.appendChild(overlay);
+
+      return {
+        dom: wrapper,
+      };
+    };
+  },
+});
 
 interface RichTextEditorProps {
   value?: string;
@@ -100,7 +220,7 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
 }) => {
   const [showLinkDialog, setShowLinkDialog] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
-  const [showMediaPicker, setShowMediaPicker] = useState(false);
+  const { openPicker, MediaPicker } = useMediaPicker();
 
   // Create lowlight instance for code highlighting
   const lowlight = createLowlight();
@@ -122,6 +242,7 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
           class: 'max-w-full h-auto rounded-lg',
         },
       }),
+      GitCMSMedia, // Add our custom media extension
       Table.configure({
         resizable: true,
       }),
@@ -166,7 +287,14 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
 
   const addImage = useCallback(() => {
     if (owner && repo) {
-      setShowMediaPicker(true);
+      openPicker({
+        onSelect: handleMediaSelect,
+        owner,
+        repo,
+        multiple: false,
+        acceptedTypes: ['image'],
+        title: 'Insert Image',
+      });
     } else {
       // Fallback to URL prompt if no repository info
       const url = window.prompt('Image URL:');
@@ -177,19 +305,34 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
   }, [editor, owner, repo]);
 
   const handleMediaSelect = useCallback(
-    (media: GitCMSMediaFile) => {
+    async (selectedMedia: GitCMSMediaFile | GitCMSMediaFile[]) => {
       if (editor) {
-        editor
-          .chain()
-          .focus()
-          .setImage({
-            src: media.url,
-            alt: media.metadata?.alt || media.filename,
-            title: media.metadata?.description || media.filename,
-          })
-          .run();
+        // Handle both single media and array (take first if array)
+        const media = Array.isArray(selectedMedia) ? selectedMedia[0] : selectedMedia;
+        if (!media) return;
+
+        try {
+          // Generate thumbnail data URL for immediate display
+          const thumbnailDataUrl = media.thumbnailUrl || media.url;
+
+          // Create custom media embedding tag with thumbnail and reference
+          const mediaEmbed = `<gitcms-media data-path="${media.path}" data-filename="${media.filename}" data-thumbnail="${thumbnailDataUrl}" alt="${media.metadata?.alt || media.filename}" title="${media.filename || media.metadata?.description}"></gitcms-media>`;
+
+          editor.chain().focus().insertContent(mediaEmbed).run();
+        } catch (error) {
+          console.error('Failed to generate thumbnail:', error);
+          // Fallback to regular image tag
+          editor
+            .chain()
+            .focus()
+            .setImage({
+              src: media.thumbnailUrl || media.url,
+              alt: media.metadata?.alt || media.filename,
+              title: media.metadata?.description || media.filename,
+            })
+            .run();
+        }
       }
-      setShowMediaPicker(false);
     },
     [editor]
   );
@@ -689,6 +832,78 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
           .ProseMirror li > * + p {
             margin-top: 0.5rem;
           }
+
+          /* GitCMS Media Embedding Styles */
+          .gitcms-media-wrapper {
+            position: relative;
+            display: inline-block;
+            margin: 1.5rem 0;
+            border-radius: 0.75rem;
+            overflow: hidden;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            background-color: #f8fafc;
+            border: 2px solid #e2e8f0;
+            transition: all 0.2s ease;
+          }
+
+          .gitcms-media-wrapper:hover {
+            box-shadow: 0 8px 25px -8px rgba(0, 0, 0, 0.15);
+            border-color: #3b82f6;
+          }
+
+          .gitcms-media-thumbnail {
+            width: 100%;
+            max-width: 400px;
+            height: auto;
+            display: block;
+            border-radius: 0.5rem;
+          }
+
+          .gitcms-media-overlay {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(to top, rgba(0, 0, 0, 0.8), rgba(0, 0, 0, 0.2));
+            color: white;
+            padding: 0.75rem;
+            border-radius: 0 0 0.5rem 0.5rem;
+          }
+
+          .gitcms-media-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 0.5rem;
+          }
+
+          .gitcms-media-filename {
+            font-size: 0.875rem;
+            font-weight: 500;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            flex: 1;
+          }
+
+          .gitcms-media-badge {
+            font-size: 0.75rem;
+            background-color: #3b82f6;
+            color: white;
+            padding: 0.25rem 0.5rem;
+            border-radius: 9999px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.025em;
+            white-space: nowrap;
+          }
+
+          /* Editor state styles for GitCMS media */
+          .ProseMirror .gitcms-media-wrapper.ProseMirror-selectednode {
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+          }
         `}</style>
       </div>
 
@@ -705,19 +920,8 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
         </div>
       )}
 
-      {/* Media Picker Dialog */}
-      {owner && repo && (
-        <MediaPickerDialog
-          isOpen={showMediaPicker}
-          onClose={() => setShowMediaPicker(false)}
-          onSelect={handleMediaSelect}
-          owner={owner}
-          repo={repo}
-          acceptedTypes={['image']}
-          title="Insert Image"
-          allowUpload={true}
-        />
-      )}
+      {/* Media Picker Modal */}
+      <MediaPicker />
     </div>
   );
 };

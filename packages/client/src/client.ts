@@ -1,5 +1,5 @@
 import { Octokit } from '@octokit/rest';
-import type { GitCMSConfig, Collection, ContentItem, QueryOptions } from './types';
+import type { GitCMSConfig, Collection, ContentItem } from './types';
 import { CollectionRef } from './collections';
 import { getSystemSchemaId, type GitCMSRepositoryConfig } from '@git-cms/core';
 

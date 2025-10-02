@@ -98,3 +98,11 @@ export {
   listSchemas,
   validateContent as validateContentWithRegistry,
 } from './registry';
+
+export {
+  // Types
+  type Operator,
+
+  // Classes and functions
+  applyOperator,
+} from './query';

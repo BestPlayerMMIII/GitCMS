@@ -1,233 +1,157 @@
-import type { GitCMSConfig, EmbeddedMedia, EmbeddedVideo, ResponsiveImageSources } from './types';
+import { Octokit } from '@octokit/rest';
+import type { GitCMSConfig } from './types';
 
 /**
- * Media embedding utility for converting GitCMS media references to usable URLs
+ * Simple media embedder for GitCMS tags
+ * Handles conversion from thumbnail data to full resolution images
  */
 export class MediaEmbedder {
-  constructor(private config: GitCMSConfig) {}
+  private html: string;
+  private config: GitCMSConfig;
+  private octokit: Octokit;
+  private tagCounter = 0;
 
-  /**
-   * Embed media by converting thumbnail references to full media URLs
-   * Useful for displaying full-size images from thumbnails
-   */
-  embedMedia(
-    thumbnailUrl: string,
-    options: {
-      size?: 'thumbnail' | 'medium' | 'large' | 'original';
-      format?: 'webp' | 'jpeg' | 'png' | 'original';
-      lazy?: boolean;
-    } = {}
-  ): EmbeddedMedia {
-    const { size = 'original', format = 'original', lazy = true } = options;
-
-    // Extract the base URL and file info from thumbnail
-    const baseUrl = this.extractBaseUrl(thumbnailUrl);
-    const fileInfo = this.parseFileInfo(thumbnailUrl);
-
-    if (!baseUrl || !fileInfo) {
-      return { url: thumbnailUrl, alt: '', loading: lazy ? 'lazy' : 'eager' };
-    }
-
-    // Generate the appropriate URL based on size and format
-    const mediaUrl = this.generateMediaUrl(baseUrl, fileInfo, size, format);
-
-    return {
-      url: mediaUrl,
-      alt: fileInfo.alt || fileInfo.filename || '',
-      loading: lazy ? 'lazy' : 'eager',
-      thumbnail: thumbnailUrl,
-      original: this.generateMediaUrl(baseUrl, fileInfo, 'original', 'original'),
-      metadata: {
-        filename: fileInfo.filename,
-        size: fileInfo.size,
-        type: fileInfo.type,
-      },
+  constructor(config: GitCMSConfig, html: string) {
+    this.config = {
+      branch: 'main',
+      ...config,
     };
+
+    this.html = html;
+    this.octokit = new Octokit({
+      auth: config.token,
+    });
   }
 
   /**
-   * Generate responsive image sources for different screen sizes
+   * Get HTML with thumbnails immediately (fast)
+   * Replaces <gitcms-media> tags with <img> tags using thumbnail data
    */
-  generateResponsiveSources(thumbnailUrl: string): ResponsiveImageSources {
-    const baseUrl = this.extractBaseUrl(thumbnailUrl);
-    const fileInfo = this.parseFileInfo(thumbnailUrl);
+  getFast(): string {
+    return this.html.replace(/<gitcms-media\s+([^>]*?)><\/gitcms-media>/gi, (match, attributes) => {
+      this.tagCounter++;
+      const id = `gitcms-media-${this.tagCounter}`;
+      const thumbnail = this.extractAttribute(attributes, 'data-thumbnail');
+      const alt = this.extractAttribute(attributes, 'alt') || '';
+      const title = this.extractAttribute(attributes, 'title') || '';
 
-    if (!baseUrl || !fileInfo) {
-      return { default: thumbnailUrl, sources: [], fallback: thumbnailUrl };
-    }
-
-    return {
-      default: this.generateMediaUrl(baseUrl, fileInfo, 'medium', 'webp'),
-      sources: [
-        {
-          media: '(max-width: 640px)',
-          srcset: this.generateMediaUrl(baseUrl, fileInfo, 'thumbnail', 'webp'),
-          type: 'image/webp',
-        },
-        {
-          media: '(max-width: 1024px)',
-          srcset: this.generateMediaUrl(baseUrl, fileInfo, 'medium', 'webp'),
-          type: 'image/webp',
-        },
-        {
-          media: '(min-width: 1025px)',
-          srcset: this.generateMediaUrl(baseUrl, fileInfo, 'large', 'webp'),
-          type: 'image/webp',
-        },
-      ],
-      fallback: this.generateMediaUrl(baseUrl, fileInfo, 'medium', 'jpeg'),
-    };
-  }
-
-  /**
-   * Process rich text content to automatically embed media
-   */
-  processRichTextContent(htmlContent: string): string {
-    // Replace image tags with embedded media
-    return htmlContent.replace(
-      /<img\s+([^>]*?)src="([^"]*?)"([^>]*?)>/gi,
-      (match, beforeSrc, src, afterSrc) => {
-        if (this.isGitCMSMediaUrl(src)) {
-          const embedded = this.embedMedia(src, { lazy: true });
-          const responsive = this.generateResponsiveSources(src);
-
-          // Generate a picture element with responsive sources
-          const pictureElement = `
-            <picture>
-              ${responsive.sources
-                .map(
-                  source =>
-                    `<source media="${source.media}" srcset="${source.srcset}" type="${source.type}">`
-                )
-                .join('')}
-              <img ${beforeSrc}src="${embedded.url}" alt="${embedded.alt}" loading="${embedded.loading}"${afterSrc}>
-            </picture>
-          `.trim();
-
-          return pictureElement;
-        }
-        return match;
+      if (thumbnail) {
+        return `<img id="${id}" src="${thumbnail}" alt="${alt}" title="${title}" data-gitcms-placeholder="true">`;
       }
-    );
+
+      // Fallback if no thumbnail
+      return `<div id="${id}" data-gitcms-placeholder="true" style="background: #f0f0f0; padding: 20px; text-align: center; border: 1px solid #ddd;">Loading media...</div>`;
+    });
   }
 
   /**
-   * Extract video embed information
+   * Get full resolution images asynchronously
+   * Processes each <gitcms-media> tag sequentially and calls listener with updated HTML
    */
-  embedVideo(
-    videoUrl: string,
-    options: {
-      autoplay?: boolean;
-      controls?: boolean;
-      muted?: boolean;
-      loop?: boolean;
-      poster?: string;
-    } = {}
-  ): EmbeddedVideo {
-    const { autoplay = false, controls = true, muted = false, loop = false, poster } = options;
+  async getFull(listener: (newHtml: string) => void): Promise<void> {
+    let currentHtml = this.getFast(); // Start with fast version
+    const mediaMatches = [...this.html.matchAll(/<gitcms-media\s+([^>]*?)><\/gitcms-media>/gi)];
 
-    return {
-      url: videoUrl,
-      autoplay,
-      controls,
-      muted,
-      loop,
-      poster,
-      type: this.getVideoType(videoUrl),
-    };
+    let tagIndex = 0;
+
+    for (const match of mediaMatches) {
+      tagIndex++;
+      const id = `gitcms-media-${tagIndex}`;
+      const attributes = match[1];
+      const dataPath = this.extractAttribute(attributes, 'data-path');
+
+      if (dataPath) {
+        try {
+          // Get full resolution image blob from GitHub
+          const blob = await this.getImageBlob(dataPath);
+          const blobUrl = URL.createObjectURL(blob);
+
+          // Replace the placeholder with full resolution image
+          currentHtml = currentHtml.replace(
+            new RegExp(`<(img|div)[^>]*id="${id}"[^>]*>`, 'i'),
+            imgMatch => {
+              // Extract alt and title from original attributes
+              const alt = this.extractAttribute(attributes, 'alt') || '';
+              const title = this.extractAttribute(attributes, 'title') || '';
+
+              return `<img id="${id}" src="${blobUrl}" alt="${alt}" title="${title}" data-gitcms-full="true">`;
+            }
+          );
+
+          // Call listener with updated HTML
+          listener(currentHtml);
+        } catch (error) {
+          console.warn(`Failed to load full resolution for ${dataPath}:`, error);
+          // Continue with next image on error
+        }
+      }
+    }
   }
 
-  private extractBaseUrl(url: string): string | null {
+  /**
+   * Get image blob from GitHub repository
+   */
+  private async getImageBlob(path: string): Promise<Blob> {
+    const [owner, repo] = this.config.repository.split('/');
+
     try {
-      const urlObj = new URL(url);
-      return `${urlObj.protocol}//${urlObj.host}`;
-    } catch {
-      return null;
+      const response = await this.octokit.repos.getContent({
+        owner,
+        repo,
+        path: path.startsWith('/') ? path.substring(1) : path,
+        ref: this.config.branch || 'main',
+      });
+
+      // Handle file content
+      if ('content' in response.data && response.data.content) {
+        // Decode base64 content
+        const content = atob(response.data.content.replace(/\s/g, ''));
+        const bytes = new Uint8Array(content.length);
+
+        for (let i = 0; i < content.length; i++) {
+          bytes[i] = content.charCodeAt(i);
+        }
+
+        // Determine content type from file extension
+        const contentType = this.getContentType(path);
+        return new Blob([bytes], { type: contentType });
+      }
+
+      throw new Error('No content found');
+    } catch (error) {
+      throw new Error(`Failed to fetch image: ${error}`);
     }
   }
 
-  private parseFileInfo(url: string): FileInfo | null {
-    try {
-      // Extract filename and metadata from URL
-      const urlObj = new URL(url);
-      const pathParts = urlObj.pathname.split('/');
-      const filename = pathParts[pathParts.length - 1];
-
-      // Try to extract metadata from query parameters or path
-      const searchParams = urlObj.searchParams;
-
-      return {
-        filename: decodeURIComponent(filename),
-        alt: searchParams.get('alt') || '',
-        size: searchParams.get('size') || 'unknown',
-        type: this.getFileType(filename),
-      };
-    } catch {
-      return null;
-    }
+  /**
+   * Extract attribute value from HTML attributes string
+   */
+  private extractAttribute(attributeString: string, attributeName: string): string | null {
+    const regex = new RegExp(`${attributeName}=["']([^"']*?)["']`, 'i');
+    const match = attributeString.match(regex);
+    return match ? match[1] : null;
   }
 
-  private generateMediaUrl(
-    baseUrl: string,
-    fileInfo: FileInfo,
-    size: string,
-    format: string
-  ): string {
-    if (size === 'original' && format === 'original') {
-      return `${baseUrl}/media/${fileInfo.filename}`;
-    }
+  /**
+   * Get content type from file extension
+   */
+  private getContentType(path: string): string {
+    const ext = path.split('.').pop()?.toLowerCase();
 
-    const formatSuffix = format === 'original' ? '' : `.${format}`;
-    const sizeSuffix = size === 'original' ? '' : `_${size}`;
-
-    const filenameParts = fileInfo.filename.split('.');
-    const name = filenameParts.slice(0, -1).join('.');
-    const ext = filenameParts[filenameParts.length - 1];
-
-    return `${baseUrl}/media/${name}${sizeSuffix}${formatSuffix || `.${ext}`}`;
-  }
-
-  private isGitCMSMediaUrl(url: string): boolean {
-    try {
-      const urlObj = new URL(url);
-      return urlObj.pathname.startsWith('/media/') || urlObj.pathname.includes('gitcms');
-    } catch {
-      return false;
-    }
-  }
-
-  private getFileType(filename: string): string {
-    const ext = filename.split('.').pop()?.toLowerCase();
-    if (!ext) return 'unknown';
-
-    const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'];
-    const videoExts = ['mp4', 'webm', 'ogg', 'avi', 'mov'];
-    const audioExts = ['mp3', 'wav', 'ogg', 'aac', 'flac'];
-
-    if (imageExts.includes(ext)) return 'image';
-    if (videoExts.includes(ext)) return 'video';
-    if (audioExts.includes(ext)) return 'audio';
-    return 'document';
-  }
-
-  private getVideoType(url: string): string {
-    const ext = url.split('.').pop()?.toLowerCase();
     switch (ext) {
-      case 'mp4':
-        return 'video/mp4';
-      case 'webm':
-        return 'video/webm';
-      case 'ogg':
-        return 'video/ogg';
+      case 'jpg':
+      case 'jpeg':
+        return 'image/jpeg';
+      case 'png':
+        return 'image/png';
+      case 'gif':
+        return 'image/gif';
+      case 'webp':
+        return 'image/webp';
+      case 'svg':
+        return 'image/svg+xml';
       default:
-        return 'video/mp4';
+        return 'image/jpeg';
     }
   }
-}
-
-interface FileInfo {
-  filename: string;
-  alt: string;
-  size: string;
-  type: string;
 }

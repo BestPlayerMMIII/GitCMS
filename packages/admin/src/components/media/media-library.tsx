@@ -719,6 +719,21 @@ export function MediaLibrary({
   );
 }
 
+export const getMediaTypeIcon = (mediaType: MediaType) => {
+  switch (mediaType) {
+    case 'image':
+      return <ImageIcon className="w-8 h-8 text-green-500" />;
+    case 'video':
+      return <Video className="w-8 h-8 text-red-500" />;
+    case 'audio':
+      return <Music className="w-8 h-8 text-purple-500" />;
+    case 'document':
+      return <FileText className="w-8 h-8 text-blue-500" />;
+    default:
+      return <File className="w-8 h-8 text-gray-500" />;
+  }
+};
+
 // Media Card Component
 interface MediaCardProps {
   media: GitCMSMediaFile;
@@ -741,21 +756,6 @@ function MediaCard({
   virtualFolder,
   onMoveToFolder,
 }: MediaCardProps) {
-  const getMediaTypeIcon = (mediaType: MediaType) => {
-    switch (mediaType) {
-      case 'image':
-        return <ImageIcon className="w-8 h-8 text-green-500" />;
-      case 'video':
-        return <Video className="w-8 h-8 text-red-500" />;
-      case 'audio':
-        return <Music className="w-8 h-8 text-purple-500" />;
-      case 'document':
-        return <FileText className="w-8 h-8 text-blue-500" />;
-      default:
-        return <File className="w-8 h-8 text-gray-500" />;
-    }
-  };
-
   return (
     <div
       className={`relative group bg-white border rounded-lg p-3 hover:shadow-md transition-shadow cursor-pointer ${
