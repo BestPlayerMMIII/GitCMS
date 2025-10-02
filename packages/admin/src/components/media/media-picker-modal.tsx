@@ -204,7 +204,7 @@ export function MediaPickerModal({
                   multiple={multiple}
                   maxFiles={multiple ? 10 : 1}
                   onUploadComplete={handleUploadComplete}
-                  onError={error => {
+                  onError={(error: string) => {
                     console.error('Upload error:', error);
                     // TODO: Show error toast/notification
                   }}

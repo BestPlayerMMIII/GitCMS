@@ -8,9 +8,33 @@ export * from './image-optimization';
 export * from './cdn';
 export * from './media-organization';
 export * from './config';
+export * from './network-monitor';
+export * from './git-lfs';
 
 // Additional GitHub types export
 export type { GitHubFileContent, GitHubCommitResponse } from './github';
+
+// Network monitoring exports
+export {
+  NetworkMonitor,
+  UploadProgressSimulator,
+  NetworkUtils,
+  type NetworkStats,
+  type UploadProgressSimulation,
+  type ProgressSimulationConfig,
+} from './network-monitor';
+
+// Git LFS exports
+export {
+  GitLFSManager,
+  LFSUtils,
+  DEFAULT_LFS_CONFIG,
+  COMMON_LFS_RULES,
+  type LFSConfig,
+  type LFSStatus,
+  type LFSRule,
+  type LFSFileAnalysis,
+} from './git-lfs';
 
 // Schema system exports
 export {

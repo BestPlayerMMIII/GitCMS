@@ -55,7 +55,11 @@ export function isVideoFile(filename: string): boolean {
 /**
  * Format file size in bytes to human readable format
  */
-export function formatFileSize(bytes: number): string {
+export function formatFileSize(bytes: number | undefined | null): string {
+  if (bytes === undefined || bytes === null || isNaN(bytes)) {
+    return 'Unknown size';
+  }
+
   if (bytes === 0) return '0 Bytes';
 
   const k = 1024;

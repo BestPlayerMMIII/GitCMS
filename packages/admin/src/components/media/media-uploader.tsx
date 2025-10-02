@@ -1,39 +1,49 @@
 'use client';
 
-import React, { useState, useRef, useCallback } from 'react';
-import { MediaType, MediaValidator, MEDIA_TYPES } from '@git-cms/core';
-import ImageOptimizer from './image-optimizer';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   Upload,
   X,
-  Check,
-  AlertCircle,
-  File,
-  Image as ImageIcon,
-  Video,
-  Music,
-  FileText,
-  Loader2,
-  Settings,
+  Wifi,
+  WifiOff,
+  Clock,
   Zap,
+  HardDrive,
+  AlertTriangle,
+  Check,
+  Loader2,
+  FileWarning,
+  Gauge,
 } from 'lucide-react';
+import {
+  NetworkMonitor,
+  UploadProgressSimulator,
+  NetworkUtils,
+  type NetworkStats,
+  type UploadProgressSimulation,
+  GitLFSManager,
+  LFSUtils,
+  type LFSFileAnalysis,
+  formatFileSize,
+} from '@git-cms/core';
 
-// Direct upload configuration - no chunking needed
-
-interface UploadFile {
-  file: File;
+interface UploadFile extends File {
   id: string;
-  status: 'pending' | 'uploading' | 'success' | 'error';
-  progress: number;
-  error?: string;
   preview?: string;
+  progress: number;
+  status: 'pending' | 'uploading' | 'success' | 'error';
+  error?: string;
+  simulator?: UploadProgressSimulator;
+  lfsAnalysis?: LFSFileAnalysis;
+  estimatedTime?: number;
+  currentSpeed?: number;
 }
 
 interface MediaUploaderProps {
   owner: string;
   repo: string;
   folder?: string;
-  acceptedTypes?: MediaType[];
+  acceptedTypes?: string[];
   multiple?: boolean;
   maxFiles?: number;
   onUploadComplete?: (files: any[]) => void;
@@ -41,6 +51,9 @@ interface MediaUploaderProps {
   className?: string;
 }
 
+/**
+ * Media Uploader with network-aware progress simulation and LFS management
+ */
 export function MediaUploader({
   owner,
   repo,
@@ -55,12 +68,36 @@ export function MediaUploader({
   const [files, setFiles] = useState<UploadFile[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  const [showOptimizer, setShowOptimizer] = useState(false);
-  const [optimizedFiles, setOptimizedFiles] = useState<File[]>([]);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [networkStats, setNetworkStats] = useState<NetworkStats | null>(null);
+  const [lfsEnabled, setLfsEnabled] = useState(false);
+  const [showNetworkInfo, setShowNetworkInfo] = useState(false);
 
-  // Generate unique ID for upload file
-  const generateId = () => `upload_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const networkMonitor = useRef<NetworkMonitor>();
+  const lfsManager = useRef<GitLFSManager>();
+
+  // Initialize network monitoring and LFS
+  useEffect(() => {
+    networkMonitor.current = NetworkMonitor.getInstance();
+
+    // Start monitoring network
+    networkMonitor.current.startMonitoring(3000);
+
+    // Subscribe to network updates
+    const unsubscribe = networkMonitor.current.subscribe(setNetworkStats);
+
+    // Initialize LFS manager (would need GitHub client)
+    // lfsManager.current = new GitLFSManager(githubClient, owner, repo);
+
+    return () => {
+      unsubscribe();
+      networkMonitor.current?.stopMonitoring();
+    };
+  }, [owner, repo]);
+
+  // Generate unique ID for files
+  const generateId = () =>
+    `smart_upload_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
   // Create file preview
   const createFilePreview = useCallback((file: File): Promise<string | undefined> => {
@@ -76,168 +113,160 @@ export function MediaUploader({
     });
   }, []);
 
-  // Add files to upload queue
-  const addFiles = useCallback(
-    async (fileList: FileList | File[]) => {
+  // Analyze file for LFS requirements
+  const analyzeLFSRequirements = useCallback(
+    (file: File): LFSFileAnalysis => {
+      const path = `${folder ? folder + '/' : ''}${file.name}`;
+      const extension = file.name.split('.').pop()?.toLowerCase() || '';
+
+      return {
+        path,
+        size: file.size,
+        extension,
+        shouldTrack: LFSUtils.shouldUseLFS(file.name, file.size),
+        reason:
+          file.size > 50 * 1024 * 1024
+            ? `Large file (${formatFileSize(file.size)})`
+            : `Binary file type (.${extension})`,
+      };
+    },
+    [folder]
+  );
+
+  // Handle file selection
+  const handleFiles = useCallback(
+    async (selectedFiles: FileList) => {
       const newFiles: UploadFile[] = [];
-      const filesArray = Array.from(fileList);
+      const errors: string[] = [];
 
-      // Check file count limit
-      if (files.length + filesArray.length > maxFiles) {
-        onError?.(`Cannot upload more than ${maxFiles} files at once`);
-        return;
-      }
+      for (let i = 0; i < selectedFiles.length && newFiles.length < maxFiles; i++) {
+        const file = selectedFiles[i];
 
-      for (const file of filesArray) {
-        // Validate file
-        const validation = MediaValidator.validateFile(file, acceptedTypes);
-        if (!validation.valid) {
-          onError?.(`${file.name}: ${validation.error}`);
+        // Check file size limits
+        const fileSizeMB = file.size / (1024 * 1024);
+        if (fileSizeMB > 100) {
+          errors.push(
+            `${file.name}: File too large (${fileSizeMB.toFixed(1)}MB). GitHub supports files up to 100MB.`
+          );
           continue;
         }
 
-        // Create preview
         const preview = await createFilePreview(file);
+        const lfsAnalysis = analyzeLFSRequirements(file);
 
-        newFiles.push({
-          file,
+        const smartFile: UploadFile = Object.assign(file, {
           id: generateId(),
-          status: 'pending',
-          progress: 0,
           preview,
+          progress: 0,
+          status: 'pending' as const,
+          lfsAnalysis,
         });
+
+        newFiles.push(smartFile);
+      }
+
+      // Show file size errors if any
+      if (errors.length > 0) {
+        onError?.(errors.join('\n'));
       }
 
       setFiles(prev => [...prev, ...newFiles]);
     },
-    [files.length, maxFiles, acceptedTypes, onError, createFilePreview]
+    [createFilePreview, analyzeLFSRequirements, maxFiles, onError]
   );
 
-  // Handle file selection
-  const handleFileSelect = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const selectedFiles = e.target.files;
-      if (selectedFiles) {
-        addFiles(selectedFiles);
-      }
-      // Reset input
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
-    },
-    [addFiles]
-  );
-
-  // Handle drag and drop
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragOver(true);
-  }, []);
-
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragOver(false);
-  }, []);
-
-  const handleDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
-      setIsDragOver(false);
-
-      const droppedFiles = e.dataTransfer.files;
-      if (droppedFiles) {
-        addFiles(droppedFiles);
-      }
-    },
-    [addFiles]
-  );
-
-  // Remove file from queue
-  const removeFile = useCallback((id: string) => {
-    setFiles(prev => prev.filter(f => f.id !== id));
-  }, []);
-
-  // Upload single file directly to GitHub
-  const uploadFile = useCallback(
-    async (uploadFile: UploadFile): Promise<void> => {
-      return uploadFileDirect(uploadFile);
-    },
-    [owner, repo, folder]
-  );
-
-  // Direct upload to GitHub
-  const uploadFileDirect = useCallback(
-    async (uploadFile: UploadFile): Promise<void> => {
-      const formData = new FormData();
-      formData.append('file', uploadFile.file);
-      formData.append('owner', owner);
-      formData.append('repo', repo);
-      if (folder) formData.append('folder', folder);
-
-      // Update status to uploading
-      setFiles(prev =>
-        prev.map(f => (f.id === uploadFile.id ? { ...f, status: 'uploading', progress: 0 } : f))
-      );
-
-      return new Promise((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open('POST', '/api/media?action=upload');
-
-        xhr.upload.onprogress = event => {
-          if (event.lengthComputable) {
-            const percent = (event.loaded / event.total) * 100;
-            setFiles(prev =>
-              prev.map(f => (f.id === uploadFile.id ? { ...f, progress: percent } : f))
-            );
-          }
-        };
-
-        xhr.onload = () => {
-          if (xhr.status >= 200 && xhr.status < 300) {
-            let result;
-            try {
-              result = JSON.parse(xhr.responseText);
-            } catch (e) {
-              result = {};
-            }
-            setFiles(prev =>
-              prev.map(f =>
-                f.id === uploadFile.id ? { ...f, status: 'success', progress: 100 } : f
-              )
-            );
-            resolve(result.media);
-          } else {
-            let errorMessage = 'Upload failed';
-            try {
-              const errorData = JSON.parse(xhr.responseText);
-              errorMessage = errorData.error || errorMessage;
-            } catch (e) {
-              // already in error state
-            }
-            setFiles(prev =>
-              prev.map(f =>
-                f.id === uploadFile.id
-                  ? { ...f, status: 'error', progress: 0, error: errorMessage }
-                  : f
-              )
-            );
-            reject(new Error(errorMessage));
-          }
-        };
-
-        xhr.onerror = () => {
-          setFiles(prev =>
-            prev.map(f =>
-              f.id === uploadFile.id
-                ? { ...f, status: 'error', progress: 0, error: 'Upload failed' }
-                : f
-            )
-          );
-          reject(new Error('Upload failed'));
-        };
-
-        xhr.send(formData);
+  // Upload single file with smart progress simulation
+  const uploadFileWithSimulation = useCallback(
+    async (file: UploadFile) => {
+      // Create progress simulator
+      const simulator = new UploadProgressSimulator({
+        fileSize: file.size,
+        maxProgress: 98,
+        updateInterval: 500,
       });
+
+      file.simulator = simulator;
+
+      // Subscribe to progress updates
+      const unsubscribe = simulator.subscribe((progress: UploadProgressSimulation) => {
+        setFiles(prev =>
+          prev.map(f =>
+            f.id === file.id
+              ? {
+                  ...f,
+                  progress: progress.progress,
+                  estimatedTime: progress.estimatedTimeRemaining,
+                  currentSpeed: progress.currentSpeed,
+                }
+              : f
+          )
+        );
+      });
+
+      try {
+        // Update status to uploading
+        setFiles(prev => prev.map(f => (f.id === file.id ? { ...f, status: 'uploading' } : f)));
+
+        // Start progress simulation
+        await simulator.start();
+
+        // Perform actual upload
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('owner', owner);
+        formData.append('repo', repo);
+        if (folder) formData.append('folder', folder);
+
+        const response = await fetch('/api/media?action=upload', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!response.ok) {
+          let errorMessage = `HTTP ${response.status}: Upload failed`;
+          try {
+            const errorData = await response.json();
+            if (errorData?.error) {
+              // Use the backend error message directly, avoiding nested "Upload failed" prefixes
+              errorMessage = errorData.error;
+              if (errorData.details) {
+                errorMessage += ` (${errorData.details})`;
+              }
+            }
+          } catch (e) {
+            // ignore JSON parse errors, use default message
+          }
+          throw new Error(errorMessage);
+        }
+
+        const result = await response.json();
+
+        // Update to success
+        setFiles(prev =>
+          prev.map(f => (f.id === file.id ? { ...f, status: 'success', progress: 100 } : f))
+        );
+
+        return result.media;
+      } catch (error) {
+        // Update to error
+        setFiles(prev =>
+          prev.map(f =>
+            f.id === file.id
+              ? {
+                  ...f,
+                  status: 'error',
+                  progress: 0,
+                  error: error instanceof Error ? error.message : 'Upload failed',
+                }
+              : f
+          )
+        );
+        throw error;
+      } finally {
+        // Cleanup
+        unsubscribe();
+        simulator.stop();
+      }
     },
     [owner, repo, folder]
   );
@@ -255,12 +284,13 @@ export function MediaUploader({
       // Upload files sequentially to avoid overwhelming the server
       for (const file of pendingFiles) {
         try {
-          const result = await uploadFile(file);
+          const result = await uploadFileWithSimulation(file);
           uploadedFiles.push(result);
         } catch (error) {
-          errors.push(
-            `${file.file.name}: ${error instanceof Error ? error.message : 'Upload failed'}`
-          );
+          // Extract clean error message without adding filename prefix if it's already included
+          const errorMsg = error instanceof Error ? error.message : 'Upload failed';
+          const cleanError = errorMsg.includes(file.name) ? errorMsg : `${file.name}: ${errorMsg}`;
+          errors.push(cleanError);
         }
       }
 
@@ -274,256 +304,343 @@ export function MediaUploader({
     } finally {
       setIsUploading(false);
     }
-  }, [files, uploadFile, onUploadComplete, onError]);
+  }, [files, uploadFileWithSimulation, onUploadComplete, onError]);
+
+  // Remove file
+  const removeFile = useCallback((id: string) => {
+    setFiles(prev => {
+      const fileToRemove = prev.find(f => f.id === id);
+      if (fileToRemove?.simulator) {
+        fileToRemove.simulator.stop();
+      }
+      return prev.filter(f => f.id !== id);
+    });
+  }, []);
 
   // Clear all files
   const clearFiles = useCallback(() => {
+    files.forEach(file => {
+      if (file.simulator) {
+        file.simulator.stop();
+      }
+    });
     setFiles([]);
-    setOptimizedFiles([]);
+  }, [files]);
+
+  // Drag and drop handlers
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(true);
   }, []);
 
-  // Handle optimized images
-  const handleOptimizedImages = useCallback((results: any[]) => {
-    // Replace original files with optimized versions
-    const optimizedFileMap = new Map(results.map(r => [r.originalFile.name, r.optimizedFile]));
-
-    setFiles(prev =>
-      prev.map(uploadFile => {
-        const optimizedFile = optimizedFileMap.get(uploadFile.file.name);
-        if (optimizedFile) {
-          return {
-            ...uploadFile,
-            file: optimizedFile,
-          };
-        }
-        return uploadFile;
-      })
-    );
-
-    // Store optimized files for reference
-    setOptimizedFiles(results.map(r => r.optimizedFile));
-
-    // Hide optimizer after optimization
-    setShowOptimizer(false);
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
   }, []);
 
-  // Handle optimization progress
-  const handleOptimizationProgress = useCallback((completed: number, total: number) => {
-    // Could show progress if needed
-    console.log(`Optimization progress: ${completed}/${total}`);
-  }, []);
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setIsDragOver(false);
 
-  // Get file type icon
-  const getFileIcon = (file: File) => {
-    const mediaType = MediaValidator.getMediaType(file);
-    switch (mediaType) {
-      case 'image':
-        return <ImageIcon className="w-8 h-8 text-green-500" />;
-      case 'video':
-        return <Video className="w-8 h-8 text-red-500" />;
-      case 'audio':
-        return <Music className="w-8 h-8 text-purple-500" />;
-      case 'document':
-        return <FileText className="w-8 h-8 text-blue-500" />;
-      default:
-        return <File className="w-8 h-8 text-gray-500" />;
-    }
-  };
+      const droppedFiles = e.dataTransfer.files;
+      if (droppedFiles.length > 0) {
+        handleFiles(droppedFiles);
+      }
+    },
+    [handleFiles]
+  );
+
+  // File input change
+  const handleFileInputChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const selectedFiles = e.target.files;
+      if (selectedFiles && selectedFiles.length > 0) {
+        handleFiles(selectedFiles);
+      }
+      // Reset input
+      if (e.target) {
+        e.target.value = '';
+      }
+    },
+    [handleFiles]
+  );
 
   // Get status icon
-  const getStatusIcon = (status: UploadFile['status']) => {
-    switch (status) {
+  const getStatusIcon = (file: UploadFile) => {
+    switch (file.status) {
       case 'uploading':
         return <Loader2 className="w-4 h-4 animate-spin text-blue-500" />;
       case 'success':
         return <Check className="w-4 h-4 text-green-500" />;
       case 'error':
-        return <AlertCircle className="w-4 h-4 text-red-500" />;
+        return <AlertTriangle className="w-4 h-4 text-red-500" />;
       default:
         return null;
     }
   };
 
-  // Get phase label
-  const getPhaseLabel = (uploadFile: UploadFile) => {
-    if (uploadFile.status === 'pending') return '';
-    if (uploadFile.status === 'error') return 'Failed';
-    if (uploadFile.status === 'success') return 'Complete';
-    if (uploadFile.status === 'uploading') return 'Uploading...';
-    return '';
+  // Get connection quality indicator
+  const getConnectionIndicator = () => {
+    if (!networkStats) {
+      return <WifiOff className="w-4 h-4 text-gray-400" />;
+    }
+
+    const quality = NetworkUtils.getConnectionQuality(networkStats.uploadSpeed);
+    const colors = {
+      Excellent: 'text-green-500',
+      'Very Good': 'text-green-400',
+      Good: 'text-yellow-500',
+      Fair: 'text-orange-500',
+      Slow: 'text-red-500',
+      'Very Slow': 'text-red-600',
+    };
+
+    return (
+      <Wifi className={`w-4 h-4 ${colors[quality as keyof typeof colors] || 'text-gray-400'}`} />
+    );
   };
 
   const hasFiles = files.length > 0;
   const pendingFiles = files.filter(f => f.status === 'pending');
+  const uploadingFiles = files.filter(f => f.status === 'uploading');
   const completedFiles = files.filter(f => f.status === 'success');
   const errorFiles = files.filter(f => f.status === 'error');
-
-  // Generate accepted file types text
-  const acceptedTypesText = acceptedTypes
-    ? acceptedTypes
-        .map(type => {
-          const config = MEDIA_TYPES[type];
-          return config.extensions.join(', ');
-        })
-        .join(', ')
-    : 'All file types';
+  const lfsFiles = files.filter(f => f.lfsAnalysis?.shouldTrack);
 
   return (
-    <div className={`bg-white rounded-lg border border-gray-200 ${className}`}>
-      {/* Drop Zone */}
+    <div className={`space-y-4 ${className}`}>
+      {/* Network Status Bar */}
+      {networkStats && (
+        <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              {getConnectionIndicator()}
+              <div className="text-sm">
+                <span className="font-medium">Connection:</span>
+                <span className="ml-1 text-gray-600">
+                  {NetworkUtils.getConnectionQuality(networkStats.uploadSpeed)}
+                </span>
+              </div>
+              <div className="text-sm text-gray-600">
+                ↑ {NetworkUtils.formatSpeed(networkStats.uploadSpeed)}
+              </div>
+              {networkStats.rtt && (
+                <div className="text-sm text-gray-600">{Math.round(networkStats.rtt)}ms RTT</div>
+              )}
+            </div>
+            <button
+              onClick={() => setShowNetworkInfo(!showNetworkInfo)}
+              className="text-sm text-blue-600 hover:text-blue-700"
+            >
+              {showNetworkInfo ? 'Hide Details' : 'Show Details'}
+            </button>
+          </div>
+
+          {showNetworkInfo && (
+            <div className="mt-3 pt-3 border-t border-gray-200 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+              <div>
+                <div className="text-gray-500">Download</div>
+                <div className="font-medium">
+                  {NetworkUtils.formatSpeed(networkStats.downloadSpeed)}
+                </div>
+              </div>
+              <div>
+                <div className="text-gray-500">Upload</div>
+                <div className="font-medium">
+                  {NetworkUtils.formatSpeed(networkStats.uploadSpeed)}
+                </div>
+              </div>
+              <div>
+                <div className="text-gray-500">Connection</div>
+                <div className="font-medium">{networkStats.connectionType || 'Unknown'}</div>
+              </div>
+              <div>
+                <div className="text-gray-500">Latency</div>
+                <div className="font-medium">{Math.round(networkStats.rtt)}ms</div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* LFS Warning */}
+      {lfsFiles.length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+          <div className="flex items-start">
+            <HardDrive className="w-5 h-5 text-amber-500 mt-0.5" />
+            <div className="ml-3">
+              <h4 className="text-sm font-medium text-amber-800">Large Files Detected</h4>
+              <p className="text-sm text-amber-700 mt-1">
+                {lfsFiles.length} file{lfsFiles.length > 1 ? 's' : ''} recommended for Git LFS
+                tracking. These files are large and should be stored using Git Large File Storage
+                for better performance.
+              </p>
+              <div className="mt-2 space-y-1">
+                {lfsFiles.map(file => (
+                  <div key={file.id} className="text-xs text-amber-600">
+                    • {file.name} ({formatFileSize(file.size)}) - {file.lfsAnalysis?.reason}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Upload Area */}
       <div
-        className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-          isDragOver ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:border-gray-400'
-        }`}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
+        className={`
+          relative border-2 border-dashed rounded-lg p-6 text-center transition-colors
+          ${isDragOver ? 'border-blue-400 bg-blue-50' : 'border-gray-300 hover:border-gray-400'}
+        `}
       >
-        <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-        <h3 className="text-lg font-medium text-gray-900 mb-2">
-          Drop files here or click to upload
-        </h3>
-        <p className="text-gray-500 mb-4">
-          {multiple ? `Upload up to ${maxFiles} files` : 'Upload a single file'}
-        </p>
-        <p className="text-sm text-gray-400 mb-4">Supported formats: {acceptedTypesText}</p>
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-        >
-          Choose Files
-        </button>
         <input
           ref={fileInputRef}
           type="file"
           multiple={multiple}
-          accept={acceptedTypes?.map(type => MEDIA_TYPES[type].extensions.join(',')).join(',')}
-          onChange={handleFileSelect}
-          className="hidden"
+          accept={acceptedTypes?.join(',')}
+          onChange={handleFileInputChange}
+          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
         />
+
+        <Upload className="mx-auto h-12 w-12 text-gray-400" />
+        <p className="mt-2 text-sm text-gray-600">
+          <span className="font-medium">Click to upload</span> or drag and drop
+        </p>
+        <p className="text-xs text-gray-500">
+          {acceptedTypes ? acceptedTypes.join(', ') : 'All file types'}
+          {multiple && ` (up to ${maxFiles} files)`}
+        </p>
+        <p className="text-xs text-amber-600 mt-1">
+          📏 File size limit: 100MB per file • Files over 50MB recommended for Git LFS
+        </p>
       </div>
 
       {/* File List */}
       {hasFiles && (
-        <div className="mt-6">
-          <div className="flex items-center justify-between mb-4">
-            <h4 className="text-lg font-medium text-gray-900">Files ({files.length})</h4>
-            <div className="flex space-x-2">
-              {/* Image Optimization Button */}
-              {pendingFiles.some(f => f.file.type.startsWith('image/')) && (
-                <button
-                  type="button"
-                  onClick={() => setShowOptimizer(!showOptimizer)}
-                  disabled={isUploading}
-                  className={`px-4 py-2 border rounded-md flex items-center disabled:opacity-50 disabled:cursor-not-allowed ${
-                    showOptimizer
-                      ? 'bg-blue-50 text-blue-700 border-blue-300'
-                      : 'text-gray-600 border-gray-300 hover:bg-gray-50'
-                  }`}
-                >
-                  <Zap className="w-4 h-4 mr-2" />
-                  Optimize Images
-                </button>
-              )}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h4 className="text-sm font-medium text-gray-900">Files ({files.length})</h4>
+            <div className="flex items-center space-x-2">
               {pendingFiles.length > 0 && (
                 <button
-                  type="button"
                   onClick={uploadAllFiles}
                   disabled={isUploading}
-                  className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                  className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50"
                 >
-                  {isUploading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Uploading...
-                    </>
-                  ) : (
-                    <>
-                      <Upload className="w-4 h-4 mr-2" />
-                      Upload All
-                    </>
-                  )}
+                  {isUploading
+                    ? 'Uploading...'
+                    : `Upload ${pendingFiles.length} file${pendingFiles.length > 1 ? 's' : ''}`}
                 </button>
               )}
               <button
-                type="button"
                 onClick={clearFiles}
                 disabled={isUploading}
-                className="px-4 py-2 text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="text-sm text-gray-500 hover:text-gray-700 disabled:opacity-50"
               >
                 Clear All
               </button>
             </div>
           </div>
 
-          {/* Image Optimizer */}
-          {showOptimizer && (
-            <div className="mb-6">
-              <ImageOptimizer
-                files={files.map(f => f.file)}
-                onOptimized={handleOptimizedImages}
-                onProgress={handleOptimizationProgress}
-                className="border-t border-gray-200 pt-6"
-              />
+          {/* Stats */}
+          {(uploadingFiles.length > 0 || completedFiles.length > 0 || errorFiles.length > 0) && (
+            <div className="grid grid-cols-3 gap-4 text-sm">
+              <div className="text-center p-2 bg-blue-50 rounded">
+                <div className="font-medium text-blue-900">{uploadingFiles.length}</div>
+                <div className="text-blue-600">Uploading</div>
+              </div>
+              <div className="text-center p-2 bg-green-50 rounded">
+                <div className="font-medium text-green-900">{completedFiles.length}</div>
+                <div className="text-green-600">Completed</div>
+              </div>
+              <div className="text-center p-2 bg-red-50 rounded">
+                <div className="font-medium text-red-900">{errorFiles.length}</div>
+                <div className="text-red-600">Errors</div>
+              </div>
             </div>
           )}
 
           {/* File Items */}
-          <div className="space-y-3 max-h-64 overflow-y-auto">
-            {files.map(uploadFile => (
+          <div className="space-y-2 max-h-64 overflow-y-auto">
+            {files.map(file => (
               <div
-                key={uploadFile.id}
-                className="flex items-center space-x-4 p-3 bg-gray-50 rounded-lg"
+                key={file.id}
+                className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg border border-gray-200"
               >
                 {/* File Preview/Icon */}
                 <div className="flex-shrink-0">
-                  {uploadFile.preview ? (
+                  {file.preview ? (
                     <img
-                      src={uploadFile.preview}
-                      alt={uploadFile.file.name}
-                      className="w-12 h-12 rounded object-cover"
+                      src={file.preview}
+                      alt={file.name}
+                      className="w-10 h-10 rounded object-cover"
                     />
                   ) : (
-                    getFileIcon(uploadFile.file)
+                    <div className="w-10 h-10 bg-gray-200 rounded flex items-center justify-center">
+                      <FileWarning className="w-5 h-5 text-gray-500" />
+                    </div>
                   )}
                 </div>
 
                 {/* File Info */}
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900 truncate">
-                    {uploadFile.file.name}
-                  </p>
-                  <p className="text-sm text-gray-500">
-                    {MediaValidator.formatFileSize(uploadFile.file.size)}
-                  </p>
+                  <div className="flex items-center space-x-2">
+                    <p className="text-sm font-medium text-gray-900 truncate">{file.name}</p>
+                    {file.lfsAnalysis?.shouldTrack && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800">
+                        LFS
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center space-x-3 text-xs text-gray-500">
+                    <span>{formatFileSize(file.size)}</span>
+                    {file.status === 'uploading' && file.currentSpeed && (
+                      <span className="flex items-center">
+                        <Zap className="w-3 h-3 mr-1" />
+                        {NetworkUtils.formatSpeed(file.currentSpeed)}
+                      </span>
+                    )}
+                    {file.status === 'uploading' && file.estimatedTime && (
+                      <span className="flex items-center">
+                        <Clock className="w-3 h-3 mr-1" />
+                        {NetworkUtils.formatTime(file.estimatedTime)}
+                      </span>
+                    )}
+                  </div>
+
                   {/* Progress Bar */}
-                  {uploadFile.status === 'uploading' && (
-                    <div className="w-full mt-2">
+                  {file.status === 'uploading' && (
+                    <div className="mt-2">
                       <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
                         <div
-                          className="h-2 transition-all duration-200 bg-blue-500"
-                          style={{ width: `${uploadFile.progress}%` }}
+                          className="h-2 transition-all duration-300 bg-blue-500"
+                          style={{ width: `${file.progress}%` }}
                         />
                       </div>
-                      <div className="text-xs text-gray-500 mt-1 flex items-center justify-between">
-                        <span>{getPhaseLabel(uploadFile)}</span>
-                        <span>{Math.round(uploadFile.progress)}%</span>
+                      <div className="flex items-center justify-between mt-1 text-xs text-gray-500">
+                        <span>Uploading...</span>
+                        <span>{Math.round(file.progress)}%</span>
                       </div>
                     </div>
                   )}
-                  {uploadFile.error && (
-                    <p className="text-sm text-red-600 mt-1">{uploadFile.error}</p>
-                  )}
+
+                  {/* Error Message */}
+                  {file.error && <p className="text-xs text-red-600 mt-1">{file.error}</p>}
                 </div>
 
-                {/* Status */}
+                {/* Status and Actions */}
                 <div className="flex items-center space-x-2">
-                  {getStatusIcon(uploadFile.status)}
+                  {getStatusIcon(file)}
                   <button
                     type="button"
-                    onClick={() => removeFile(uploadFile.id)}
-                    disabled={uploadFile.status === 'uploading'}
+                    onClick={() => removeFile(file.id)}
+                    disabled={file.status === 'uploading'}
                     className="text-gray-400 hover:text-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <X className="w-4 h-4" />
@@ -532,22 +649,6 @@ export function MediaUploader({
               </div>
             ))}
           </div>
-
-          {/* Upload Summary */}
-          {(completedFiles.length > 0 || errorFiles.length > 0) && (
-            <div className="mt-4 p-3 bg-gray-100 rounded-lg">
-              <div className="flex items-center justify-between text-sm">
-                {completedFiles.length > 0 && (
-                  <span className="text-green-600">
-                    {completedFiles.length} uploaded successfully
-                  </span>
-                )}
-                {errorFiles.length > 0 && (
-                  <span className="text-red-600">{errorFiles.length} failed to upload</span>
-                )}
-              </div>
-            </div>
-          )}
         </div>
       )}
     </div>

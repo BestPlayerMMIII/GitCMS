@@ -13,7 +13,45 @@ const config = {
 const client = new GitCMSClient(config);
 ```
 
-## Advanced Querying
+## Advance## Key Benefits
+
+✅ **Simple API**: Just two methods - `getFast()` and `getFull()`  
+✅ **Fast Initial Load**: Thumbnails show immediately  
+✅ **Progressive Enhancement**: Full images load asynchronously  
+✅ **User Control**: You decide when and how to load images  
+✅ **Clean Code**: Minimal, focused implementation  
+✅ **Framework Agnostic**: Works with React, Vue, vanilla JS, etc.  
+✅ **Network Aware**: Integrates with GitCMS smart upload features  
+✅ **LFS Ready**: Optimized for Git Large File Storage
+
+## Enhanced Upload Experience
+
+When using GitCMS Admin, you'll benefit from:
+
+### 🌐 Smart Upload Progress
+
+- **Network-aware progress simulation** based on real connection speed
+- **Intelligent time estimates** that adapt to your bandwidth
+- **Visual connection quality indicators** (Excellent, Good, Fair, etc.)
+- **Real-time upload speed monitoring** with automatic adjustments
+
+### 🗂️ Automatic LFS Management
+
+- **Large file detection** (files >50MB automatically recommended for LFS)
+- **Smart extension-based rules** for common binary formats
+- **Automatic .gitattributes management** with zero configuration
+- **Repository optimization** for faster clones and better performance
+
+### 📱 Enhanced Mobile Experience
+
+- **Responsive progress indicators** optimized for touch interfaces
+- **Bandwidth-conscious uploads** that adapt to mobile connections
+- **Battery-efficient monitoring** with minimal background activity
+
+This approach gives you maximum control over the loading experience while
+keeping the code simple and maintainable! The GitCMS Admin interface provides
+additional smart features that enhance the upload experience without requiring
+any changes to your client code.
 
 ```typescript
 // Get a collection with advanced querying

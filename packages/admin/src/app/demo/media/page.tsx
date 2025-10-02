@@ -2,9 +2,9 @@
 
 import React, { useState } from 'react';
 import { MediaLibrary } from '@/components/media/media-library';
-import { MediaUploader } from '@/components/media/media-uploader';
-import { MediaPickerModal, useMediaPicker } from '@/components/media/media-picker-modal';
+import { useMediaPicker } from '@/components/media/media-picker-modal';
 import { Camera, Upload, Grid3X3, Eye } from 'lucide-react';
+import { MediaUploader } from '@/components/media/media-uploader';
 
 export default function MediaManagementDemo() {
   const [activeTab, setActiveTab] = useState<'library' | 'uploader' | 'picker'>('library');
@@ -146,7 +146,7 @@ export default function MediaManagementDemo() {
                   multiple={true}
                   maxFiles={10}
                   onUploadComplete={handleUploadComplete}
-                  onError={error => {
+                  onError={(error: string) => {
                     console.error('Upload error:', error);
                     alert('Upload error: ' + error);
                   }}

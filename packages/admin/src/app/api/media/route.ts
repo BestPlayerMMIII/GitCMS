@@ -439,17 +439,41 @@ async function handleUploadMedia(request: NextRequest, accessToken: string): Pro
       );
     }
 
-    // Upload to GitHub
-    const githubClient = new GitHubApiClient(accessToken, owner, repo);
-    // Fast authentication check before upload
-    try {
-      await githubClient.getUser();
-    } catch (authError) {
+    // Check for large files (GitHub has a 100MB limit)
+    const fileSizeMB = file.size / (1024 * 1024);
+    if (fileSizeMB > 100) {
       return NextResponse.json(
-        { error: 'GitHub authentication failed. Please check your access token.' },
-        { status: 401 }
+        {
+          error: `File too large (${fileSizeMB.toFixed(1)}MB). GitHub supports files up to 100MB.`,
+          details:
+            'Consider using Git LFS for large files, or compress the file to reduce its size.',
+        },
+        { status: 413 } // Payload Too Large
       );
     }
+
+    // Info about large files (files > 1MB use Git LFS or Git Data API)
+    if (fileSizeMB > 1) {
+      console.log(
+        `Large file detected: ${file.name} (${fileSizeMB.toFixed(1)}MB). Will use Git LFS or Git Data API for upload.`
+      );
+    }
+
+    // Recommend LFS for files larger than 10MB
+    if (fileSizeMB > 10) {
+      console.log(
+        `⚠️ Large file detected: ${file.name} (${fileSizeMB.toFixed(1)}MB). Git LFS is strongly recommended.`
+      );
+      console.log(
+        `   If upload fails, please enable Git LFS in your repository: https://git-lfs.github.com/`
+      );
+    }
+
+    // Upload to GitHub
+    const githubClient = new GitHubApiClient(accessToken, owner, repo);
+
+    // Log file info for debugging
+    console.log(`Starting upload for file: ${file.name} (${fileSizeMB.toFixed(1)}MB)`);
 
     // Get the configured media path
     const mediaBasePath = await getMediaPath(owner, repo, accessToken);
@@ -475,6 +499,10 @@ async function handleUploadMedia(request: NextRequest, accessToken: string): Pro
       options
     );
 
+    console.log(
+      `Upload successful for file: ${file.name} (${fileSizeMB.toFixed(1)}MB) to path: ${path}`
+    );
+
     // Register in memory
     defaultMediaRegistry.register(mediaFile);
 
@@ -485,10 +513,39 @@ async function handleUploadMedia(request: NextRequest, accessToken: string): Pro
     });
   } catch (error) {
     console.error('Upload error:', error);
+
+    // Provide specific error messages based on error type
+    let errorMessage = 'Upload failed';
+    let details: string | undefined = error instanceof Error ? error.message : 'Unknown error';
+
+    if (error instanceof Error) {
+      if (error.message.includes('authentication') || error.message.includes('401')) {
+        errorMessage = 'GitHub authentication failed. Please check your access token.';
+        details = undefined;
+      } else if (error.message.includes('permission') || error.message.includes('403')) {
+        errorMessage = 'Access denied. Check your repository permissions.';
+        details = undefined;
+      } else if (error.message.includes('validation')) {
+        errorMessage = 'File validation failed';
+      } else if (error.message.includes('rate limit')) {
+        errorMessage = 'GitHub rate limit exceeded. Please try again later.';
+        details = undefined;
+      } else if (error.message.includes('too large') || error.message.includes('413')) {
+        errorMessage = 'File is too large for GitHub (100MB limit)';
+        details = 'Consider using Git LFS for large files or compress the file.';
+      } else if (error.message.includes('network') || error.message.includes('timeout')) {
+        errorMessage = 'Network error during upload. Please try again.';
+        details = undefined;
+      } else {
+        errorMessage = error.message; // Use the original error message directly
+        details = undefined;
+      }
+    }
+
     return NextResponse.json(
       {
-        error: 'Upload failed',
-        details: error instanceof Error ? error.message : 'Unknown error',
+        error: errorMessage,
+        ...(details && { details }),
       },
       { status: 500 }
     );

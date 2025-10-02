@@ -13,6 +13,8 @@ import CDNSettings from './cdn-settings';
 import AdvancedMediaSearch from './advanced-media-search';
 import BulkOperations from './bulk-operations';
 import { VirtualFolderManager } from './virtual-folder-manager';
+import { MediaUploader } from './media-uploader';
+import { LFSManagement } from './lfs-management';
 import { useVirtualFolders } from '@/hooks/use-virtual-folders';
 import {
   Camera,
@@ -33,6 +35,7 @@ import {
   File,
   Settings,
   Globe,
+  HardDrive,
 } from 'lucide-react';
 
 interface MediaLibraryProps {
@@ -42,6 +45,8 @@ interface MediaLibraryProps {
   multiple?: boolean;
   acceptedTypes?: MediaType[];
   mode?: 'library' | 'picker';
+  initialTab?: 'library' | 'upload' | 'lfs';
+  showTabs?: boolean;
 }
 
 interface MediaFilters {
@@ -58,6 +63,8 @@ export function MediaLibrary({
   multiple = false,
   acceptedTypes,
   mode = 'library',
+  initialTab = 'library',
+  showTabs = true,
 }: MediaLibraryProps) {
   const { data: session } = useSession();
   const [media, setMedia] = useState<GitCMSMediaFile[]>([]);
@@ -75,6 +82,8 @@ export function MediaLibrary({
   const [showHidden, setShowHidden] = useState(false);
   const [showVirtualFolders, setShowVirtualFolders] = useState(false);
   const [selectedVirtualFolder, setSelectedVirtualFolder] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState(initialTab);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   // Virtual folder management
   const {
@@ -248,6 +257,34 @@ export function MediaLibrary({
     setSelectedMedia(new Set());
   }, []);
 
+  // Handle upload completion with tab switching and refresh
+  const handleUploadComplete = useCallback(
+    (uploadedFiles: any[]) => {
+      console.log('Upload completed:', uploadedFiles);
+      // Refresh the library
+      setRefreshKey(prev => prev + 1);
+      // Switch to library tab to see uploaded files
+      if (showTabs) {
+        setActiveTab('library');
+      }
+      // Close uploader modal if it was open
+      setShowUploader(false);
+      // Reload media to show new files
+      loadMedia();
+    },
+    [showTabs, loadMedia]
+  );
+
+  // Handle upload error
+  const handleUploadError = useCallback((error: string) => {
+    console.error('Upload error:', error);
+    // Show clean error message without redundant "Upload failed" prefix
+    const cleanError = error.toLowerCase().startsWith('upload failed:')
+      ? error.substring(14).trim() // Remove "Upload failed: " prefix
+      : error;
+    alert(`Upload Error: ${cleanError}`);
+  }, []);
+
   // Memoize selected media array to prevent recreating on every render
   const selectedMediaArray = useMemo(
     () =>
@@ -367,6 +404,101 @@ export function MediaLibrary({
     );
   }
 
+  // MediaGrid component
+  const MediaGrid = () => {
+    return displayedMedia.length === 0 ? (
+      <div className="text-center py-12">
+        <Camera className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+        <h3 className="text-lg font-medium text-gray-900 mb-2">No media files found</h3>
+        <p className="text-gray-500 mb-4">
+          {hasActiveSearch
+            ? 'No media files match your current filters. Try adjusting your search criteria.'
+            : media.length === 0
+              ? 'Upload some media files to get started.'
+              : 'Try adjusting your filters or upload some media files.'}
+        </p>
+        {mode === 'library' && !hasActiveSearch && (
+          <button
+            type="button"
+            onClick={e => {
+              e.preventDefault();
+              e.stopPropagation();
+              setShowUploader(true);
+            }}
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+          >
+            Upload Media
+          </button>
+        )}
+      </div>
+    ) : (
+      <>
+        {viewMode === 'grid' ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+            {displayedMedia.map(mediaFile => (
+              <MediaCard
+                key={mediaFile.id}
+                media={mediaFile}
+                onSelect={() => handleMediaSelect(mediaFile)}
+                onDelete={() => handleDeleteMedia(mediaFile)}
+                isSelected={selectedMedia.has(mediaFile.id)}
+                selectable={mode === 'picker'}
+                showActions={mode === 'library'}
+                virtualFolder={(() => {
+                  const folder = getMediaFolder(mediaFile.id);
+                  return folder ? { name: folder.name, color: folder.color || '#6b7280' } : null;
+                })()}
+                onMoveToFolder={addMediaToFolder}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="bg-white shadow rounded-lg overflow-hidden">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    File
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Type
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Size
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Folder
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Uploaded
+                  </th>
+                  {mode === 'library' && (
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Actions
+                    </th>
+                  )}
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {displayedMedia.map(mediaFile => (
+                  <MediaRow
+                    key={mediaFile.id}
+                    media={mediaFile}
+                    onSelect={() => handleMediaSelect(mediaFile)}
+                    onDelete={() => handleDeleteMedia(mediaFile)}
+                    isSelected={selectedMedia.has(mediaFile.id)}
+                    selectable={mode === 'picker'}
+                    showActions={mode === 'library'}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </>
+    );
+  };
+
   return (
     <div className="max-w-7xl mx-auto p-6">
       {/* Header */}
@@ -374,105 +506,98 @@ export function MediaLibrary({
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-2xl font-bold text-gray-900 flex items-center">
             <Camera className="w-6 h-6 mr-2" />
-            Media Library
+            {showTabs ? 'Media Manager' : 'Media Library'}
             {owner && repo && (
               <span className="text-sm font-normal text-gray-500 ml-2">
                 {owner}/{repo}
               </span>
             )}
           </h1>
-          <div className="flex items-center space-x-2">
-            {mode === 'library' && (
-              <>
+          {!showTabs && (
+            <div className="flex items-center space-x-2">
+              {mode === 'library' && (
+                <>
+                  <button
+                    type="button"
+                    onClick={e => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setShowCDNSettings(true);
+                    }}
+                    className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 flex items-center"
+                  >
+                    <Globe className="w-4 h-4 mr-2" />
+                    CDN Settings
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowUploader(true)}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center"
+                  >
+                    <Upload className="w-4 h-4 mr-2" />
+                    Upload Media
+                  </button>
+                </>
+              )}
+              <div className="flex items-center border border-gray-300 rounded-md">
                 <button
                   type="button"
                   onClick={e => {
                     e.preventDefault();
                     e.stopPropagation();
-                    setShowCDNSettings(true);
+                    setViewMode('grid');
                   }}
-                  className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 flex items-center"
+                  className={`p-2 ${viewMode === 'grid' ? 'bg-gray-100' : ''}`}
                 >
-                  <Globe className="w-4 h-4 mr-2" />
-                  CDN Settings
+                  <Grid3X3 className="w-4 h-4" />
                 </button>
                 <button
                   type="button"
-                  onClick={() => setShowUploader(true)}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center"
+                  onClick={e => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setViewMode('list');
+                  }}
+                  className={`p-2 ${viewMode === 'list' ? 'bg-gray-100' : ''}`}
                 >
-                  <Upload className="w-4 h-4 mr-2" />
-                  Upload Media
+                  <List className="w-4 h-4" />
                 </button>
-              </>
-            )}
-            <div className="flex items-center border border-gray-300 rounded-md">
-              <button
-                type="button"
-                onClick={e => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setViewMode('grid');
-                }}
-                className={`p-2 ${viewMode === 'grid' ? 'bg-gray-100' : ''}`}
-              >
-                <Grid3X3 className="w-4 h-4" />
-              </button>
-              <button
-                type="button"
-                onClick={e => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setViewMode('list');
-                }}
-                className={`p-2 ${viewMode === 'list' ? 'bg-gray-100' : ''}`}
-              >
-                <List className="w-4 h-4" />
-              </button>
+              </div>
             </div>
-          </div>
+          )}
         </div>
+
+        {/* Tab Navigation (only when showTabs is true) */}
+        {showTabs && (
+          <div className="border-b border-gray-200 mb-6">
+            <nav className="-mb-px flex space-x-8">
+              {[
+                { id: 'library', label: 'Media Library', icon: <Camera className="w-4 h-4" /> },
+                { id: 'upload', label: 'Upload Files', icon: <Upload className="w-4 h-4" /> },
+                ...(owner && repo
+                  ? [{ id: 'lfs', label: 'Git LFS', icon: <HardDrive className="w-4 h-4" /> }]
+                  : []),
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id as any)}
+                  className={`py-2 px-1 border-b-2 font-medium text-sm flex items-center space-x-2 ${
+                    activeTab === tab.id
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  {tab.icon}
+                  <span>{tab.label}</span>
+                </button>
+              ))}
+            </nav>
+          </div>
+        )}
 
         {/* Advanced Search + Filters */}
         <div className="mb-6">
           <AdvancedMediaSearch media={media} onSearchResults={handleSearchResults} />
-
-          {/* Quick Filter Buttons */}
-          <div className="mt-4 flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => handleFilterChange('mediaType', undefined)}
-              className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                !filters.mediaType
-                  ? 'bg-blue-100 text-blue-800 border border-blue-200'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              All Files ({displayedMedia.length})
-            </button>
-            {Object.entries(MEDIA_TYPES).map(([type, config]) => {
-              const count = displayedMedia.filter(m => m.mediaType === type).length;
-              if (count === 0) return null;
-
-              return (
-                <button
-                  key={type}
-                  type="button"
-                  onClick={() => handleFilterChange('mediaType', type as MediaType)}
-                  className={`px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center ${
-                    filters.mediaType === type
-                      ? 'bg-blue-100 text-blue-800 border border-blue-200'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  {getMediaTypeIcon(type as MediaType)}
-                  <span className="ml-1 capitalize">
-                    {type}s ({count})
-                  </span>
-                </button>
-              );
-            })}
-          </div>
 
           {/* Virtual Folder Organization */}
           <div className="mt-6">
@@ -536,141 +661,123 @@ export function MediaLibrary({
         </div>
       </div>
 
-      {/* Bulk Operations */}
-      {selectedMedia.size > 0 && (
-        <div className="mb-6">
-          <BulkOperations
-            selectedMedia={selectedMediaArray}
-            onClearSelection={handleClearSelection}
-            onOperationComplete={handleBulkOperationComplete}
-          />
-        </div>
-      )}
+      {/* Tab Content */}
+      {showTabs ? (
+        <div>
+          {activeTab === 'library' && (
+            <div>
+              {/* Bulk Operations */}
+              {selectedMedia.size > 0 && (
+                <div className="mb-6">
+                  <BulkOperations
+                    selectedMedia={selectedMediaArray}
+                    onClearSelection={handleClearSelection}
+                    onOperationComplete={handleBulkOperationComplete}
+                  />
+                </div>
+              )}
 
-      {/* Media Stats */}
-      {media.length > 0 && (
-        <div className="mb-6 grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-white p-4 rounded-lg shadow-sm border">
-            <div className="text-2xl font-bold text-gray-900">
-              {displayedMedia.length}
-              {filters.mediaType || hasActiveSearch ? ` / ${media.length}` : ''}
-            </div>
-            <div className="text-sm text-gray-500">
-              {filters.mediaType || hasActiveSearch ? 'Filtered / Total Files' : 'Total Files'}
-            </div>
-          </div>
-          <div className="bg-white p-4 rounded-lg shadow-sm border">
-            <div className="text-2xl font-bold text-blue-600">
-              {media.filter(m => m.mediaType === 'image').length}
-            </div>
-            <div className="text-sm text-gray-500">Images</div>
-          </div>
-          <div className="bg-white p-4 rounded-lg shadow-sm border">
-            <div className="text-2xl font-bold text-green-600">
-              {media.filter(m => m.mediaType === 'document').length}
-            </div>
-            <div className="text-sm text-gray-500">Documents</div>
-          </div>
-          <div className="bg-white p-4 rounded-lg shadow-sm border">
-            <div className="text-2xl font-bold text-purple-600">
-              {media.filter(m => m.mediaType === 'video' || m.mediaType === 'audio').length}
-            </div>
-            <div className="text-sm text-gray-500">Media</div>
-          </div>
-        </div>
-      )}
+              {/* Media Stats */}
+              {media.length > 0 && (
+                <div className="mb-6 grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="bg-white p-4 rounded-lg shadow-sm border">
+                    <div className="text-2xl font-bold text-gray-900">
+                      {displayedMedia.length}
+                      {filters.mediaType || hasActiveSearch ? ` / ${media.length}` : ''}
+                    </div>
+                    <div className="text-sm text-gray-500">
+                      {filters.mediaType || hasActiveSearch
+                        ? 'Filtered / Total Files'
+                        : 'Total Files'}
+                    </div>
+                  </div>
+                  <div className="bg-white p-4 rounded-lg shadow-sm border">
+                    <div className="text-2xl font-bold text-blue-600">
+                      {media.filter(m => m.mediaType === 'image').length}
+                    </div>
+                    <div className="text-sm text-gray-500">Images</div>
+                  </div>
+                  <div className="bg-white p-4 rounded-lg shadow-sm border">
+                    <div className="text-2xl font-bold text-green-600">
+                      {media.filter(m => m.mediaType === 'document').length}
+                    </div>
+                    <div className="text-sm text-gray-500">Documents</div>
+                  </div>
+                  <div className="bg-white p-4 rounded-lg shadow-sm border">
+                    <div className="text-2xl font-bold text-purple-600">
+                      {media.filter(m => m.mediaType === 'video' || m.mediaType === 'audio').length}
+                    </div>
+                    <div className="text-sm text-gray-500">Media</div>
+                  </div>
+                </div>
+              )}
 
-      {/* Media Grid/List */}
-      {displayedMedia.length === 0 ? (
-        <div className="text-center py-12">
-          <Camera className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">No media files found</h3>
-          <p className="text-gray-500 mb-4">
-            {hasActiveSearch
-              ? 'No media files match your current filters. Try adjusting your search criteria.'
-              : media.length === 0
-                ? 'Upload some media files to get started.'
-                : 'Try adjusting your filters or upload some media files.'}
-          </p>
-          {mode === 'library' && !hasActiveSearch && (
-            <button
-              type="button"
-              onClick={e => {
-                e.preventDefault();
-                e.stopPropagation();
-                setShowUploader(true);
-              }}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-            >
-              Upload Media
-            </button>
+              {/* Media Grid/List */}
+              <MediaGrid />
+            </div>
           )}
+
+          {activeTab === 'upload' && (
+            <MediaUploader
+              key={refreshKey}
+              owner={owner || ''}
+              repo={repo || ''}
+              onUploadComplete={handleUploadComplete}
+              onError={handleUploadError}
+            />
+          )}
+
+          {activeTab === 'lfs' && owner && repo && <LFSManagement owner={owner} repo={repo} />}
         </div>
       ) : (
-        <>
-          {viewMode === 'grid' ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-              {displayedMedia.map(mediaFile => (
-                <MediaCard
-                  key={mediaFile.id}
-                  media={mediaFile}
-                  onSelect={() => handleMediaSelect(mediaFile)}
-                  onDelete={() => handleDeleteMedia(mediaFile)}
-                  isSelected={selectedMedia.has(mediaFile.id)}
-                  selectable={mode === 'picker'}
-                  showActions={mode === 'library'}
-                  virtualFolder={(() => {
-                    const folder = getMediaFolder(mediaFile.id);
-                    return folder ? { name: folder.name, color: folder.color || '#6b7280' } : null;
-                  })()}
-                  onMoveToFolder={addMediaToFolder}
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="bg-white shadow rounded-lg overflow-hidden">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      File
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Type
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Size
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Folder
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Uploaded
-                    </th>
-                    {mode === 'library' && (
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Actions
-                      </th>
-                    )}
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {displayedMedia.map(mediaFile => (
-                    <MediaRow
-                      key={mediaFile.id}
-                      media={mediaFile}
-                      onSelect={() => handleMediaSelect(mediaFile)}
-                      onDelete={() => handleDeleteMedia(mediaFile)}
-                      isSelected={selectedMedia.has(mediaFile.id)}
-                      selectable={mode === 'picker'}
-                      showActions={mode === 'library'}
-                    />
-                  ))}
-                </tbody>
-              </table>
+        <div>
+          {/* Bulk Operations */}
+          {selectedMedia.size > 0 && (
+            <div className="mb-6">
+              <BulkOperations
+                selectedMedia={selectedMediaArray}
+                onClearSelection={handleClearSelection}
+                onOperationComplete={handleBulkOperationComplete}
+              />
             </div>
           )}
-        </>
+
+          {/* Media Stats */}
+          {media.length > 0 && (
+            <div className="mb-6 grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="bg-white p-4 rounded-lg shadow-sm border">
+                <div className="text-2xl font-bold text-gray-900">
+                  {displayedMedia.length}
+                  {filters.mediaType || hasActiveSearch ? ` / ${media.length}` : ''}
+                </div>
+                <div className="text-sm text-gray-500">
+                  {filters.mediaType || hasActiveSearch ? 'Filtered / Total Files' : 'Total Files'}
+                </div>
+              </div>
+              <div className="bg-white p-4 rounded-lg shadow-sm border">
+                <div className="text-2xl font-bold text-blue-600">
+                  {media.filter(m => m.mediaType === 'image').length}
+                </div>
+                <div className="text-sm text-gray-500">Images</div>
+              </div>
+              <div className="bg-white p-4 rounded-lg shadow-sm border">
+                <div className="text-2xl font-bold text-green-600">
+                  {media.filter(m => m.mediaType === 'document').length}
+                </div>
+                <div className="text-sm text-gray-500">Documents</div>
+              </div>
+              <div className="bg-white p-4 rounded-lg shadow-sm border">
+                <div className="text-2xl font-bold text-purple-600">
+                  {media.filter(m => m.mediaType === 'video' || m.mediaType === 'audio').length}
+                </div>
+                <div className="text-sm text-gray-500">Media</div>
+              </div>
+            </div>
+          )}
+
+          {/* Media Grid/List */}
+          <MediaGrid />
+        </div>
       )}
 
       {/* CDN Settings Modal */}
@@ -715,6 +822,54 @@ export function MediaLibrary({
         onFoldersChange={updateVirtualFolders}
         mediaFiles={media.map(m => ({ id: m.id, filename: m.filename, mediaType: m.mediaType }))}
       />
+
+      {/* Media Uploader Modal */}
+      {showUploader && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-auto">
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-semibold text-gray-900">Upload Media</h2>
+                <button
+                  onClick={() => setShowUploader(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div className="p-6">
+              <MediaUploader
+                owner={owner || ''}
+                repo={repo || ''}
+                acceptedTypes={acceptedTypes}
+                multiple={true}
+                maxFiles={10}
+                onUploadComplete={(uploadedFiles: any[]) => {
+                  console.log('Upload completed:', uploadedFiles);
+                  setShowUploader(false);
+                  loadMedia(); // Refresh media list
+                }}
+                onError={(error: string) => {
+                  console.error('Upload error:', error);
+                  // Show clean error message without redundant "Upload failed" prefix
+                  const cleanError = error.toLowerCase().startsWith('upload failed:')
+                    ? error.substring(14).trim() // Remove "Upload failed: " prefix
+                    : error;
+                  alert(`Upload Error: ${cleanError}`);
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
