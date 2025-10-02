@@ -36,6 +36,8 @@ import {
   Highlighter,
 } from 'lucide-react';
 import { useCallback, useState } from 'react';
+import { MediaPickerDialog } from './media-picker-dialog';
+import { type GitCMSMediaFile } from '@git-cms/core';
 
 interface RichTextEditorProps {
   value?: string;
@@ -43,6 +45,9 @@ interface RichTextEditorProps {
   placeholder?: string;
   readOnly?: boolean;
   className?: string;
+  // Media picker configuration
+  owner?: string;
+  repo?: string;
 }
 
 interface ToolbarButtonProps {
@@ -90,9 +95,12 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
   placeholder = 'Start writing...',
   readOnly = false,
   className = '',
+  owner,
+  repo,
 }) => {
   const [showLinkDialog, setShowLinkDialog] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
+  const [showMediaPicker, setShowMediaPicker] = useState(false);
 
   // Create lowlight instance for code highlighting
   const lowlight = createLowlight();
@@ -157,11 +165,34 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
   }, [editor, linkUrl]);
 
   const addImage = useCallback(() => {
-    const url = window.prompt('Image URL:');
-    if (url && editor) {
-      editor.chain().focus().setImage({ src: url }).run();
+    if (owner && repo) {
+      setShowMediaPicker(true);
+    } else {
+      // Fallback to URL prompt if no repository info
+      const url = window.prompt('Image URL:');
+      if (url && editor) {
+        editor.chain().focus().setImage({ src: url }).run();
+      }
     }
-  }, [editor]);
+  }, [editor, owner, repo]);
+
+  const handleMediaSelect = useCallback(
+    (media: GitCMSMediaFile) => {
+      if (editor) {
+        editor
+          .chain()
+          .focus()
+          .setImage({
+            src: media.url,
+            alt: media.metadata?.alt || media.filename,
+            title: media.metadata?.description || media.filename,
+          })
+          .run();
+      }
+      setShowMediaPicker(false);
+    },
+    [editor]
+  );
 
   if (!editor) {
     return null;
@@ -672,6 +703,20 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
             Visual formatting and markdown syntax supported
           </div>
         </div>
+      )}
+
+      {/* Media Picker Dialog */}
+      {owner && repo && (
+        <MediaPickerDialog
+          isOpen={showMediaPicker}
+          onClose={() => setShowMediaPicker(false)}
+          onSelect={handleMediaSelect}
+          owner={owner}
+          repo={repo}
+          acceptedTypes={['image']}
+          title="Insert Image"
+          allowUpload={true}
+        />
       )}
     </div>
   );

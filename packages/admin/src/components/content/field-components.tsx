@@ -84,6 +84,9 @@ export interface BaseFieldProps {
   availableSchemas?: GitCMSSchema[]; // For resolving schema references in object fields
   allErrors?: Record<string, string>; // All form errors for nested error handling
   fieldPath?: string; // Current field path for error resolution
+  // Repository info for media integration
+  owner?: string;
+  repo?: string;
 }
 
 // String/Text Field Component
@@ -721,7 +724,15 @@ export function ReferenceField({ field, value, onChange, error, disabled }: Base
 }
 
 // Rich Text Field Component (handles both rich-text and markdown the same way)
-export function RichTextField({ field, value, onChange, error, disabled }: BaseFieldProps) {
+export function RichTextField({
+  field,
+  value,
+  onChange,
+  error,
+  disabled,
+  owner,
+  repo,
+}: BaseFieldProps) {
   return (
     <div className="space-y-3">
       <label className="block text-sm font-medium text-gray-700">
@@ -739,6 +750,8 @@ export function RichTextField({ field, value, onChange, error, disabled }: BaseF
             field.placeholder || 'Start writing... Use toolbar or markdown syntax like **bold**'
           }
           readOnly={disabled}
+          owner={owner}
+          repo={repo}
           className={`transition-all duration-200 ${
             error
               ? 'border-red-400 shadow-sm focus-within:border-red-500 focus-within:ring-2 focus-within:ring-red-200'
@@ -782,6 +795,8 @@ export function FieldRenderer({
   availableSchemas,
   allErrors,
   fieldPath,
+  owner,
+  repo,
 }: BaseFieldProps) {
   switch (field.type) {
     case 'string':
@@ -910,6 +925,8 @@ export function FieldRenderer({
           onChange={onChange}
           error={error}
           disabled={disabled}
+          owner={owner}
+          repo={repo}
         />
       );
 

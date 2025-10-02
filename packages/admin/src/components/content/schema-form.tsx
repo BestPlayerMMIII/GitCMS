@@ -566,6 +566,8 @@ export function SchemaForm({
                         availableSchemas={availableSchemas}
                         allErrors={allErrors}
                         fieldPath={fieldKey}
+                        owner={repoInfo?.owner}
+                        repo={repoInfo?.repo}
                       />
                     </div>
                   ))}

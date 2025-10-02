@@ -25,7 +25,16 @@ export interface ContentSchema {
 
 export interface SchemaField {
   name: string;
-  type: 'string' | 'number' | 'boolean' | 'date' | 'datetime' | 'markdown' | 'media' | 'array' | 'object';
+  type:
+    | 'string'
+    | 'number'
+    | 'boolean'
+    | 'date'
+    | 'datetime'
+    | 'markdown'
+    | 'media'
+    | 'array'
+    | 'object';
   required?: boolean;
   description?: string;
   validation?: any;
@@ -46,4 +55,37 @@ export type TransportMode = 'github' | 'http';
 export interface GitCMSError extends Error {
   code: string;
   details?: any;
+}
+
+export interface EmbeddedMedia {
+  url: string;
+  alt: string;
+  loading: 'lazy' | 'eager';
+  thumbnail?: string;
+  original?: string;
+  metadata?: {
+    filename: string;
+    size: string;
+    type: string;
+  };
+}
+
+export interface EmbeddedVideo {
+  url: string;
+  autoplay: boolean;
+  controls: boolean;
+  muted: boolean;
+  loop: boolean;
+  poster?: string;
+  type: string;
+}
+
+export interface ResponsiveImageSources {
+  default: string;
+  sources: {
+    media: string;
+    srcset: string;
+    type: string;
+  }[];
+  fallback: string;
 }

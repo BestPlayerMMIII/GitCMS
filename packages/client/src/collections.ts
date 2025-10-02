@@ -1,6 +1,8 @@
 import { Octokit } from '@octokit/rest';
 import type { GitCMSConfig, ContentItem, QueryOptions } from './types';
 
+export type Operator = '==' | '!=' | '>' | '>=' | '<' | '<=' | 'in' | 'contains';
+
 export class CollectionRef {
   constructor(
     private name: string,
@@ -77,8 +79,8 @@ export class CollectionRef {
   /**
    * Query collection with filters
    */
-  where(field: string, value: any): CollectionQuery {
-    return new CollectionQuery(this.name, this.octokit, this.config).where(field, value);
+  where(field: string, operator: Operator, value: any): CollectionQuery {
+    return new CollectionQuery(this.name, this.octokit, this.config).where(field, operator, value);
   }
 
   /**
@@ -151,8 +153,11 @@ export class CollectionQuery {
     private config: GitCMSConfig
   ) {}
 
-  where(field: string, value: any): CollectionQuery {
-    this.filters[field] = value;
+  where(field: string, operator: Operator, value: any): CollectionQuery {
+    if (!this.filters._where) {
+      this.filters._where = [];
+    }
+    this.filters._where.push({ field, operator, value });
     return this;
   }
 
@@ -166,6 +171,41 @@ export class CollectionQuery {
     return this;
   }
 
+  /**
+   * Get the count of documents that match the current query
+   */
+  async count(): Promise<number> {
+    const items = await this.get();
+    return items.length;
+  }
+
+  /**
+   * Check if any documents exist that match the current query
+   */
+  async exists(): Promise<boolean> {
+    const count = await this.count();
+    return count > 0;
+  }
+
+  /**
+   * Get the first document that matches the query
+   */
+  async first(): Promise<ContentItem | null> {
+    const originalLimit = this.limitCount;
+    this.limitCount = 1;
+    const items = await this.get();
+    this.limitCount = originalLimit; // Restore original limit
+    return items.length > 0 ? items[0] : null;
+  }
+
+  /**
+   * Search in content text
+   */
+  search(query: string): CollectionQuery {
+    this.filters._search = query;
+    return this;
+  }
+
   async get(): Promise<ContentItem[]> {
     if (this.config.baseUrl) {
       const [owner, repo] = this.config.repository.split('/');
@@ -173,13 +213,23 @@ export class CollectionQuery {
         `${this.config.baseUrl}/api/content/${owner}/${repo}/${this.collectionName}`
       );
       url.searchParams.set('branch', this.config.branch || 'main');
-      if (Object.keys(this.filters).length)
-        url.searchParams.set('where', JSON.stringify(this.filters));
+
+      // Enhanced filtering support
+      if (Object.keys(this.filters).length) {
+        if (this.filters._where) {
+          url.searchParams.set('where', JSON.stringify(this.filters._where));
+        }
+        if (this.filters._search) {
+          url.searchParams.set('search', this.filters._search);
+        }
+      }
+
       if (this.ordering) {
         url.searchParams.set('orderBy', this.ordering.field);
         url.searchParams.set('order', this.ordering.direction);
       }
       if (this.limitCount != null) url.searchParams.set('limit', String(this.limitCount));
+
       const res = await fetch(url.toString(), {
         headers: this.config.token ? { Authorization: `Bearer ${this.config.token}` } : {},
       });
@@ -187,19 +237,36 @@ export class CollectionQuery {
       const json = await res.json();
       return json.items as ContentItem[];
     }
+
+    // Fallback to direct GitHub API access
     const collection = new CollectionRef(this.collectionName, this.octokit, this.config);
     let items = await collection.get();
 
-    // Apply filters
-    Object.entries(this.filters).forEach(([field, value]) => {
-      items = items.filter(item => item.data[field] === value);
-    });
+    // Apply where filters
+    if (this.filters._where) {
+      this.filters._where.forEach((filter: any) => {
+        items = items.filter(item => {
+          const fieldValue = item.data?.[filter.field] ?? item[filter.field];
+          return this.applyOperator(fieldValue, filter.operator, filter.value);
+        });
+      });
+    }
+
+    // Apply search
+    if (this.filters._search) {
+      const searchLower = this.filters._search.toLowerCase();
+      items = items.filter(item => {
+        const content = item.content?.toLowerCase() || '';
+        const dataStr = JSON.stringify(item.data || {}).toLowerCase();
+        return content.includes(searchLower) || dataStr.includes(searchLower);
+      });
+    }
 
     // Apply ordering
     if (this.ordering) {
       items.sort((a, b) => {
-        const aVal = a[this.ordering!.field];
-        const bVal = b[this.ordering!.field];
+        const aVal = a.data?.[this.ordering!.field] ?? a[this.ordering!.field];
+        const bVal = b.data?.[this.ordering!.field] ?? b[this.ordering!.field];
 
         if (aVal < bVal) return this.ordering!.direction === 'asc' ? -1 : 1;
         if (aVal > bVal) return this.ordering!.direction === 'asc' ? 1 : -1;
@@ -213,6 +280,31 @@ export class CollectionQuery {
     }
 
     return items;
+  }
+
+  private applyOperator(fieldValue: any, operator: Operator, value: any): boolean {
+    switch (operator) {
+      case '==':
+        return fieldValue === value;
+      case '!=':
+        return fieldValue !== value;
+      case '>':
+        return fieldValue > value;
+      case '>=':
+        return fieldValue >= value;
+      case '<':
+        return fieldValue < value;
+      case '<=':
+        return fieldValue <= value;
+      case 'in':
+        return Array.isArray(value) && value.includes(fieldValue);
+      case 'contains':
+        return typeof fieldValue === 'string' && typeof value === 'string'
+          ? fieldValue.toLowerCase().includes(value.toLowerCase())
+          : false;
+      default:
+        return false;
+    }
   }
 }
 
