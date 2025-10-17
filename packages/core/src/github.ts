@@ -545,6 +545,66 @@ export class GitHubApiClient {
   }
 
   /**
+   * Parse Git LFS pointer file content to extract metadata
+   * LFS pointer format:
+   * version https://git-lfs.github.com/spec/v1
+   * oid sha256:abc123...
+   * size 12345678
+   */
+  static parseLFSPointer(content: string): { isLFS: boolean; size?: number; oid?: string } {
+    const lines = content.trim().split('\n');
+
+    // Check if this is an LFS pointer file
+    if (!lines[0] || !lines[0].includes('git-lfs.github.com/spec')) {
+      return { isLFS: false };
+    }
+
+    let size: number | undefined;
+    let oid: string | undefined;
+
+    for (const line of lines) {
+      if (line.startsWith('size ')) {
+        size = parseInt(line.substring(5).trim(), 10);
+      } else if (line.startsWith('oid sha256:')) {
+        oid = line.substring(11).trim();
+      }
+    }
+
+    return {
+      isLFS: true,
+      size,
+      oid,
+    };
+  }
+
+  /**
+   * Get file content and check if it's an LFS pointer
+   * Returns the actual file size for LFS files
+   */
+  async getFileWithLFSInfo(path: string): Promise<GitHubFileContent & { lfsSize?: number }> {
+    try {
+      const fileData = await this.getFile(path);
+
+      // If file has content, check if it's an LFS pointer
+      if (fileData.content) {
+        const decodedContent = Buffer.from(fileData.content, 'base64').toString('utf-8');
+        const lfsInfo = GitHubApiClient.parseLFSPointer(decodedContent);
+
+        if (lfsInfo.isLFS && lfsInfo.size) {
+          return {
+            ...fileData,
+            lfsSize: lfsInfo.size,
+          };
+        }
+      }
+
+      return fileData;
+    } catch (error) {
+      throw this.handleError(error, `Failed to get file with LFS info: ${path}`);
+    }
+  }
+
+  /**
    * Delete a file from the repository
    */
   async deleteFile(path: string, message: string, sha: string): Promise<GitHubCommitResponse> {

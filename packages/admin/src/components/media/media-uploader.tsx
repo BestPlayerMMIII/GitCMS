@@ -1,42 +1,42 @@
 'use client';
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { Upload, X, Wifi, WifiOff, HardDrive, FileWarning } from 'lucide-react';
 import {
-  Upload,
-  X,
-  Wifi,
-  WifiOff,
-  Clock,
-  Zap,
-  HardDrive,
-  AlertTriangle,
-  Check,
-  Loader2,
-  FileWarning,
-  Gauge,
-} from 'lucide-react';
-import {
-  NetworkMonitor,
-  UploadProgressSimulator,
-  NetworkUtils,
-  type NetworkStats,
-  type UploadProgressSimulation,
-  GitLFSManager,
   LFSUtils,
   type LFSFileAnalysis,
   formatFileSize,
+  NetworkMonitor,
+  type NetworkStats,
+  UploadProgressSimulator,
+  NetworkUtils as CoreNetworkUtils,
 } from '@git-cms/core';
+import { useUploadContext } from '@/contexts/upload-context';
 
-interface UploadFile extends File {
+// Re-export network utilities from core for consistency
+const NetworkUtils = {
+  formatSpeed: (bytesPerSecond?: number) => {
+    if (!bytesPerSecond) return '0 MB/s';
+    return CoreNetworkUtils.formatSpeed(bytesPerSecond);
+  },
+  formatTime: (milliseconds?: number) => {
+    if (!milliseconds) return '0s';
+    return CoreNetworkUtils.formatTime(milliseconds);
+  },
+  getConnectionQuality: (bytesPerSecond?: number) => {
+    if (!bytesPerSecond) return 'Unknown';
+    return CoreNetworkUtils.getConnectionQuality(bytesPerSecond);
+  },
+  getConnectionColor: (quality: string) => {
+    return CoreNetworkUtils.getConnectionColor(quality);
+  },
+};
+
+// Local file interface for UI state (before adding to global context)
+interface LocalUploadFile extends File {
   id: string;
   preview?: string;
-  progress: number;
-  status: 'pending' | 'uploading' | 'success' | 'error';
-  error?: string;
-  simulator?: UploadProgressSimulator;
   lfsAnalysis?: LFSFileAnalysis;
-  estimatedTime?: number;
-  currentSpeed?: number;
 }
 
 interface MediaUploaderProps {
@@ -65,35 +65,37 @@ export function MediaUploader({
   onError,
   className = '',
 }: MediaUploaderProps) {
-  const [files, setFiles] = useState<UploadFile[]>([]);
+  // Local UI state (pending files not yet uploaded)
+  const [pendingFiles, setPendingFiles] = useState<LocalUploadFile[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [networkStats, setNetworkStats] = useState<NetworkStats | null>(null);
-  const [lfsEnabled, setLfsEnabled] = useState(false);
   const [showNetworkInfo, setShowNetworkInfo] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const networkMonitor = useRef<NetworkMonitor>();
-  const lfsManager = useRef<GitLFSManager>();
+  const simulatorsRef = useRef<Map<string, UploadProgressSimulator>>(new Map());
+  const networkMonitorRef = useRef<NetworkMonitor>();
 
-  // Initialize network monitoring and LFS
+  // Global upload context for persistent state across tabs
+  const { addFiles, updateFile } = useUploadContext();
+
+  // Initialize network monitoring (singleton pattern - shared across all instances)
   useEffect(() => {
-    networkMonitor.current = NetworkMonitor.getInstance();
-
-    // Start monitoring network
-    networkMonitor.current.startMonitoring(3000);
+    // Get singleton instance
+    networkMonitorRef.current = NetworkMonitor.getInstance();
 
     // Subscribe to network updates
-    const unsubscribe = networkMonitor.current.subscribe(setNetworkStats);
+    const unsubscribe = networkMonitorRef.current.subscribe(setNetworkStats);
 
-    // Initialize LFS manager (would need GitHub client)
-    // lfsManager.current = new GitLFSManager(githubClient, owner, repo);
+    // Start monitoring (idempotent - safe to call multiple times)
+    networkMonitorRef.current.startMonitoring(1500);
 
+    // Cleanup: only unsubscribe, don't stop monitoring (it's shared!)
     return () => {
       unsubscribe();
-      networkMonitor.current?.stopMonitoring();
+      // DON'T stop monitoring - it's a singleton shared across components
     };
-  }, [owner, repo]);
+  }, []);
 
   // Generate unique ID for files
   const generateId = () =>
@@ -136,17 +138,18 @@ export function MediaUploader({
   // Handle file selection
   const handleFiles = useCallback(
     async (selectedFiles: FileList) => {
-      const newFiles: UploadFile[] = [];
+      const newFiles: LocalUploadFile[] = [];
       const errors: string[] = [];
 
       for (let i = 0; i < selectedFiles.length && newFiles.length < maxFiles; i++) {
         const file = selectedFiles[i];
 
-        // Check file size limits
+        // Check file size limits (2GB for Git LFS)
         const fileSizeMB = file.size / (1024 * 1024);
-        if (fileSizeMB > 100) {
+        const fileSizeGB = fileSizeMB / 1024;
+        if (fileSizeGB > 2) {
           errors.push(
-            `${file.name}: File too large (${fileSizeMB.toFixed(1)}MB). GitHub supports files up to 100MB.`
+            `${file.name}: File too large (${fileSizeGB.toFixed(2)}GB). GitHub LFS maximum is 2GB per file.`
           );
           continue;
         }
@@ -154,15 +157,13 @@ export function MediaUploader({
         const preview = await createFilePreview(file);
         const lfsAnalysis = analyzeLFSRequirements(file);
 
-        const smartFile: UploadFile = Object.assign(file, {
+        const localFile: LocalUploadFile = Object.assign(file, {
           id: generateId(),
           preview,
-          progress: 0,
-          status: 'pending' as const,
           lfsAnalysis,
         });
 
-        newFiles.push(smartFile);
+        newFiles.push(localFile);
       }
 
       // Show file size errors if any
@@ -170,44 +171,52 @@ export function MediaUploader({
         onError?.(errors.join('\n'));
       }
 
-      setFiles(prev => [...prev, ...newFiles]);
+      setPendingFiles(prev => [...prev, ...newFiles]);
     },
     [createFilePreview, analyzeLFSRequirements, maxFiles, onError]
   );
 
-  // Upload single file with smart progress simulation
+  // Upload single file with smart 2-phase progress simulation
   const uploadFileWithSimulation = useCallback(
-    async (file: UploadFile) => {
-      // Create progress simulator
+    async (file: LocalUploadFile) => {
+      const stats = networkMonitorRef.current?.getCurrentStats();
+      const uploadSpeed = stats?.uploadSpeed || 5 * 1024 * 1024; // Default 5 MB/s
+
+      // Add file to context ONCE at the start
+      addFiles([
+        Object.assign(
+          { ...file, name: file.name, size: file.size },
+          {
+            progress: 0,
+            status: 'uploading' as const,
+          }
+        ),
+      ]);
+
+      // Create progress simulator with 2-phase algorithm (alpha=0.9, beta=0.4)
       const simulator = new UploadProgressSimulator({
         fileSize: file.size,
-        maxProgress: 98,
-        updateInterval: 500,
+        alpha: 0.9, // Switch to entertainment phase at 90%
+        beta: 0.4, // Exponential decay factor for entertainment phase
+        updateInterval: 1500, // Update every 1.5 seconds
       });
-
-      file.simulator = simulator;
 
       // Subscribe to progress updates
-      const unsubscribe = simulator.subscribe((progress: UploadProgressSimulation) => {
-        setFiles(prev =>
-          prev.map(f =>
-            f.id === file.id
-              ? {
-                  ...f,
-                  progress: progress.progress,
-                  estimatedTime: progress.estimatedTimeRemaining,
-                  currentSpeed: progress.currentSpeed,
-                }
-              : f
-          )
-        );
+      const unsubscribe = simulator.subscribe(progressUpdate => {
+        // UPDATE existing file progress (not add new files!)
+        updateFile(file.id, {
+          progress: progressUpdate.progress,
+          status: 'uploading' as const,
+          uploadSpeed: progressUpdate.currentSpeed,
+          estimatedTime: progressUpdate.estimatedTimeRemaining,
+          simulatedProgress: progressUpdate.progress,
+        });
       });
 
-      try {
-        // Update status to uploading
-        setFiles(prev => prev.map(f => (f.id === file.id ? { ...f, status: 'uploading' } : f)));
+      simulatorsRef.current.set(file.id, simulator);
 
-        // Start progress simulation
+      try {
+        // Start simulation
         await simulator.start();
 
         // Perform actual upload
@@ -227,56 +236,51 @@ export function MediaUploader({
           try {
             const errorData = await response.json();
             if (errorData?.error) {
-              // Use the backend error message directly, avoiding nested "Upload failed" prefixes
               errorMessage = errorData.error;
               if (errorData.details) {
                 errorMessage += ` (${errorData.details})`;
               }
             }
           } catch (e) {
-            // ignore JSON parse errors, use default message
+            // ignore JSON parse errors
           }
           throw new Error(errorMessage);
         }
 
         const result = await response.json();
 
-        // Update to success
-        setFiles(prev =>
-          prev.map(f => (f.id === file.id ? { ...f, status: 'success', progress: 100 } : f))
-        );
+        // Complete simulator and update to success
+        simulator.complete();
+        updateFile(file.id, {
+          progress: 100,
+          status: 'success' as const,
+        });
 
         return result.media;
       } catch (error) {
-        // Update to error
-        setFiles(prev =>
-          prev.map(f =>
-            f.id === file.id
-              ? {
-                  ...f,
-                  status: 'error',
-                  progress: 0,
-                  error: error instanceof Error ? error.message : 'Upload failed',
-                }
-              : f
-          )
-        );
+        // Stop simulator and update to error
+        simulator.stop();
+        const errorMessage = error instanceof Error ? error.message : 'Upload failed';
+        updateFile(file.id, {
+          progress: 0,
+          status: 'error' as const,
+          error: errorMessage,
+        });
         throw error;
       } finally {
         // Cleanup
         unsubscribe();
-        simulator.stop();
+        simulatorsRef.current.delete(file.id);
       }
     },
-    [owner, repo, folder]
+    [owner, repo, folder, addFiles, updateFile]
   );
 
-  // Upload all files
+  // Upload all pending files
   const uploadAllFiles = useCallback(async () => {
-    if (files.length === 0) return;
+    if (pendingFiles.length === 0) return;
 
     setIsUploading(true);
-    const pendingFiles = files.filter(f => f.status === 'pending');
     const uploadedFiles: any[] = [];
     const errors: string[] = [];
 
@@ -301,31 +305,34 @@ export function MediaUploader({
       if (errors.length > 0) {
         onError?.(errors.join('\n'));
       }
+
+      // Clear pending files after successful upload
+      setPendingFiles([]);
     } finally {
       setIsUploading(false);
     }
-  }, [files, uploadFileWithSimulation, onUploadComplete, onError]);
+  }, [pendingFiles, uploadFileWithSimulation, onUploadComplete, onError]);
 
-  // Remove file
+  // Remove file from pending list
   const removeFile = useCallback((id: string) => {
-    setFiles(prev => {
+    setPendingFiles(prev => {
       const fileToRemove = prev.find(f => f.id === id);
-      if (fileToRemove?.simulator) {
-        fileToRemove.simulator.stop();
+      if (fileToRemove?.preview) {
+        URL.revokeObjectURL(fileToRemove.preview);
       }
       return prev.filter(f => f.id !== id);
     });
   }, []);
 
-  // Clear all files
+  // Clear all pending files
   const clearFiles = useCallback(() => {
-    files.forEach(file => {
-      if (file.simulator) {
-        file.simulator.stop();
+    pendingFiles.forEach(file => {
+      if (file.preview) {
+        URL.revokeObjectURL(file.preview);
       }
     });
-    setFiles([]);
-  }, [files]);
+    setPendingFiles([]);
+  }, [pendingFiles]);
 
   // Drag and drop handlers
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -366,20 +373,6 @@ export function MediaUploader({
     [handleFiles]
   );
 
-  // Get status icon
-  const getStatusIcon = (file: UploadFile) => {
-    switch (file.status) {
-      case 'uploading':
-        return <Loader2 className="w-4 h-4 animate-spin text-blue-500" />;
-      case 'success':
-        return <Check className="w-4 h-4 text-green-500" />;
-      case 'error':
-        return <AlertTriangle className="w-4 h-4 text-red-500" />;
-      default:
-        return null;
-    }
-  };
-
   // Get connection quality indicator
   const getConnectionIndicator = () => {
     if (!networkStats) {
@@ -387,26 +380,14 @@ export function MediaUploader({
     }
 
     const quality = NetworkUtils.getConnectionQuality(networkStats.uploadSpeed);
-    const colors = {
-      Excellent: 'text-green-500',
-      'Very Good': 'text-green-400',
-      Good: 'text-yellow-500',
-      Fair: 'text-orange-500',
-      Slow: 'text-red-500',
-      'Very Slow': 'text-red-600',
-    };
+    const color = NetworkUtils.getConnectionColor(quality);
 
-    return (
-      <Wifi className={`w-4 h-4 ${colors[quality as keyof typeof colors] || 'text-gray-400'}`} />
-    );
+    return <Wifi className={`w-4 h-4 ${color}`} />;
   };
 
-  const hasFiles = files.length > 0;
-  const pendingFiles = files.filter(f => f.status === 'pending');
-  const uploadingFiles = files.filter(f => f.status === 'uploading');
-  const completedFiles = files.filter(f => f.status === 'success');
-  const errorFiles = files.filter(f => f.status === 'error');
-  const lfsFiles = files.filter(f => f.lfsAnalysis?.shouldTrack);
+  const hasFiles = pendingFiles.length > 0;
+  const hasLargeFiles = pendingFiles.some(f => f.size > 100 * 1024 * 1024);
+  const lfsFiles = pendingFiles.filter(f => f.lfsAnalysis?.shouldTrack);
 
   return (
     <div className={`space-y-4 ${className}`}>
@@ -464,25 +445,15 @@ export function MediaUploader({
         </div>
       )}
 
-      {/* LFS Warning */}
-      {lfsFiles.length > 0 && (
-        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+      {/* LFS Info - Only show if files are very large (>100MB) */}
+      {hasLargeFiles && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
           <div className="flex items-start">
-            <HardDrive className="w-5 h-5 text-amber-500 mt-0.5" />
-            <div className="ml-3">
-              <h4 className="text-sm font-medium text-amber-800">Large Files Detected</h4>
-              <p className="text-sm text-amber-700 mt-1">
-                {lfsFiles.length} file{lfsFiles.length > 1 ? 's' : ''} recommended for Git LFS
-                tracking. These files are large and should be stored using Git Large File Storage
-                for better performance.
+            <HardDrive className="w-4 h-4 text-blue-500 mt-0.5" />
+            <div className="ml-2">
+              <p className="text-xs text-blue-700">
+                Files ≥1MB automatically use Git LFS for optimal performance.
               </p>
-              <div className="mt-2 space-y-1">
-                {lfsFiles.map(file => (
-                  <div key={file.id} className="text-xs text-amber-600">
-                    • {file.name} ({formatFileSize(file.size)}) - {file.lfsAnalysis?.reason}
-                  </div>
-                ))}
-              </div>
             </div>
           </div>
         </div>
@@ -515,8 +486,8 @@ export function MediaUploader({
           {acceptedTypes ? acceptedTypes.join(', ') : 'All file types'}
           {multiple && ` (up to ${maxFiles} files)`}
         </p>
-        <p className="text-xs text-amber-600 mt-1">
-          📏 File size limit: 100MB per file • Files over 50MB recommended for Git LFS
+        <p className="text-xs text-blue-600 mt-1">
+          Files ≥1MB automatically use Git LFS • Maximum: 2GB per file
         </p>
       </div>
 
@@ -524,7 +495,7 @@ export function MediaUploader({
       {hasFiles && (
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <h4 className="text-sm font-medium text-gray-900">Files ({files.length})</h4>
+            <h4 className="text-sm font-medium text-gray-900">Files ({pendingFiles.length})</h4>
             <div className="flex items-center space-x-2">
               {pendingFiles.length > 0 && (
                 <button
@@ -547,27 +518,9 @@ export function MediaUploader({
             </div>
           </div>
 
-          {/* Stats */}
-          {(uploadingFiles.length > 0 || completedFiles.length > 0 || errorFiles.length > 0) && (
-            <div className="grid grid-cols-3 gap-4 text-sm">
-              <div className="text-center p-2 bg-blue-50 rounded">
-                <div className="font-medium text-blue-900">{uploadingFiles.length}</div>
-                <div className="text-blue-600">Uploading</div>
-              </div>
-              <div className="text-center p-2 bg-green-50 rounded">
-                <div className="font-medium text-green-900">{completedFiles.length}</div>
-                <div className="text-green-600">Completed</div>
-              </div>
-              <div className="text-center p-2 bg-red-50 rounded">
-                <div className="font-medium text-red-900">{errorFiles.length}</div>
-                <div className="text-red-600">Errors</div>
-              </div>
-            </div>
-          )}
-
-          {/* File Items */}
+          {/* File Items - Only Pending Files (progress shown in floating indicator) */}
           <div className="space-y-2 max-h-64 overflow-y-auto">
-            {files.map(file => (
+            {pendingFiles.map(file => (
               <div
                 key={file.id}
                 className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg border border-gray-200"
@@ -600,48 +553,15 @@ export function MediaUploader({
 
                   <div className="flex items-center space-x-3 text-xs text-gray-500">
                     <span>{formatFileSize(file.size)}</span>
-                    {file.status === 'uploading' && file.currentSpeed && (
-                      <span className="flex items-center">
-                        <Zap className="w-3 h-3 mr-1" />
-                        {NetworkUtils.formatSpeed(file.currentSpeed)}
-                      </span>
-                    )}
-                    {file.status === 'uploading' && file.estimatedTime && (
-                      <span className="flex items-center">
-                        <Clock className="w-3 h-3 mr-1" />
-                        {NetworkUtils.formatTime(file.estimatedTime)}
-                      </span>
-                    )}
                   </div>
-
-                  {/* Progress Bar */}
-                  {file.status === 'uploading' && (
-                    <div className="mt-2">
-                      <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                        <div
-                          className="h-2 transition-all duration-300 bg-blue-500"
-                          style={{ width: `${file.progress}%` }}
-                        />
-                      </div>
-                      <div className="flex items-center justify-between mt-1 text-xs text-gray-500">
-                        <span>Uploading...</span>
-                        <span>{Math.round(file.progress)}%</span>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Error Message */}
-                  {file.error && <p className="text-xs text-red-600 mt-1">{file.error}</p>}
                 </div>
 
-                {/* Status and Actions */}
+                {/* Remove Button */}
                 <div className="flex items-center space-x-2">
-                  {getStatusIcon(file)}
                   <button
                     type="button"
                     onClick={() => removeFile(file.id)}
-                    disabled={file.status === 'uploading'}
-                    className="text-gray-400 hover:text-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="text-gray-400 hover:text-gray-600"
                   >
                     <X className="w-4 h-4" />
                   </button>

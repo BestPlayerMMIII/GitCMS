@@ -594,71 +594,6 @@ export function MediaLibrary({
             </nav>
           </div>
         )}
-
-        {/* Advanced Search + Filters */}
-        <div className="mb-6">
-          <AdvancedMediaSearch media={media} onSearchResults={handleSearchResults} />
-
-          {/* Virtual Folder Organization */}
-          <div className="mt-6">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-medium text-gray-900">Virtual Folders</h3>
-              <button
-                type="button"
-                onClick={() => setShowVirtualFolders(true)}
-                className="px-3 py-1 text-xs bg-gray-600 text-white rounded hover:bg-gray-700 flex items-center gap-1"
-              >
-                <Settings className="w-3 h-3" />
-                Manage
-              </button>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => setSelectedVirtualFolder(null)}
-                className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                  !selectedVirtualFolder
-                    ? 'bg-green-100 text-green-800 border border-green-200'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                All Media ({media.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setSelectedVirtualFolder('unorganized')}
-                className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                  selectedVirtualFolder === 'unorganized'
-                    ? 'bg-green-100 text-green-800 border border-green-200'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                Unorganized ({getUnorganizedMedia(media.map(m => m.id)).length})
-              </button>
-              {virtualFolders.map(folder => {
-                const count = folder.mediaIds.length;
-                return (
-                  <button
-                    key={folder.id}
-                    type="button"
-                    onClick={() => setSelectedVirtualFolder(folder.id)}
-                    className={`px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center ${
-                      selectedVirtualFolder === folder.id
-                        ? 'bg-green-100 text-green-800 border border-green-200'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    <div
-                      className="w-3 h-3 rounded mr-2"
-                      style={{ backgroundColor: folder.color }}
-                    />
-                    {folder.name} ({count})
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* Tab Content */}
@@ -666,6 +601,11 @@ export function MediaLibrary({
         <div>
           {activeTab === 'library' && (
             <div>
+              {/* Advanced Search + Filters */}
+              <div className="mb-6">
+                <AdvancedMediaSearch media={media} onSearchResults={handleSearchResults} />
+                {/* TODO: Virtual Folder Organization */}
+              </div>
               {/* Bulk Operations */}
               {selectedMedia.size > 0 && (
                 <div className="mb-6">

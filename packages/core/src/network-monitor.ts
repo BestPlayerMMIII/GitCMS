@@ -1,3 +1,6 @@
+import networkTestData from './ignore/network-test.json';
+const networkTest = networkTestData as { url: string; size: number }[];
+
 /**
  * Network monitoring and upload progress simulation utilities
  * Provides intelligent progress simulation based on connection speed
@@ -19,22 +22,28 @@ export interface NetworkStats {
 }
 
 export interface UploadProgressSimulation {
-  /** Current progress percentage (0-98) */
+  /** Current progress percentage (0-100) */
   progress: number;
-  /** Estimated time remaining in seconds */
+  /** Estimated time remaining in milliseconds */
   estimatedTimeRemaining: number;
   /** Current upload speed in bytes/second */
   currentSpeed: number;
-  /** Whether simulation is complete (reached 98%) */
+  /** Current simulation phase */
+  phase: 'network' | 'entertainment' | 'waiting' | 'complete';
+  /** Whether simulation is complete */
   isSimulationComplete: boolean;
 }
 
 export interface ProgressSimulationConfig {
   /** File size in bytes */
   fileSize: number;
-  /** Maximum progress percentage before waiting for actual upload (default: 98) */
+  /** Threshold where entertainment phase starts (0-1, e.g., 0.9 = 90%) - default: 0.9 */
+  alpha?: number;
+  /** Decay factor for entertainment phase (0-1, e.g., 0.4 = 40% of remaining) - default: 0.4 */
+  beta?: number;
+  /** Maximum progress percentage before waiting for actual upload (default: 99) */
   maxProgress?: number;
-  /** Update interval in milliseconds (default: 1000) */
+  /** Update interval in milliseconds (default: 2000) */
   updateInterval?: number;
   /** Speed smoothing factor (0-1, default: 0.7) */
   smoothingFactor?: number;
@@ -65,11 +74,20 @@ export class NetworkMonitor {
 
   /**
    * Start monitoring network performance
+   * This method is idempotent - calling it multiple times will not create multiple intervals
    */
-  async startMonitoring(intervalMs: number = 5000): Promise<void> {
-    if (this.isMonitoring) return;
-
+  async startMonitoring(intervalMs: number = 3000): Promise<void> {
+    // If already monitoring, do nothing
+    if (this.isMonitoring) {
+      return;
+    }
     this.isMonitoring = true;
+
+    // Clear any orphaned interval (defensive)
+    if (this.monitoringInterval) {
+      clearInterval(this.monitoringInterval);
+      this.monitoringInterval = null;
+    }
 
     // Initial measurement
     await this.measureNetworkSpeed();
@@ -82,13 +100,16 @@ export class NetworkMonitor {
 
   /**
    * Stop monitoring network performance
+   * Note: This is primarily for cleanup. The singleton pattern means monitoring
+   * should generally stay active once started, but components can call this
+   * if they need to stop monitoring globally.
    */
   stopMonitoring(): void {
-    this.isMonitoring = false;
     if (this.monitoringInterval) {
       clearInterval(this.monitoringInterval);
       this.monitoringInterval = null;
     }
+    this.isMonitoring = false;
   }
 
   /**
@@ -116,11 +137,17 @@ export class NetworkMonitor {
   /**
    * Measure current network speed using multiple techniques
    */
-  private async measureNetworkSpeed(): Promise<NetworkStats> {
+  private async measureNetworkSpeed(): Promise<void> {
+    // evaluate if we really need to measure or it's useless
+    if (this.callbacks.length === 0) {
+      return;
+    }
+    // if here, we have subscribers - measure speed
+
+    // Use multiple methods to get a more accurate picture
     const measurements = await Promise.allSettled([
       this.measureWithImageDownload(),
       this.measureWithNetworkAPI(),
-      this.measureWithPingTest(),
     ]);
 
     // Combine results and calculate averages
@@ -132,8 +159,8 @@ export class NetworkMonitor {
       .map(result => result.value);
 
     const stats: NetworkStats = {
-      downloadSpeed: this.calculateAverage(validResults, 'downloadSpeed') || 1000000, // 1MB/s default
-      uploadSpeed: this.calculateAverage(validResults, 'uploadSpeed') || 500000, // 500KB/s default
+      downloadSpeed: this.calculateAverage(validResults, 'downloadSpeed') || 1 * 1024 * 1024, // 1MB/s default
+      uploadSpeed: this.calculateAverage(validResults, 'uploadSpeed') || 500 * 1024, // 500KB/s default
       rtt: this.calculateAverage(validResults, 'rtt') || 100, // 100ms default
       connectionType: this.detectConnectionType(),
       timestamp: Date.now(),
@@ -141,7 +168,7 @@ export class NetworkMonitor {
 
     // Smooth the values if we have previous stats
     if (this.networkStats) {
-      const smoothing = 0.7;
+      const smoothing = 0.1;
       stats.downloadSpeed = this.smooth(
         stats.downloadSpeed,
         this.networkStats.downloadSpeed,
@@ -155,39 +182,75 @@ export class NetworkMonitor {
 
     // Notify subscribers
     this.callbacks.forEach(callback => callback(stats));
-
-    return stats;
   }
 
   /**
    * Measure speed by downloading a small image
    */
   private async measureWithImageDownload(): Promise<Partial<NetworkStats>> {
-    try {
-      const testUrl = 'https://httpbin.org/bytes/100000'; // 100KB test
-      const startTime = performance.now();
+    // Use Image() to avoid CORS issues
+    return new Promise<Partial<NetworkStats>>(resolve => {
+      const times = [0, 0];
+      const imageUrls = [networkTest[0].url, networkTest[1].url];
+      const imageSizes = [networkTest[0].size, networkTest[1].size];
+      let finished = 0;
+      let failed = false;
 
-      const response = await fetch(testUrl, {
-        cache: 'no-cache',
-        signal: AbortSignal.timeout(10000),
-      });
+      function maybeResolve() {
+        finished++;
+        if (failed) return; // Already resolved due to error
+        if (finished === 2) {
+          // Both images loaded successfully
+          if (times[0] > 0 && times[1] > 0 && times[1] > times[0]) {
+            const downloadSpeed = (imageSizes[1] - imageSizes[0]) / (times[1] - times[0]); // bytes/second
+            const rtt = (times[0] - imageSizes[0] / downloadSpeed) * 1000; // ms
+            resolve({
+              downloadSpeed,
+              uploadSpeed: downloadSpeed * 0.5,
+              rtt,
+            });
+          } else {
+            resolve({});
+          }
+        }
+      }
 
-      if (!response.ok) throw new Error('Test failed');
+      for (let i = 0; i < 2; i++) {
+        try {
+          const testUrl = imageUrls[i];
+          const img = new Image();
+          const startTime = performance.now();
+          let timeout: any = null;
 
-      await response.blob();
-      const endTime = performance.now();
+          timeout = setTimeout(() => {
+            if (!failed) {
+              failed = true;
+              resolve({});
+            }
+          }, 10000);
 
-      const duration = (endTime - startTime) / 1000; // seconds
-      const downloadSpeed = 100000 / duration; // bytes/second
-
-      return {
-        downloadSpeed,
-        uploadSpeed: downloadSpeed * 0.5, // Estimate upload as 50% of download
-        rtt: duration * 1000 * 0.1, // Estimate RTT
-      };
-    } catch (error) {
-      return {};
-    }
+          img.onload = () => {
+            clearTimeout(timeout);
+            const endTime = performance.now();
+            times[i] = (endTime - startTime) / 1000; // seconds
+            maybeResolve();
+          };
+          img.onerror = () => {
+            clearTimeout(timeout);
+            if (!failed) {
+              failed = true;
+              resolve({});
+            }
+          };
+          img.src = testUrl + (testUrl.includes('?') ? '&' : '?') + 'cb=' + Date.now();
+        } catch (error) {
+          if (!failed) {
+            failed = true;
+            resolve({});
+          }
+        }
+      }
+    });
   }
 
   /**
@@ -208,27 +271,6 @@ export class NetworkMonitor {
         rtt,
         connectionType: connection.effectiveType,
       };
-    } catch (error) {
-      return {};
-    }
-  }
-
-  /**
-   * Simple ping test using fetch timing
-   */
-  private async measureWithPingTest(): Promise<Partial<NetworkStats>> {
-    try {
-      const startTime = performance.now();
-
-      await fetch('https://httpbin.org/get', {
-        method: 'HEAD',
-        cache: 'no-cache',
-        signal: AbortSignal.timeout(5000),
-      });
-
-      const rtt = performance.now() - startTime;
-
-      return { rtt };
     } catch (error) {
       return {};
     }
@@ -274,25 +316,42 @@ export class NetworkMonitor {
 }
 
 /**
- * Upload progress simulator
+ * Upload progress simulator with 2-phase intelligent algorithm
+ *
+ * Phase 1 (Network): 0% → 100alpha% - Progress based on measured network speed
+ * Phase 2 (Entertainment): 100alpha% → maxProgress% - Exponential decay with beta factor
+ * Phase 3 (Waiting): 99% - Waits for actual completion signal
+ * Phase 4 (Complete): 100% - Upload finished
+ *
  * Provides realistic progress simulation based on network conditions
  */
+export type SimulationPhase = 'network' | 'entertainment' | 'waiting' | 'complete';
 export class UploadProgressSimulator {
   private config: Required<ProgressSimulationConfig>;
   private startTime: number = 0;
+  private lastUpdateTime: number = 0;
   private currentProgress: number = 0;
+  private elapsedTimeAtAlpha: number | undefined = undefined;
+  private phase: SimulationPhase = 'network';
   private simulationInterval: NodeJS.Timeout | null = null;
   private callbacks: Array<(progress: UploadProgressSimulation) => void> = [];
   private networkMonitor: NetworkMonitor;
   private isRunning = false;
+  private fallbackUploadSpeed = 500 * 1024; // 500KB/s fallback
 
   constructor(config: ProgressSimulationConfig) {
     this.config = {
-      maxProgress: 98,
-      updateInterval: 1000,
+      alpha: 0.9,
+      beta: 0.4,
+      maxProgress: 99,
+      updateInterval: 2000,
       smoothingFactor: 0.7,
       ...config,
     };
+
+    // Clamp alpha and beta to valid ranges
+    this.config.alpha = Math.max(0, Math.min(1, this.config.alpha));
+    this.config.beta = Math.max(0, Math.min(1, this.config.beta));
 
     this.networkMonitor = NetworkMonitor.getInstance();
   }
@@ -305,10 +364,12 @@ export class UploadProgressSimulator {
 
     this.isRunning = true;
     this.startTime = Date.now();
+    this.lastUpdateTime = this.startTime;
     this.currentProgress = 0;
+    this.phase = 'network';
 
     // Ensure network monitoring is active
-    await this.networkMonitor.startMonitoring();
+    await this.networkMonitor.startMonitoring(this.config.updateInterval);
 
     // Start simulation loop
     this.simulationInterval = setInterval(() => {
@@ -332,6 +393,16 @@ export class UploadProgressSimulator {
   }
 
   /**
+   * Mark upload as complete (jumps to 100%)
+   */
+  complete(): void {
+    this.stop();
+    this.currentProgress = 100;
+    this.phase = 'complete';
+    this.notifySubscribers();
+  }
+
+  /**
    * Subscribe to progress updates
    */
   subscribe(callback: (progress: UploadProgressSimulation) => void): () => void {
@@ -346,51 +417,111 @@ export class UploadProgressSimulator {
   }
 
   /**
-   * Update progress based on current network conditions
+   * Update progress based on current phase and network conditions
    */
   private updateProgress(): void {
     if (!this.isRunning) return;
 
-    const networkStats = this.networkMonitor.getCurrentStats();
+    // Check if we've reached the waiting threshold
+    if (this.currentProgress >= this.config.maxProgress) {
+      this.phase = 'waiting';
+      this.notifySubscribers();
+      return;
+    }
+
     const currentTime = Date.now();
-    const elapsedSeconds = (currentTime - this.startTime) / 1000;
+    const elapsed = currentTime - this.lastUpdateTime;
 
-    if (!networkStats) {
-      // Fallback to basic time-based progress
-      this.currentProgress = Math.min(elapsedSeconds * 5, this.config.maxProgress);
+    const alphaThreshold = this.config.alpha * 100;
+
+    if (this.currentProgress < alphaThreshold) {
+      // Phase 1: Network-based simulation
+      this.phase = 'network';
+      this.updateNetworkPhase(elapsed);
     } else {
-      // Calculate progress based on upload speed
-      const uploadSpeed = networkStats.uploadSpeed;
-      const expectedBytesUploaded = uploadSpeed * elapsedSeconds;
-      const rawProgress = (expectedBytesUploaded / this.config.fileSize) * 100;
-
-      // Apply smoothing and cap at maxProgress
-      const smoothedProgress =
-        this.currentProgress * this.config.smoothingFactor +
-        rawProgress * (1 - this.config.smoothingFactor);
-
-      this.currentProgress = Math.min(smoothedProgress, this.config.maxProgress);
+      // Phase 2: Entertainment (exponential decay)
+      this.phase = 'entertainment';
+      this.updateEntertainmentPhase();
     }
 
-    // Calculate remaining time
-    const remainingProgress = this.config.maxProgress - this.currentProgress;
-    const progressRate = this.currentProgress / elapsedSeconds;
-    const estimatedTimeRemaining = progressRate > 0 ? remainingProgress / progressRate : Infinity;
+    this.lastUpdateTime = currentTime;
+    this.notifySubscribers();
+  }
 
-    const progressUpdate: UploadProgressSimulation = {
-      progress: Math.max(0, Math.min(this.currentProgress, this.config.maxProgress)),
-      estimatedTimeRemaining: Math.max(0, Math.min(estimatedTimeRemaining, 3600)), // Cap at 1 hour
-      currentSpeed: networkStats?.uploadSpeed || 500000,
-      isSimulationComplete: this.currentProgress >= this.config.maxProgress,
-    };
+  /**
+   * Phase 1: Network-based progress calculation
+   */
+  private updateNetworkPhase(elapsedMs: number): void {
+    const networkStats = this.networkMonitor.getCurrentStats();
+    const uploadSpeed = networkStats?.uploadSpeed || this.fallbackUploadSpeed;
+    const maxPercentage = this.config.alpha * 100;
 
-    // Notify subscribers
-    this.callbacks.forEach(callback => callback(progressUpdate));
+    // Calculate progress based on actual upload speed
+    const bytesUploaded = (uploadSpeed * elapsedMs) / 1000;
+    const progressIncrement = (bytesUploaded / this.config.fileSize) * maxPercentage;
 
-    // Auto-stop when simulation is complete
-    if (progressUpdate.isSimulationComplete) {
-      this.stop();
+    // Apply smoothing
+    const rawProgress = this.currentProgress + progressIncrement;
+    const smoothedProgress =
+      this.currentProgress * this.config.smoothingFactor +
+      rawProgress * (1 - this.config.smoothingFactor);
+
+    this.currentProgress = Math.min(smoothedProgress, maxPercentage);
+    if (this.currentProgress === maxPercentage && this.elapsedTimeAtAlpha === undefined) {
+      this.elapsedTimeAtAlpha = Date.now() - this.startTime;
     }
+  }
+
+  /**
+   * Phase 2: Entertainment phase with exponential decay
+   */
+  private updateEntertainmentPhase(): void {
+    // Exponential decay: increment = (maxProgress - current) * beta
+    const remaining = this.config.maxProgress - this.currentProgress;
+    const increment = remaining * this.config.beta;
+
+    this.currentProgress = Math.min(this.currentProgress + increment, this.config.maxProgress);
+  }
+
+  /**
+   * Calculate estimated time remaining
+   */
+  private calculateTimeRemaining(): number {
+    if (this.currentProgress >= this.config.maxProgress) {
+      return 0;
+    }
+
+    if (this.phase === 'network') {
+      // Network phase: calculate based on upload speed
+      const networkStats = this.networkMonitor.getCurrentStats();
+      const uploadSpeed = networkStats?.uploadSpeed || this.fallbackUploadSpeed;
+
+      const remainingProgress = this.config.alpha * 100 - this.currentProgress;
+      const remainingBytes = (remainingProgress / 100) * this.config.fileSize;
+      return (remainingBytes / uploadSpeed) * 1000; // Convert to milliseconds
+    } else if (this.phase === 'entertainment') {
+      // Entertainment phase: estimate based on exponential decay
+      const remaining = this.config.maxProgress - this.currentProgress;
+
+      // Calculate number of steps to reach ~maxProgress%
+      // Each step: remaining * beta
+      // After n steps: remaining * (1-beta)^n
+      // We want (1-beta)^n ≈ 0.01*(100-maxProgress), so
+      // n = log(0.01*(100-maxProgress)) / log(1-beta)
+      const stepsToComplete =
+        Math.log(0.01 * (100 - this.config.maxProgress)) / Math.log(1 - this.config.beta);
+
+      return stepsToComplete * this.config.updateInterval;
+    }
+
+    return 1000; // Default 1 second
+  }
+
+  /**
+   * Notify all subscribers with current progress
+   */
+  private notifySubscribers(): void {
+    this.callbacks.forEach(callback => callback(this.getCurrentProgress()));
   }
 
   /**
@@ -398,55 +529,65 @@ export class UploadProgressSimulator {
    */
   getCurrentProgress(): UploadProgressSimulation {
     const networkStats = this.networkMonitor.getCurrentStats();
+    const estimatedTimeRemaining = this.calculateTimeRemaining();
 
     return {
       progress: this.currentProgress,
-      estimatedTimeRemaining: 0,
-      currentSpeed: networkStats?.uploadSpeed || 500000,
-      isSimulationComplete: this.currentProgress >= this.config.maxProgress,
+      estimatedTimeRemaining,
+      currentSpeed: networkStats?.uploadSpeed || this.fallbackUploadSpeed,
+      phase: this.phase,
+      isSimulationComplete:
+        this.currentProgress >= this.config.maxProgress || this.phase === 'complete',
     };
   }
 }
 
 /**
- * Utility functions for network monitoring
+ * Utility functions for network monitoring and progress display
  */
+export type ConnectionQuality = 'Excellent' | 'Very Good' | 'Good' | 'Fair' | 'Slow' | 'Very Slow';
 export const NetworkUtils = {
   /**
    * Format speed in human-readable format
    */
   formatSpeed(bytesPerSecond: number): string {
-    const units = ['B/s', 'KB/s', 'MB/s', 'GB/s'];
-    let value = bytesPerSecond;
-    let unitIndex = 0;
+    const mbps = bytesPerSecond / (1024 * 1024);
 
-    while (value >= 1024 && unitIndex < units.length - 1) {
-      value /= 1024;
-      unitIndex++;
+    if (mbps < 1) {
+      const kbps = bytesPerSecond / 1024;
+      return `${kbps.toFixed(0)} KB/s`;
     }
 
-    return `${value.toFixed(1)} ${units[unitIndex]}`;
+    return `${mbps.toFixed(1)} MB/s`;
   },
 
   /**
    * Format time in human-readable format
    */
-  formatTime(seconds: number): string {
-    if (!isFinite(seconds) || seconds < 0) return 'Unknown';
+  formatTime(milliseconds: number): string {
+    if (!isFinite(milliseconds) || milliseconds < 0) return 'Unknown';
 
-    if (seconds < 60) return `${Math.round(seconds)}s`;
-    if (seconds < 3600) return `${Math.round(seconds / 60)}m ${Math.round(seconds % 60)}s`;
+    const seconds = Math.floor(milliseconds / 1000);
 
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    return `${hours}h ${minutes}m`;
+    if (seconds < 60) return `${seconds}s`;
+
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+
+    if (minutes < 60) {
+      return remainingSeconds > 0 ? `${minutes}m ${remainingSeconds}s` : `${minutes}m`;
+    }
+
+    const hours = Math.floor(minutes / 60);
+    const remainingMinutes = minutes % 60;
+    return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
   },
 
   /**
-   * Get connection quality description
+   * Get connection quality description based on upload speed
    */
-  getConnectionQuality(speed: number): string {
-    const mbps = (speed / 1000000) * 8;
+  getConnectionQuality(bytesPerSecond: number): ConnectionQuality {
+    const mbps = (bytesPerSecond / (1024 * 1024)) * 8;
 
     if (mbps > 50) return 'Excellent';
     if (mbps > 25) return 'Very Good';
@@ -454,5 +595,63 @@ export const NetworkUtils = {
     if (mbps > 5) return 'Fair';
     if (mbps > 1) return 'Slow';
     return 'Very Slow';
+  },
+
+  /**
+   * Get color class based on connection quality
+   */
+  getConnectionColor(quality: string): string {
+    switch (quality) {
+      case 'Excellent':
+        return 'text-purple-500';
+      case 'Very Good':
+        return 'text-green-500';
+      case 'Good':
+        return 'text-green-400';
+      case 'Fair':
+        return 'text-amber-500';
+      case 'Slow':
+        return 'text-orange-500';
+      case 'Very Slow':
+        return 'text-red-500';
+      default:
+        return 'text-gray-400';
+    }
+  },
+
+  /**
+   * Get progress bar color based on phase
+   */
+  getProgressColor(phase: string): string {
+    switch (phase) {
+      case 'network':
+        return 'bg-blue-500';
+      case 'entertainment':
+        return 'bg-purple-500';
+      case 'waiting':
+        return 'bg-amber-500';
+      case 'complete':
+        return 'bg-green-500';
+      default:
+        return 'bg-gray-500';
+    }
+  },
+
+  /**
+   * Get progress bar animation based on phase
+   */
+  getProgressAnimation(phase: string): string {
+    switch (phase) {
+      case 'network':
+        return 'transition-all duration-500 ease-linear';
+      case 'entertainment':
+        return 'transition-all duration-1000 ease-out';
+      case 'waiting':
+        return 'animate-pulse';
+      case 'complete':
+        return 'transition-all duration-300';
+      default:
+        return 'transition-all duration-300';
+    }
   },
 };

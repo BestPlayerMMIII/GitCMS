@@ -183,18 +183,10 @@ interface AdvancedMediaSearchProps {
   onSearchResults: (
     results: MediaSearchResult & { hasActiveSearch: boolean; showHidden?: boolean }
   ) => void;
-  availableLabels?: MediaLabel[];
-  availableCollections?: MediaCollection[];
   className?: string;
 }
 
-function AdvancedMediaSearch({
-  media,
-  onSearchResults,
-  availableLabels = [],
-  availableCollections = [],
-  className = '',
-}: AdvancedMediaSearchProps) {
+function AdvancedMediaSearch({ media, onSearchResults, className = '' }: AdvancedMediaSearchProps) {
   const [searchOptions, setSearchOptions] = useState<MediaSearchOptions>({
     query: '',
     sortBy: 'name',

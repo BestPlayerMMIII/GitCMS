@@ -295,6 +295,23 @@ async function handleGetRepositoryMedia(
 
     for (const file of files) {
       if (file.type === 'file') {
+        // Start with the GitHub API reported size
+        let actualSize = file.size || 0;
+
+        // Check if this is an LFS pointer file (they're tiny, ~130 bytes)
+        // If file is suspiciously small, fetch it and check if it's an LFS pointer
+        if (actualSize < 200) {
+          try {
+            const fileWithLFS = await githubClient.getFileWithLFSInfo(file.path);
+            if (fileWithLFS.lfsSize) {
+              actualSize = fileWithLFS.lfsSize;
+              console.log(`LFS file detected: ${file.name}, actual size: ${actualSize} bytes`);
+            }
+          } catch (error) {
+            console.warn(`Could not check LFS info for ${file.path}:`, error);
+          }
+        }
+
         // Create media file object from GitHub file
         const mediaType =
           MediaValidator.getMediaType({
@@ -328,7 +345,7 @@ async function handleGetRepositoryMedia(
           filename: file.name,
           originalName: file.name,
           path: file.path,
-          size: file.size || 0,
+          size: actualSize, // Use the actual size (LFS-aware)
           mimeType: getMimeTypeFromExtension(file.name),
           mediaType,
           url: imageUrl,
@@ -439,34 +456,32 @@ async function handleUploadMedia(request: NextRequest, accessToken: string): Pro
       );
     }
 
-    // Check for large files (GitHub has a 100MB limit)
+    // Check for large files (GitHub LFS has a 2GB limit)
     const fileSizeMB = file.size / (1024 * 1024);
-    if (fileSizeMB > 100) {
+    const fileSizeGB = fileSizeMB / 1024;
+    if (fileSizeGB > 2) {
       return NextResponse.json(
         {
-          error: `File too large (${fileSizeMB.toFixed(1)}MB). GitHub supports files up to 100MB.`,
-          details:
-            'Consider using Git LFS for large files, or compress the file to reduce its size.',
+          error: `File too large (${fileSizeGB.toFixed(2)}GB). GitHub LFS supports files up to 2GB.`,
+          details: 'Please compress the file or split it into smaller parts.',
         },
         { status: 413 } // Payload Too Large
       );
     }
 
-    // Info about large files (files > 1MB use Git LFS or Git Data API)
-    if (fileSizeMB > 1) {
+    // Info about large files (files ≥1MB automatically use Git LFS)
+    if (fileSizeMB >= 1) {
       console.log(
-        `Large file detected: ${file.name} (${fileSizeMB.toFixed(1)}MB). Will use Git LFS or Git Data API for upload.`
+        `Large file detected: ${file.name} (${fileSizeMB.toFixed(1)}MB). Will automatically use Git LFS.`
       );
     }
 
-    // Recommend LFS for files larger than 10MB
-    if (fileSizeMB > 10) {
+    // Recommend enabling LFS for very large files (>100MB) if not already configured
+    if (fileSizeMB > 100) {
       console.log(
-        `⚠️ Large file detected: ${file.name} (${fileSizeMB.toFixed(1)}MB). Git LFS is strongly recommended.`
+        `⚠️  Very large file: ${file.name} (${fileSizeMB.toFixed(1)}MB). Ensure Git LFS is enabled in your repository.`
       );
-      console.log(
-        `   If upload fails, please enable Git LFS in your repository: https://git-lfs.github.com/`
-      );
+      console.log(`   If upload fails, please check: https://git-lfs.github.com/`);
     }
 
     // Upload to GitHub

@@ -20,7 +20,9 @@ export function SessionProvider({ children }: SessionProviderProps) {
         </div>
       }
     >
-      <NextAuthSessionProvider>{children}</NextAuthSessionProvider>
+      <NextAuthSessionProvider refetchOnWindowFocus={false} refetchInterval={0}>
+        {children}
+      </NextAuthSessionProvider>
     </Suspense>
   );
 }
