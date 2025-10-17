@@ -412,11 +412,6 @@ export const cacheInvalidation = {
     globalCache.delete(createCacheKey.registrySchemas());
   },
 
-  // Invalidate schema mapping for a repository
-  invalidateSchemaMapping: (owner: string, repo: string) => {
-    globalCache.delete(`schema-mapping:${owner}:${repo}`);
-  },
-
   // Clear all caches
   clearAll: () => {
     globalCache.clear();

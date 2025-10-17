@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import type { GitCMSSchema, FieldDefinition, FieldType } from '@git-cms/core';
 import { SchemaReferenceSelector } from './schema-reference-selector';
 import { useRegistrySchemas, useRepoSchemas } from '../../lib/api-hooks';
-import { ProgressiveLoading } from '../ui/loading';
 import { CategoryManager } from './category-manager';
 import { useCategories } from '@/hooks/use-categories';
 import { IdValidationInput } from '../ui/id-validation-input';
@@ -166,7 +165,7 @@ export function SchemaEditor({
       return null; // Don't show error for empty field until form submission
     }
 
-    if (!/^[a-z0-9-]+$/.test(newId)) {
+    if (!/^[a-z0-9_-]+$/.test(newId)) {
       return 'Schema ID must contain only lowercase letters, numbers, and hyphens';
     }
 

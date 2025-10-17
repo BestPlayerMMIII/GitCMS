@@ -7,7 +7,6 @@ export interface GitCMSRepositoryConfig {
   mediaPath: string;
   collections: string[];
   schemas: Record<string, any>;
-  schemaIdMapping?: Record<string, string>; // system-defined-id: user-defined-id
   createdAt: string;
   [key: string]: any;
 }
@@ -21,7 +20,6 @@ export const DEFAULT_GITCMS_CONFIG: Partial<GitCMSRepositoryConfig> = {
   mediaPath: 'media',
   collections: [],
   schemas: {},
-  schemaIdMapping: {},
 } as const;
 
 /**
@@ -32,7 +30,6 @@ export const DEFAULT_GITCMS_PATHS = {
   schemasDir: '.gitcms/schemas',
   metadataDir: '.gitcms/schemas/.metadata',
   configFile: '.gitcms/config.json',
-  schemaIdMappingFile: '.gitcms/schemas/.metadata/id-mapping.json',
 } as const;
 
 /**
@@ -75,74 +72,4 @@ export function validateGitCMSConfig(config: any): config is GitCMSRepositoryCon
     Array.isArray(config.collections) &&
     typeof config.schemas === 'object'
   );
-}
-
-/**
- * Generate a system-defined schema ID (UUID-like but shorter)
- */
-export function generateSystemSchemaId(): string {
-  return `schema_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-}
-
-/**
- * Get system schema ID from user-defined ID using mapping
- */
-export function getSystemSchemaId(
-  userDefinedId: string,
-  config?: Partial<GitCMSRepositoryConfig> | null
-): string {
-  const mapping = config?.schemaIdMapping || {};
-
-  // Find the system ID that maps to this user ID
-  for (const [systemId, userId] of Object.entries(mapping)) {
-    if (userId === userDefinedId) {
-      return systemId;
-    }
-  }
-
-  // If no mapping exists, return the user ID (for backward compatibility)
-  return userDefinedId;
-}
-
-/**
- * Get user-defined schema ID from system ID using mapping
- */
-export function getUserSchemaId(
-  systemId: string,
-  config?: Partial<GitCMSRepositoryConfig> | null
-): string {
-  const mapping = config?.schemaIdMapping || {};
-  return mapping[systemId] || systemId;
-}
-
-/**
- * Update schema ID mapping when a schema ID changes
- */
-export function updateSchemaIdMapping(
-  systemId: string,
-  newUserDefinedId: string,
-  config: Partial<GitCMSRepositoryConfig>
-): GitCMSRepositoryConfig {
-  const updatedConfig = { ...config };
-  if (!updatedConfig.schemaIdMapping) {
-    updatedConfig.schemaIdMapping = {};
-  }
-
-  updatedConfig.schemaIdMapping[systemId] = newUserDefinedId;
-
-  return updatedConfig as GitCMSRepositoryConfig;
-}
-
-/**
- * Create a new schema ID mapping entry
- */
-export function createSchemaIdMapping(
-  userDefinedId: string,
-  config: Partial<GitCMSRepositoryConfig>,
-  systemId?: string
-): { systemId: string; updatedConfig: GitCMSRepositoryConfig } {
-  const finalSystemId = systemId || generateSystemSchemaId();
-  const updatedConfig = updateSchemaIdMapping(finalSystemId, userDefinedId, config);
-
-  return { systemId: finalSystemId, updatedConfig };
 }

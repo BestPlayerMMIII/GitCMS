@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ProgressiveLoading, ContentGridSkeleton } from '@/components/ui/loading';
-import { useContentList, useRepoSchemas, useContentMutations } from '@/lib/api-hooks';
+import { useRepoSchemas, useContentMutations, useContentList } from '@/lib/api-hooks';
 import { useRepository } from '@/contexts/repository-context';
 import type { GitCMSSchema } from '@git-cms/core';
 import { PageSubHeader } from '@/components/page-header';
@@ -468,7 +468,7 @@ function ContentListContent() {
             </div>
           ) : (
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-              {filteredContent.map(item => (
+              {filteredContent.map(async item => (
                 <div
                   key={`${item.schemaId}-${item.id}`}
                   className="bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow"

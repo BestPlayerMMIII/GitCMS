@@ -73,10 +73,10 @@ export function SchemaReferenceSelector({
 
         {/* Problematic schemas (disabled with explanation) */}
         {problematicSchemas.length > 0 && (
-          <optgroup label="Cannot Reference (Circular Dependency)">
+          <optgroup label="Cannot Reference (Would create Circular Dependency)">
             {problematicSchemas.map(schema => (
               <option key={schema.id} value={schema.id} disabled>
-                {schema.metadata.name} ({schema.id}) - Would create circular dependency
+                {schema.metadata.name} ({schema.id})
               </option>
             ))}
           </optgroup>

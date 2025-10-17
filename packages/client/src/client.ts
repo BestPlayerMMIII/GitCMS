@@ -1,13 +1,11 @@
 import { Octokit } from '@octokit/rest';
 import type { GitCMSConfig, Collection, ContentItem } from './types';
 import { CollectionRef } from './collections';
-import { getSystemSchemaId, type GitCMSRepositoryConfig } from '@git-cms/core';
 
 export class GitCMS {
   private octokit: Octokit;
   private config: GitCMSConfig;
   private transport: 'github' | 'http';
-  private schemaConfig: GitCMSRepositoryConfig | null = null;
 
   constructor(config: GitCMSConfig) {
     this.config = {
@@ -23,43 +21,10 @@ export class GitCMS {
   }
 
   /**
-   * Load schema configuration with ID mapping
+   * Get a reference to a collection
    */
-  private async loadSchemaConfig(): Promise<GitCMSRepositoryConfig | null> {
-    if (this.schemaConfig) {
-      return this.schemaConfig;
-    }
-
-    try {
-      const [owner, repo] = this.config.repository.split('/');
-      const response = await this.octokit.rest.repos.getContent({
-        owner,
-        repo,
-        path: '.gitcms/config.json',
-        ref: this.config.branch,
-      });
-
-      if ('content' in response.data) {
-        const content = Buffer.from(response.data.content, 'base64').toString('utf-8');
-        this.schemaConfig = JSON.parse(content);
-        return this.schemaConfig;
-      }
-    } catch (error) {
-      // Config doesn't exist or other error - continue without mapping
-      console.warn('Failed to load GitCMS config:', error);
-    }
-
-    return null;
-  }
-
-  /**
-   * Get a reference to a collection with schema ID mapping
-   */
-  async collection(name: string): Promise<CollectionRef> {
-    const schemaConfig = await this.loadSchemaConfig();
-    const systemSchemaId = getSystemSchemaId(name, schemaConfig);
-
-    return new CollectionRef(systemSchemaId, this.octokit, this.config);
+  collection(name: string): CollectionRef {
+    return new CollectionRef(name, this.octokit, this.config);
   }
 
   /**

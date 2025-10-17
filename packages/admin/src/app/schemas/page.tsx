@@ -7,16 +7,7 @@ import { SchemaList } from '@/components/schemas/schema-list';
 import { SchemaEditor } from '@/components/schemas/schema-editor';
 import { SchemaImportModal } from '@/components/schemas/schema-import-modal';
 import { ProgressiveLoading, SchemaListSkeleton } from '@/components/ui/loading';
-import {
-  useRepoSchemas,
-  useSchemaMutations,
-  useCacheInvalidation,
-  useSchemaMapping,
-  useSchemaMappingMutations,
-  getUserSchemaId,
-  getSystemSchemaId,
-} from '@/lib/api-hooks';
-import { convertSchemasToUserFormat } from '@/lib/schema-id-converter';
+import { useRepoSchemas, useSchemaMutations, useCacheInvalidation } from '@/lib/api-hooks';
 import { useRepository } from '@/contexts/repository-context';
 import type { GitCMSSchema } from '@git-cms/core';
 import { useNavigationHeader } from '@/contexts/navigation-context';
@@ -33,17 +24,13 @@ export default function SchemasPage() {
   const { repositoryInfo, setRepositoryInfo } = useRepository();
   const { setHeader } = useNavigationHeader();
 
-  // State for converted schemas (system -> user friendly)
-  const [displaySchemas, setDisplaySchemas] = useState<GitCMSSchema[]>([]);
-  const [schemasLoading, setSchemasLoading] = useState(false);
-
   // Cache invalidation utilities
   const { invalidateRepoSchemas } = useCacheInvalidation();
 
-  // Get schemas using cached hook (these use system IDs)
+  // Get schemas using cached hook (now returns user-defined IDs directly)
   const {
-    data: systemSchemas,
-    loading: systemSchemasLoading,
+    data: schemas,
+    loading: schemasLoading,
     error,
     refresh: refreshSchemas,
   } = useRepoSchemas(repositoryInfo?.owner || null, repositoryInfo?.repo || null, {
@@ -51,51 +38,11 @@ export default function SchemasPage() {
     fallbackToRegistry: true,
   });
 
-  // Schema mapping hooks
-  const { data: schemaMapping } = useSchemaMapping(
-    repositoryInfo?.owner || null,
-    repositoryInfo?.repo || null,
-    { enabled: Boolean(repositoryInfo) }
-  );
-
-  const { createMapping, updateMapping } = useSchemaMappingMutations(
-    repositoryInfo?.owner || null,
-    repositoryInfo?.repo || null
-  );
-
   // Mutations with automatic cache invalidation
   const { saveSchema, deleteSchema } = useSchemaMutations(
     repositoryInfo?.owner || null,
     repositoryInfo?.repo || null
   );
-
-  // Convert system schemas to user-friendly format whenever they change
-  useEffect(() => {
-    const convertSchemas = async () => {
-      if (!systemSchemas || !repositoryInfo) {
-        setDisplaySchemas([]);
-        setSchemasLoading(false);
-        return;
-      }
-
-      setSchemasLoading(true);
-      try {
-        const convertedSchemas = await convertSchemasToUserFormat(
-          systemSchemas,
-          repositoryInfo.owner,
-          repositoryInfo.repo
-        );
-        setDisplaySchemas(convertedSchemas);
-      } catch (error) {
-        console.error('Failed to convert schemas:', error);
-        setDisplaySchemas(systemSchemas); // Fallback to system schemas
-      } finally {
-        setSchemasLoading(false);
-      }
-    };
-
-    convertSchemas();
-  }, [systemSchemas, repositoryInfo]);
 
   // Initialize repository info from URL params if available
   useEffect(() => {
@@ -116,23 +63,7 @@ export default function SchemasPage() {
   };
 
   const handleEditSchema = async (schema: GitCMSSchema) => {
-    // Convert system ID to user-friendly ID for editing
-    if (repositoryInfo) {
-      try {
-        const userDefinedId = await getUserSchemaId(
-          repositoryInfo.owner,
-          repositoryInfo.repo,
-          schema.id
-        );
-        const schemaForEditing = { ...schema, id: userDefinedId };
-        setState({ view: 'edit', selectedSchema: schemaForEditing });
-      } catch (error) {
-        // Fallback to original ID if mapping fails
-        setState({ view: 'edit', selectedSchema: schema });
-      }
-    } else {
-      setState({ view: 'edit', selectedSchema: schema });
-    }
+    setState({ view: 'edit', selectedSchema: schema });
   };
 
   const handleDeleteSchema = async (schemaId: string) => {
@@ -156,7 +87,7 @@ export default function SchemasPage() {
 
     // Generate a unique ID for the duplicated schema
     const generateUniqueId = (baseId: string): string => {
-      const existingIds = displaySchemas?.map((s: GitCMSSchema) => s.id) || [];
+      const existingIds = schemas?.map((s: GitCMSSchema) => s.id) || [];
       let counter = 1;
       let newId = `${baseId}-copy`;
 
@@ -203,37 +134,18 @@ export default function SchemasPage() {
     }
 
     try {
-      // Store the user-provided ID for mapping
-      const userDefinedId = schema.id;
-
-      // Create a copy of the schema to modify for storage
-      const schemaToSave = { ...schema };
-
-      // Create or update schema mapping
-      if (!originalSchemaId) {
-        // New schema - create mapping with user-defined ID
-        const { systemId } = await createMapping(userDefinedId);
-        // Use system ID for storage, but keep user ID in UI
-        schemaToSave.id = systemId;
-        await saveSchema(schemaToSave);
-      } else {
-        // Editing existing schema
-        // Convert original user ID to system ID if needed
-        const originalSystemId = await getSystemSchemaId(
-          repositoryInfo.owner,
-          repositoryInfo.repo,
-          originalSchemaId
-        );
-
-        if (originalSchemaId !== userDefinedId) {
-          // Schema ID changed - update mapping
-          await updateMapping(originalSystemId, userDefinedId);
+      // If schema ID changed, delete the old one
+      if (originalSchemaId && originalSchemaId !== schema.id) {
+        try {
+          await deleteSchema(originalSchemaId);
+        } catch (e) {
+          // Ignore error if old schema doesn't exist
+          console.warn('Failed to delete old schema:', e);
         }
-
-        // Use system ID for storage
-        schemaToSave.id = originalSystemId;
-        await saveSchema(schemaToSave, originalSystemId);
       }
+
+      // Save the schema with user-defined ID
+      await saveSchema(schema);
 
       // Return to list view
       setState({ view: 'list' });
@@ -333,52 +245,43 @@ export default function SchemasPage() {
               <br />
               Create schemas first, then you can create content instances based on these templates.
             </p>
-            {!systemSchemasLoading &&
-              !schemasLoading &&
-              displaySchemas &&
-              displaySchemas.length === 0 &&
-              !error &&
-              repositoryInfo && (
-                <div className="mt-4 bg-blue-50 border border-blue-200 rounded-md p-4">
-                  <div className="flex">
-                    <div className="flex-shrink-0">
-                      <svg
-                        className="h-5 w-5 text-blue-400"
-                        viewBox="0 0 20 20"
-                        fill="currentColor"
-                      >
-                        <path
-                          fillRule="evenodd"
-                          d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
-                          clipRule="evenodd"
-                        />
-                      </svg>
-                    </div>
-                    <div className="ml-3">
-                      <h3 className="text-sm font-medium text-blue-800">Getting Started</h3>
-                      <div className="mt-2 text-sm text-blue-700">
-                        <p>
-                          No schemas found.
-                          <br />
-                          Create your first content schema to define what types of content you want
-                          to manage (e.g., blog posts, projects, products).
-                        </p>
-                      </div>
+            {!schemasLoading && schemas && schemas.length === 0 && !error && repositoryInfo && (
+              <div className="mt-4 bg-blue-50 border border-blue-200 rounded-md p-4">
+                <div className="flex">
+                  <div className="flex-shrink-0">
+                    <svg className="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
+                      <path
+                        fillRule="evenodd"
+                        d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+                        clipRule="evenodd"
+                      />
+                    </svg>
+                  </div>
+                  <div className="ml-3">
+                    <h3 className="text-sm font-medium text-blue-800">Getting Started</h3>
+                    <div className="mt-2 text-sm text-blue-700">
+                      <p>
+                        No schemas found.
+                        <br />
+                        Create your first content schema to define what types of content you want to
+                        manage (e.g., blog posts, projects, products).
+                      </p>
                     </div>
                   </div>
                 </div>
-              )}
+              </div>
+            )}
           </div>
 
           <ProgressiveLoading
-            loading={systemSchemasLoading || schemasLoading}
-            data={displaySchemas}
+            loading={schemasLoading}
+            data={schemas}
             skeleton={<SchemaListSkeleton count={3} />}
             error={error}
             onRetry={refreshSchemas}
           >
             <SchemaList
-              schemas={displaySchemas || []}
+              schemas={schemas || []}
               onCreateSchema={handleCreateSchema}
               onEditSchema={handleEditSchema}
               onDeleteSchema={handleDeleteSchema}

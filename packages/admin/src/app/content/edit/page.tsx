@@ -302,7 +302,7 @@ export default function ContentEditor() {
     setHeader(
       'content',
       <PageSubHeader
-        title={`${contentId ? 'Edit' : 'Create'} ${schema.id}`}
+        title={contentId ? `Edit ${contentId}` : 'Create content'}
         backName="Back to Content"
         onBack="/content"
         rightElement={

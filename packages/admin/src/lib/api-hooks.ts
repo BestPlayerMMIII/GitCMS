@@ -68,7 +68,17 @@ export function useRegistrySchemas(): UseApiDataResult<GitCMSSchema[]> {
   });
 }
 
-// Hook for repository-specific schemas
+/**
+ * Hook for repository-specific schemas
+ *
+ * Returns schemas with user-defined IDs (no more system/user ID separation)
+ *
+ * @example
+ * ```tsx
+ * const { data: schemas, loading } = useRepoSchemas(owner, repo);
+ * // schemas will have user-defined IDs like "blog-post", "author", etc.
+ * ```
+ */
 export function useRepoSchemas(
   owner: string | null,
   repo: string | null,
@@ -158,72 +168,6 @@ export function useContentList(
     enabled: enabled && Boolean(owner && repo),
     staleWhileRevalidate: true,
   });
-}
-
-// Hook for content list with automatic schema ID conversion
-export function useContentListWithMapping(
-  owner: string | null,
-  repo: string | null,
-  userSchemaId?: string,
-  options: { enabled?: boolean } = {}
-): UseApiDataResult<ContentItem[]> {
-  const { enabled = true } = options;
-
-  // First get the system schema ID if userSchemaId is provided
-  const [systemSchemaId, setSystemSchemaId] = useState<string | undefined>(userSchemaId);
-
-  useEffect(() => {
-    if (!userSchemaId || !owner || !repo) {
-      setSystemSchemaId(userSchemaId);
-      return;
-    }
-
-    const convertId = async () => {
-      try {
-        const systemId = await getSystemSchemaId(owner, repo, userSchemaId);
-        setSystemSchemaId(systemId);
-      } catch {
-        setSystemSchemaId(userSchemaId); // Fallback to original ID
-      }
-    };
-
-    convertId();
-  }, [userSchemaId, owner, repo]);
-
-  const rawContentResult = useContentList(owner, repo, systemSchemaId, options);
-
-  // Convert the content items to show user-friendly schema IDs
-  const [convertedData, setConvertedData] = useState<ContentItem[]>([]);
-  const [isConverting, setIsConverting] = useState(false);
-
-  useEffect(() => {
-    const convertContent = async () => {
-      if (!rawContentResult.data || !owner || !repo) {
-        setConvertedData([]);
-        return;
-      }
-
-      setIsConverting(true);
-      try {
-        const { convertContentListToUserFormat } = await import('./schema-id-converter');
-        const converted = await convertContentListToUserFormat(rawContentResult.data, owner, repo);
-        setConvertedData(converted);
-      } catch (error) {
-        console.error('Failed to convert content schema IDs:', error);
-        setConvertedData(rawContentResult.data); // Fallback to original data
-      } finally {
-        setIsConverting(false);
-      }
-    };
-
-    convertContent();
-  }, [rawContentResult.data, owner, repo]);
-
-  return {
-    ...rawContentResult,
-    data: convertedData,
-    loading: rawContentResult.loading || isConverting,
-  };
 }
 
 // Hook for individual content item
@@ -545,7 +489,6 @@ export function useCacheInvalidation() {
     invalidateContentItem: cacheInvalidation.invalidateContentItem,
     invalidateRepoSetup: cacheInvalidation.invalidateRepoSetup,
     invalidateRegistrySchemas: cacheInvalidation.invalidateRegistrySchemas,
-    invalidateSchemaMapping: cacheInvalidation.invalidateSchemaMapping,
     clearAll: cacheInvalidation.clearAll,
   };
 }
@@ -816,118 +759,4 @@ export async function saveSchemaWithRename(
   }
 
   return await response.json();
-}
-
-// Schema ID Mapping Hooks
-
-/**
- * Hook to get schema mappings for a repository
- */
-export function useSchemaMapping(
-  owner: string | null,
-  repo: string | null,
-  options: { enabled?: boolean } = {}
-) {
-  const { enabled = true } = options;
-
-  return useApiData({
-    key: owner && repo ? `schema-mapping:${owner}:${repo}` : 'disabled',
-    fetcher: async () => {
-      if (!owner || !repo) {
-        throw new Error('Owner and repo are required');
-      }
-
-      const { schemaIdMappingService } = await import('./schema-mapping');
-      return await schemaIdMappingService.loadMapping(owner, repo);
-    },
-    ttl: 300000, // Cache for 5 minutes
-    enabled: enabled && !!owner && !!repo,
-  });
-}
-
-/**
- * Get user-defined schema ID from system ID
- */
-export async function getUserSchemaId(
-  owner: string,
-  repo: string,
-  systemId: string
-): Promise<string> {
-  const { schemaIdMappingService } = await import('./schema-mapping');
-  return await schemaIdMappingService.getUserSchemaId(owner, repo, systemId);
-}
-
-/**
- * Get system schema ID from user-defined ID
- */
-export async function getSystemSchemaId(
-  owner: string,
-  repo: string,
-  userDefinedId: string
-): Promise<string> {
-  const { schemaIdMappingService } = await import('./schema-mapping');
-  return await schemaIdMappingService.getSystemSchemaId(owner, repo, userDefinedId);
-}
-
-/**
- * Schema mapping mutations
- */
-export function useSchemaMappingMutations(owner: string | null, repo: string | null) {
-  const createMapping = useCallback(
-    async (userDefinedId: string, systemId?: string) => {
-      if (!owner || !repo) {
-        throw new Error('Owner and repo are required');
-      }
-
-      const { schemaIdMappingService } = await import('./schema-mapping');
-      const result = await schemaIdMappingService.createSchemaMapping(
-        owner,
-        repo,
-        userDefinedId,
-        systemId
-      );
-
-      // Invalidate cache
-      cacheInvalidation.invalidateSchemaMapping(owner, repo);
-
-      return result;
-    },
-    [owner, repo]
-  );
-
-  const updateMapping = useCallback(
-    async (systemId: string, newUserDefinedId: string) => {
-      if (!owner || !repo) {
-        throw new Error('Owner and repo are required');
-      }
-
-      const { schemaIdMappingService } = await import('./schema-mapping');
-      await schemaIdMappingService.updateSchemaMapping(owner, repo, systemId, newUserDefinedId);
-
-      // Invalidate cache
-      cacheInvalidation.invalidateSchemaMapping(owner, repo);
-    },
-    [owner, repo]
-  );
-
-  const removeMapping = useCallback(
-    async (systemId: string) => {
-      if (!owner || !repo) {
-        throw new Error('Owner and repo are required');
-      }
-
-      const { schemaIdMappingService } = await import('./schema-mapping');
-      await schemaIdMappingService.removeSchemaMapping(owner, repo, systemId);
-
-      // Invalidate cache
-      cacheInvalidation.invalidateSchemaMapping(owner, repo);
-    },
-    [owner, repo]
-  );
-
-  return {
-    createMapping,
-    updateMapping,
-    removeMapping,
-  };
 }
