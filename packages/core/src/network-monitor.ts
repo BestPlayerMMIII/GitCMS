@@ -477,7 +477,7 @@ export class UploadProgressSimulator {
    */
   private updateEntertainmentPhase(): void {
     // Exponential decay: increment = (maxProgress - current) * beta
-    const remaining = this.config.maxProgress - this.currentProgress;
+    const remaining = 100 - this.currentProgress;
     const increment = remaining * this.config.beta;
 
     this.currentProgress = Math.min(this.currentProgress + increment, this.config.maxProgress);
@@ -501,15 +501,15 @@ export class UploadProgressSimulator {
       return (remainingBytes / uploadSpeed) * 1000; // Convert to milliseconds
     } else if (this.phase === 'entertainment') {
       // Entertainment phase: estimate based on exponential decay
-      const remaining = this.config.maxProgress - this.currentProgress;
-
       // Calculate number of steps to reach ~maxProgress%
       // Each step: remaining * beta
-      // After n steps: remaining * (1-beta)^n
-      // We want (1-beta)^n ≈ 0.01*(100-maxProgress), so
-      // n = log(0.01*(100-maxProgress)) / log(1-beta)
+      // After n steps: remaining * (1-beta)^n; with remaining = (100 - currentProgress)
+      // We want remaining * (1-beta)^n <= (100-maxProgress), so
+      // n >= log((100 - this.config.maxProgress) / (100 - this.currentProgress)) / log(1-beta)
+      // stepsToComplete = n_min, so change from >= to =.
       const stepsToComplete =
-        Math.log(0.01 * (100 - this.config.maxProgress)) / Math.log(1 - this.config.beta);
+        Math.log((100 - this.config.maxProgress) / (100 - this.currentProgress)) /
+        Math.log(1 - this.config.beta);
 
       return stepsToComplete * this.config.updateInterval;
     }
@@ -550,7 +550,10 @@ export const NetworkUtils = {
   /**
    * Format speed in human-readable format
    */
-  formatSpeed(bytesPerSecond: number): string {
+  formatSpeed(bytesPerSecond: number | undefined): string {
+    if (!bytesPerSecond || !isFinite(bytesPerSecond)) return '? B/s';
+    if (bytesPerSecond < 0) bytesPerSecond = 0;
+
     const mbps = bytesPerSecond / (1024 * 1024);
 
     if (mbps < 1) {
@@ -564,8 +567,9 @@ export const NetworkUtils = {
   /**
    * Format time in human-readable format
    */
-  formatTime(milliseconds: number): string {
-    if (!isFinite(milliseconds) || milliseconds < 0) return 'Unknown';
+  formatTime(milliseconds: number | undefined): string {
+    if (!milliseconds || !isFinite(milliseconds)) return '?s';
+    if (milliseconds < 0) milliseconds = 0;
 
     const seconds = Math.floor(milliseconds / 1000);
 

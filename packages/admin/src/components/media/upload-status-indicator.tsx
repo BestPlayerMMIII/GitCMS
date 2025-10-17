@@ -3,7 +3,7 @@
 import React from 'react';
 import { X, Check, Loader2, AlertTriangle, Upload as UploadIcon } from 'lucide-react';
 import { useUploadContext, type UploadFile } from '@/contexts/upload-context';
-import { formatFileSize, NetworkUtils } from '@git-cms/core';
+import { NetworkUtils, formatFileSize } from '@git-cms/core';
 
 /**
  * Floating Upload Status Indicator
@@ -43,7 +43,11 @@ export function UploadStatusIndicator() {
           </span>
         </div>
         {completedUploads.length > 0 && !isUploading && (
-          <button onClick={clearCompleted} className="text-xs text-gray-500 hover:text-gray-700">
+          <button
+            type="button"
+            onClick={clearCompleted}
+            className="text-xs text-gray-500 hover:text-gray-700"
+          >
             Clear
           </button>
         )}
@@ -124,13 +128,15 @@ function FileUploadItem({ file }: { file: UploadFile }) {
 
           <div className="flex items-center space-x-2 mt-1">
             <p className="text-xs text-gray-500">{formatFileSize(file.size)}</p>
-            {file.status === 'uploading' && file.uploadSpeed && (
+            {file.status === 'uploading' && (
               <>
                 <span className="text-gray-300">•</span>
-                <p className="text-xs text-blue-600 font-medium">{formatSpeed(file.uploadSpeed)}</p>
+                <p className="text-xs text-blue-600 font-medium">
+                  {NetworkUtils.formatSpeed(file.uploadSpeed)}
+                </p>
               </>
             )}
-            {file.status === 'uploading' && file.estimatedTime && (
+            {file.status === 'uploading' && (
               <>
                 <span className="text-gray-300">•</span>
                 <p className="text-xs text-purple-600">
@@ -161,13 +167,4 @@ function FileUploadItem({ file }: { file: UploadFile }) {
       </div>
     </div>
   );
-}
-
-function formatSpeed(bytesPerSecond: number): string {
-  const mbps = (bytesPerSecond * 8) / (1024 * 1024);
-  if (mbps < 1) {
-    const kbps = (bytesPerSecond * 8) / 1024;
-    return `${kbps.toFixed(0)} Kbps`;
-  }
-  return `${mbps.toFixed(1)} Mbps`;
 }

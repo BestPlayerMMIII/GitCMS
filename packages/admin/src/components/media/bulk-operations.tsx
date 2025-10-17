@@ -218,6 +218,7 @@ function BulkOperations({
           </span>
         </div>
         <button
+          type="button"
           onClick={onClearSelection}
           className="text-gray-500 hover:text-gray-700"
           title="Clear selection"
@@ -260,6 +261,7 @@ function BulkOperations({
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
         {operations.map(operation => (
           <button
+            type="button"
             key={operation.id}
             onClick={() => showConfirmation(operation.id as BulkOperationType)}
             disabled={activeOperation?.status === 'running'}
@@ -343,12 +345,14 @@ function BulkOperations({
 
               <div className="flex justify-end space-x-3">
                 <button
+                  type="button"
                   onClick={cancelOperation}
                   className="px-4 py-2 text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50"
                 >
                   Cancel
                 </button>
                 <button
+                  type="button"
                   onClick={confirmOperation}
                   className={`px-4 py-2 text-white rounded-md ${
                     operations.find(op => op.id === showConfirmDialog)?.dangerous

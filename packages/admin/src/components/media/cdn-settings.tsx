@@ -191,6 +191,7 @@ export default function CDNSettings({
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           {Object.entries(CDN_PROVIDERS).map(([id, provider]) => (
             <button
+              type="button"
               key={id}
               onClick={() => updateProvider(id)}
               className={`p-4 rounded-lg border text-left transition-colors ${
@@ -248,6 +249,7 @@ export default function CDNSettings({
           </p>
           {pagesStatus === 'disabled' && (
             <button
+              type="button"
               onClick={enableGitHubPages}
               disabled={isTestingPages}
               className="inline-flex items-center px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 text-sm"
@@ -439,6 +441,7 @@ export default function CDNSettings({
         <div className="flex items-center justify-between mb-3">
           <h4 className="font-medium text-gray-900">Provider Performance</h4>
           <button
+            type="button"
             onClick={testProviders}
             disabled={isTestingProviders}
             className="inline-flex items-center px-3 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 disabled:opacity-50 text-sm"
@@ -519,12 +522,14 @@ export default function CDNSettings({
       {/* Action Buttons */}
       <div className="flex justify-between">
         <button
+          type="button"
           onClick={() => console.log('CDN Configuration:', config)}
           className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
         >
           Save Configuration
         </button>
         <button
+          type="button"
           onClick={() => updateConfig(createCDNConfig('github'))}
           className="px-4 py-2 text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50"
         >

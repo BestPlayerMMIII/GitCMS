@@ -411,6 +411,7 @@ export function MediaUploader({
               )}
             </div>
             <button
+              type="button"
               onClick={() => setShowNetworkInfo(!showNetworkInfo)}
               className="text-sm text-blue-600 hover:text-blue-700"
             >
@@ -499,6 +500,7 @@ export function MediaUploader({
             <div className="flex items-center space-x-2">
               {pendingFiles.length > 0 && (
                 <button
+                  type="button"
                   onClick={uploadAllFiles}
                   disabled={isUploading}
                   className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50"
@@ -509,6 +511,7 @@ export function MediaUploader({
                 </button>
               )}
               <button
+                type="button"
                 onClick={clearFiles}
                 disabled={isUploading}
                 className="text-sm text-gray-500 hover:text-gray-700 disabled:opacity-50"

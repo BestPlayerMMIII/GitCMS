@@ -12,20 +12,14 @@ import {
 import CDNSettings from './cdn-settings';
 import AdvancedMediaSearch from './advanced-media-search';
 import BulkOperations from './bulk-operations';
-import { VirtualFolderManager } from './virtual-folder-manager';
 import { MediaUploader } from './media-uploader';
 import { LFSManagement } from './lfs-management';
-import { useVirtualFolders } from '@/hooks/use-virtual-folders';
 import {
   Camera,
-  FolderOpen,
-  Search,
-  Filter,
   Upload,
   Grid3X3,
   List,
   Trash2,
-  Edit3,
   Download,
   Eye,
   FileText,
@@ -33,7 +27,6 @@ import {
   Video,
   Image as ImageIcon,
   File,
-  Settings,
   Globe,
   HardDrive,
 } from 'lucide-react';
@@ -73,28 +66,14 @@ export function MediaLibrary({
   const [filters, setFilters] = useState<MediaFilters>({});
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [selectedMedia, setSelectedMedia] = useState<Set<string>>(new Set());
-  const [folders, setFolders] = useState<string[]>([]);
   const [showUploader, setShowUploader] = useState(false);
   const [showCDNSettings, setShowCDNSettings] = useState(false);
   const [searchResults, setSearchResults] = useState<GitCMSMediaFile[]>([]);
   const [showBulkOperations, setShowBulkOperations] = useState(false);
   const [hasActiveSearch, setHasActiveSearch] = useState(false);
   const [showHidden, setShowHidden] = useState(false);
-  const [showVirtualFolders, setShowVirtualFolders] = useState(false);
-  const [selectedVirtualFolder, setSelectedVirtualFolder] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState(initialTab);
   const [refreshKey, setRefreshKey] = useState(0);
-
-  // Virtual folder management
-  const {
-    folders: virtualFolders,
-    updateFolders: updateVirtualFolders,
-    addMediaToFolder,
-    removeMediaFromFolder,
-    getMediaFolder,
-    getFolderMedia,
-    getUnorganizedMedia,
-  } = useVirtualFolders();
 
   // Determine what media to display
   const displayedMedia = useMemo(() => {
@@ -103,17 +82,6 @@ export function MediaLibrary({
     // Filter by media type if specified
     if (filters.mediaType) {
       result = result.filter(item => item.mediaType === filters.mediaType);
-    }
-
-    // Filter by virtual folder if selected
-    if (selectedVirtualFolder) {
-      if (selectedVirtualFolder === 'unorganized') {
-        const unorganizedIds = getUnorganizedMedia(result.map(m => m.id));
-        result = result.filter(item => unorganizedIds.includes(item.id));
-      } else {
-        const folderMediaIds = getFolderMedia(selectedVirtualFolder);
-        result = result.filter(item => folderMediaIds.includes(item.id));
-      }
     }
 
     // When not in search mode, filter hidden files based on showHidden state
@@ -127,16 +95,7 @@ export function MediaLibrary({
     }
 
     return result;
-  }, [
-    hasActiveSearch,
-    searchResults,
-    media,
-    showHidden,
-    filters.mediaType,
-    selectedVirtualFolder,
-    getFolderMedia,
-    getUnorganizedMedia,
-  ]);
+  }, [hasActiveSearch, searchResults, media, showHidden, filters.mediaType]);
 
   // Load media files
   const loadMedia = useCallback(async () => {
@@ -210,22 +169,6 @@ export function MediaLibrary({
     }
   }, [session, owner, repo, filters, acceptedTypes]);
 
-  // Load folders
-  const loadFolders = useCallback(async () => {
-    if (!session) return;
-
-    try {
-      const response = await fetch('/api/media?action=folders');
-      const data = await response.json();
-
-      if (response.ok) {
-        setFolders(data.folders || []);
-      }
-    } catch (err) {
-      console.error('Error loading folders:', err);
-    }
-  }, [session]);
-
   // Handle search results
   const handleSearchResults = useCallback(
     (results: { media: GitCMSMediaFile[]; hasActiveSearch: boolean; showHidden?: boolean }) => {
@@ -296,8 +239,7 @@ export function MediaLibrary({
 
   useEffect(() => {
     loadMedia();
-    loadFolders();
-  }, [loadMedia, loadFolders]);
+  }, [loadMedia]);
 
   // Handle media selection
   const handleMediaSelect = (mediaFile: GitCMSMediaFile) => {
@@ -444,11 +386,6 @@ export function MediaLibrary({
                 isSelected={selectedMedia.has(mediaFile.id)}
                 selectable={mode === 'picker'}
                 showActions={mode === 'library'}
-                virtualFolder={(() => {
-                  const folder = getMediaFolder(mediaFile.id);
-                  return folder ? { name: folder.name, color: folder.color || '#6b7280' } : null;
-                })()}
-                onMoveToFolder={addMediaToFolder}
               />
             ))}
           </div>
@@ -579,6 +516,7 @@ export function MediaLibrary({
                   : []),
               ].map(tab => (
                 <button
+                  type="button"
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id as any)}
                   className={`py-2 px-1 border-b-2 font-medium text-sm flex items-center space-x-2 ${
@@ -728,6 +666,7 @@ export function MediaLibrary({
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-semibold text-gray-900">CDN Configuration</h2>
                 <button
+                  type="button"
                   onClick={() => setShowCDNSettings(false)}
                   className="text-gray-400 hover:text-gray-600"
                 >
@@ -755,14 +694,6 @@ export function MediaLibrary({
         </div>
       )}
 
-      {/* Virtual Folder Manager Modal */}
-      <VirtualFolderManager
-        isOpen={showVirtualFolders}
-        onClose={() => setShowVirtualFolders(false)}
-        onFoldersChange={updateVirtualFolders}
-        mediaFiles={media.map(m => ({ id: m.id, filename: m.filename, mediaType: m.mediaType }))}
-      />
-
       {/* Media Uploader Modal */}
       {showUploader && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -771,6 +702,7 @@ export function MediaLibrary({
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-semibold text-gray-900">Upload Media</h2>
                 <button
+                  type="button"
                   onClick={() => setShowUploader(false)}
                   className="text-gray-400 hover:text-gray-600"
                 >
@@ -837,8 +769,6 @@ interface MediaCardProps {
   isSelected: boolean;
   selectable: boolean;
   showActions: boolean;
-  virtualFolder?: { name: string; color: string } | null;
-  onMoveToFolder?: (mediaId: string, folderId: string) => void;
 }
 
 function MediaCard({
@@ -848,8 +778,6 @@ function MediaCard({
   isSelected,
   selectable,
   showActions,
-  virtualFolder,
-  onMoveToFolder,
 }: MediaCardProps) {
   return (
     <div
@@ -896,21 +824,6 @@ function MediaCard({
           {media.filename}
         </h3>
         <p className="text-xs text-gray-500">{MediaValidator.formatFileSize(media.size)}</p>
-        {media.metadata.folder && (
-          <p className="text-xs text-gray-400 flex items-center">
-            <FolderOpen className="w-3 h-3 mr-1" />
-            {media.metadata.folder}
-          </p>
-        )}
-        {virtualFolder && (
-          <p className="text-xs flex items-center">
-            <div
-              className="w-2 h-2 rounded-full mr-1"
-              style={{ backgroundColor: virtualFolder.color }}
-            />
-            <span style={{ color: virtualFolder.color }}>{virtualFolder.name}</span>
-          </p>
-        )}
       </div>
 
       {/* Actions */}

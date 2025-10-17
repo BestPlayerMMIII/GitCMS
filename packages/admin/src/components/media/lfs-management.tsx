@@ -213,6 +213,7 @@ export function LFSManagement({ owner, repo, className = '' }: LFSManagementProp
           </div>
           <div className="flex items-center space-x-2">
             <button
+              type="button"
               onClick={loadLFSStatus}
               className="p-2 text-gray-500 hover:text-gray-700 rounded-md border border-gray-300 hover:border-gray-400"
             >
@@ -220,6 +221,7 @@ export function LFSManagement({ owner, repo, className = '' }: LFSManagementProp
             </button>
             {!lfsStatus?.isEnabled && (
               <button
+                type="button"
                 onClick={initializeLFS}
                 disabled={isInitializing}
                 className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 flex items-center space-x-2"
@@ -284,6 +286,7 @@ export function LFSManagement({ owner, repo, className = '' }: LFSManagementProp
                 </p>
                 <div className="mt-3">
                   <button
+                    type="button"
                     onClick={initializeLFS}
                     disabled={isInitializing}
                     className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 disabled:opacity-50"
@@ -313,6 +316,7 @@ export function LFSManagement({ owner, repo, className = '' }: LFSManagementProp
                       <div className="flex items-center space-x-2">
                         <span className="text-amber-600">{formatFileSize(file.size)}</span>
                         <button
+                          type="button"
                           onClick={() =>
                             addLFSPattern(
                               LFSUtils.generatePattern(file.extension),
@@ -362,6 +366,7 @@ export function LFSManagement({ owner, repo, className = '' }: LFSManagementProp
             <div className="flex items-center justify-between mb-4">
               <h4 className="text-sm font-medium text-gray-900">LFS Tracking Rules</h4>
               <button
+                type="button"
                 onClick={() => setShowAddRule(true)}
                 className="flex items-center space-x-2 px-3 py-1 text-sm bg-blue-50 text-blue-600 rounded-md hover:bg-blue-100"
               >
@@ -390,6 +395,7 @@ export function LFSManagement({ owner, repo, className = '' }: LFSManagementProp
 
                   <div className="flex items-center space-x-2">
                     <button
+                      type="button"
                       onClick={() => addLFSPattern(newPattern)}
                       disabled={!newPattern.trim() || !LFSUtils.isValidPattern(newPattern)}
                       className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 disabled:opacity-50"
@@ -397,6 +403,7 @@ export function LFSManagement({ owner, repo, className = '' }: LFSManagementProp
                       Add Rule
                     </button>
                     <button
+                      type="button"
                       onClick={() => {
                         setShowAddRule(false);
                         setNewPattern('');
@@ -432,12 +439,14 @@ export function LFSManagement({ owner, repo, className = '' }: LFSManagementProp
 
                     <div className="flex items-center space-x-2">
                       <button
+                        type="button"
                         onClick={() => setSelectedRule(rule)}
                         className="text-gray-400 hover:text-gray-600"
                       >
                         <Info className="w-4 h-4" />
                       </button>
                       <button
+                        type="button"
                         onClick={() => removeLFSPattern(rule.pattern)}
                         className="text-red-400 hover:text-red-600"
                       >
@@ -467,6 +476,7 @@ export function LFSManagement({ owner, repo, className = '' }: LFSManagementProp
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
               {COMMON_LFS_RULES.slice(0, 8).map((rule, index) => (
                 <button
+                  type="button"
                   key={index}
                   onClick={() => addLFSPattern(rule.pattern, rule.description)}
                   className="px-3 py-2 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50 text-left"
@@ -486,6 +496,7 @@ export function LFSManagement({ owner, repo, className = '' }: LFSManagementProp
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold text-gray-900">Rule Details</h3>
                 <button
+                  type="button"
                   onClick={() => setSelectedRule(null)}
                   className="text-gray-400 hover:text-gray-600"
                 >
@@ -523,12 +534,14 @@ export function LFSManagement({ owner, repo, className = '' }: LFSManagementProp
 
               <div className="mt-6 flex justify-end space-x-3">
                 <button
+                  type="button"
                   onClick={() => setSelectedRule(null)}
                   className="px-4 py-2 text-gray-600 text-sm rounded-md hover:bg-gray-100"
                 >
                   Close
                 </button>
                 <button
+                  type="button"
                   onClick={() => {
                     removeLFSPattern(selectedRule.pattern);
                     setSelectedRule(null);

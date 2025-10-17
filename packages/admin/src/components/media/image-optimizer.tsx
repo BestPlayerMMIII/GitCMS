@@ -469,6 +469,7 @@ export default function ImageOptimizer({
 
         {/* Process Button */}
         <button
+          type="button"
           onClick={processImages}
           disabled={isProcessing || imageFiles.length === 0}
           className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
