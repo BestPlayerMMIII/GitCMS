@@ -46,7 +46,7 @@ const FIELD_TYPES = [
   'rich-text',
   'select',
   'color',
-  'reference',
+  // 'reference', // disabled for now until we have cool collection references TODO
 ] as const;
 type FieldTypeValue = (typeof FIELD_TYPES)[number];
 
@@ -820,7 +820,7 @@ export function SchemaEditor({
                 ))}
               </select>
               <p className="mt-1 text-xs text-gray-500">
-                Choose from available schemas/collections in this repository
+                Choose from available collections in this repository
               </p>
             </div>
             <div>

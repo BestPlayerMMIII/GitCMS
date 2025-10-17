@@ -234,7 +234,7 @@ function validateFieldValue(value: any, field: any): ContentValidationError | nu
   switch (type) {
     case 'string':
     case 'text':
-    case 'markdown':
+    case 'rich-text':
       if (typeof value !== 'string') {
         return { field: name, message: `Field '${name}' must be a string`, value };
       }

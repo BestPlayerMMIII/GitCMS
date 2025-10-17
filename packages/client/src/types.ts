@@ -27,14 +27,17 @@ export interface SchemaField {
   name: string;
   type:
     | 'string'
+    | 'text'
     | 'number'
     | 'boolean'
     | 'date'
     | 'datetime'
-    | 'markdown'
-    | 'media'
     | 'array'
-    | 'object';
+    | 'object'
+    | 'media'
+    | 'rich-text'
+    | 'select'
+    | 'color';
   required?: boolean;
   description?: string;
   validation?: any;

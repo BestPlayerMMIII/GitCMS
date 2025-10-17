@@ -43,20 +43,6 @@ interface MediaSearchResult {
   };
 }
 
-interface MediaLabel {
-  id: string;
-  name: string;
-  color: string;
-  description?: string;
-}
-
-interface MediaCollection {
-  id: string;
-  name: string;
-  description?: string;
-  mediaIds: string[];
-}
-
 // Simple search engine implementation
 class SimpleMediaSearchEngine {
   searchMedia(media: GitCMSMediaFile[], options: MediaSearchOptions): MediaSearchResult {

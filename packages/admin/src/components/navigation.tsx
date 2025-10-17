@@ -6,13 +6,7 @@ import { Home, Github, Settings, FileText, Image, Archive, LucideIcon } from 'lu
 import { ReactNode } from 'react';
 import { useNavigationHeader } from '@/contexts/navigation-context';
 
-export type NavigationItem =
-  | 'dashboard'
-  | 'repositories'
-  | 'schemas'
-  | 'collections'
-  | 'content'
-  | 'media';
+export type NavigationItem = 'dashboard' | 'repositories' | 'schemas' | 'content' | 'media';
 interface NavigationEntry {
   id: NavigationItem;
   name: string;
@@ -24,7 +18,6 @@ const navigation: NavigationEntry[] = [
   { id: 'dashboard', name: 'Dashboard', href: '/', icon: Home },
   { id: 'repositories', name: 'Repositories', href: '/repositories/connect', icon: Github },
   { id: 'schemas', name: 'Schemas', href: '/schemas', icon: Settings },
-  { id: 'collections', name: 'Collections', href: '/collections', icon: Archive },
   { id: 'content', name: 'Content', href: '/content', icon: FileText },
   { id: 'media', name: 'Media', href: '/media', icon: Image },
 ];
