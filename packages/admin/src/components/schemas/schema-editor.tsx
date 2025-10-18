@@ -805,13 +805,13 @@ export function SchemaEditor({
         return (
           <>
             <div>
-              <label className="block text-sm font-medium text-gray-700">Collection</label>
+              <label className="block text-sm font-medium text-gray-700">Schema</label>
               <select
-                value={field.collection || ''}
-                onChange={e => updateCallback({ collection: e.target.value })}
+                value={field.schema || ''}
+                onChange={e => updateCallback({ schema: e.target.value })}
                 className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <option value="">Select a collection...</option>
+                <option value="">Select a schema...</option>
                 {repoSchemas?.map(schema => (
                   <option key={schema.id} value={schema.id}>
                     {schema.metadata.name} ({schema.id})
@@ -819,7 +819,7 @@ export function SchemaEditor({
                 ))}
               </select>
               <p className="mt-1 text-xs text-gray-500">
-                Choose from available collections in this repository
+                Choose from available schemas in this repository
               </p>
             </div>
             <div>
@@ -930,7 +930,7 @@ export function SchemaEditor({
                     updates.items.options = [{ label: 'option-1', value: 'option-1' }];
                     break;
                   case 'reference':
-                    updates.items.collection = '';
+                    updates.items.schema = '';
                     break;
                   case 'color':
                     updates.items.defaultValue = '#000000';
@@ -1221,7 +1221,7 @@ export function SchemaEditor({
         updates.options = [{ label: 'option-1', value: 'option-1' }];
         break;
       case 'reference':
-        updates.collection = '';
+        updates.schema = '';
         break;
     }
 

@@ -107,7 +107,7 @@ const cms = new GitCMS({
   token: 'github-token', // optional for public repos
 });
 
-const posts = await cms.collection('blog-posts').get();
+const posts = await cms.from('blog-posts').get();
 ```
 
 ### @git-cms/core

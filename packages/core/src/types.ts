@@ -87,7 +87,6 @@ export interface GitCMSMetadata {
   config: {
     mediaPath: string;
     contentPath: string;
-    collections: string[];
   };
 }
 

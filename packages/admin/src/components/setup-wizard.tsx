@@ -39,7 +39,6 @@ export function SetupWizard({ repository }: SetupWizardProps) {
   const [setupConfig, setSetupConfig] = useState({
     contentPath: DEFAULT_GITCMS_CONFIG.contentPath!,
     mediaPath: DEFAULT_GITCMS_CONFIG.mediaPath!,
-    collections: [] as string[],
     includeDefaultSchemas: true,
   });
   const [step, setStep] = useState<'check' | 'configure' | 'complete'>('check');

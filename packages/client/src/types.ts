@@ -10,7 +10,10 @@ export interface ContentItem {
   [key: string]: any;
 }
 
-export interface Collection {
+/**
+ * SchemaGroup represents all content items grouped by their schema type
+ */
+export interface SchemaGroup {
   name: string;
   schema: ContentSchema;
   items: ContentItem[];

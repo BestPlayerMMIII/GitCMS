@@ -83,8 +83,7 @@ export async function initializeGitCMS(
 This directory contains the GitCMS configuration for this repository.
 
 - \`config.json\`: Main configuration file
-- \`schemas/\`: Content type schemas
-- \`collections/\`: Collection definitions
+- \`schemas/\`: Content type schemas (define the structure of your content)
 
 Do not modify these files manually unless you know what you're doing.
 `,

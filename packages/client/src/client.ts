@@ -1,6 +1,6 @@
 import { Octokit } from '@octokit/rest';
-import type { GitCMSConfig, Collection, ContentItem } from './types';
-import { CollectionRef } from './collections';
+import type { GitCMSConfig, SchemaGroup, ContentItem } from './types';
+import { SchemaRef } from './collections';
 
 export class GitCMS {
   private octokit: Octokit;
@@ -21,10 +21,10 @@ export class GitCMS {
   }
 
   /**
-   * Get a reference to a collection
+   * Get content from a schema (SQL-like FROM syntax)
    */
-  collection(name: string): CollectionRef {
-    return new CollectionRef(name, this.octokit, this.config);
+  from(schemaName: string): SchemaRef {
+    return new SchemaRef(schemaName, this.octokit, this.config);
   }
 
   /**
@@ -71,9 +71,9 @@ export class GitCMS {
   }
 
   /**
-   * Get all collections in the repository
+   * Get all schema groups in the repository
    */
-  async getCollections(): Promise<Collection[]> {
+  async getSchemas(): Promise<SchemaGroup[]> {
     try {
       const [owner, repo] = this.config.repository.split('/');
       const response = await this.octokit.rest.repos.getContent({
@@ -84,26 +84,26 @@ export class GitCMS {
       });
 
       if (Array.isArray(response.data)) {
-        const collections: Collection[] = [];
+        const schemaGroups: SchemaGroup[] = [];
 
         for (const item of response.data) {
           if (item.type === 'dir') {
-            const collectionRef = await this.collection(item.name);
-            const collectionData = await collectionRef.get();
-            collections.push({
+            const schemaRef = await this.from(item.name);
+            const schemaData = await schemaRef.get();
+            schemaGroups.push({
               name: item.name,
               schema: await this.getSchema(item.name),
-              items: collectionData,
+              items: schemaData,
             });
           }
         }
 
-        return collections;
+        return schemaGroups;
       }
 
       return [];
     } catch (error) {
-      console.error('Error fetching collections:', error);
+      console.error('Error fetching schemas:', error);
       return [];
     }
   }

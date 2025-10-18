@@ -2,7 +2,7 @@ import { Octokit } from '@octokit/rest';
 import type { GitCMSConfig, ContentItem } from './types';
 import { Operator, applyOperator } from '@git-cms/core';
 
-export class CollectionRef {
+export class SchemaRef {
   constructor(
     private name: string,
     private octokit: Octokit,
@@ -10,9 +10,11 @@ export class CollectionRef {
   ) {}
 
   /**
-   * Get all items in the collection
+   * Get all items from this schema
+   * @param debug active <===> true <===> want console error when failing
+   * @returns contents that match the query
    */
-  async get(): Promise<ContentItem[]> {
+  async get(debug: boolean = true): Promise<ContentItem[]> {
     if (this.config.baseUrl) {
       const [owner, repo] = this.config.repository.split('/');
       const url = new URL(`${this.config.baseUrl}/api/content/${owner}/${repo}/${this.name}`);
@@ -63,7 +65,7 @@ export class CollectionRef {
 
       return [];
     } catch (error) {
-      console.error(`Error fetching collection ${this.name}:`, error);
+      if (debug) console.error(`Error fetching content from schema ${this.name}:`, error);
       return [];
     }
   }
@@ -76,24 +78,24 @@ export class CollectionRef {
   }
 
   /**
-   * Query collection with filters
+   * Query content with filters
    */
-  where(field: string, operator: Operator, value: any): CollectionQuery {
-    return new CollectionQuery(this.name, this.octokit, this.config).where(field, operator, value);
+  where(field: string, operator: Operator, value: any): SchemaQuery {
+    return new SchemaQuery(this.name, this.octokit, this.config).where(field, operator, value);
   }
 
   /**
-   * Order collection results
+   * Order content results
    */
-  orderBy(field: string, direction: 'asc' | 'desc' = 'asc'): CollectionQuery {
-    return new CollectionQuery(this.name, this.octokit, this.config).orderBy(field, direction);
+  orderBy(field: string, direction: 'asc' | 'desc' = 'asc'): SchemaQuery {
+    return new SchemaQuery(this.name, this.octokit, this.config).orderBy(field, direction);
   }
 
   /**
-   * Limit collection results
+   * Limit content results
    */
-  limit(count: number): CollectionQuery {
-    return new CollectionQuery(this.name, this.octokit, this.config).limit(count);
+  limit(count: number): SchemaQuery {
+    return new SchemaQuery(this.name, this.octokit, this.config).limit(count);
   }
 
   /**
@@ -141,18 +143,24 @@ export class CollectionRef {
   }
 }
 
-export class CollectionQuery {
+export class SchemaQuery {
   private filters: Record<string, any> = {};
   private ordering: { field: string; direction: 'asc' | 'desc' } | null = null;
   private limitCount: number | null = null;
+  private debugActive: boolean = true;
 
   constructor(
-    private collectionName: string,
+    private schemaName: string,
     private octokit: Octokit,
     private config: GitCMSConfig
   ) {}
 
-  where(field: string, operator: Operator, value: any): CollectionQuery {
+  debug(active: boolean): SchemaQuery {
+    this.debugActive = active;
+    return this;
+  }
+
+  where(field: string, operator: Operator, value: any): SchemaQuery {
     if (!this.filters._where) {
       this.filters._where = [];
     }
@@ -160,12 +168,12 @@ export class CollectionQuery {
     return this;
   }
 
-  orderBy(field: string, direction: 'asc' | 'desc' = 'asc'): CollectionQuery {
+  orderBy(field: string, direction: 'asc' | 'desc' = 'asc'): SchemaQuery {
     this.ordering = { field, direction };
     return this;
   }
 
-  limit(count: number): CollectionQuery {
+  limit(count: number): SchemaQuery {
     this.limitCount = count;
     return this;
   }
@@ -200,17 +208,45 @@ export class CollectionQuery {
   /**
    * Search in content text
    */
-  search(query: string): CollectionQuery {
+  search(query: string): SchemaQuery {
     this.filters._search = query;
     return this;
+  }
+
+  /**
+   * Get nested field value from an item using dot notation
+   * Supports: 'field', 'data.field', 'metadata.status', 'nested.deep.property'
+   * @private
+   */
+  private getNestedFieldValue(item: any, fieldPath: string): any {
+    // Split the path by dots to handle nested properties
+    const pathParts = fieldPath.split('.');
+
+    // Try to get the value following the path
+    let value = item;
+    for (const part of pathParts) {
+      if (value === null || value === undefined) {
+        break;
+      }
+      value = value[part];
+    }
+
+    // If we found a value, return it
+    if (value !== undefined) {
+      return value;
+    }
+
+    // Fallback: try looking in 'data' object if the direct path didn't work
+    // This maintains backward compatibility with data.field access
+    if (!fieldPath.startsWith('data.')) {
+      return this.getNestedFieldValue(item, 'data.' + fieldPath);
+    } else return undefined;
   }
 
   async get(): Promise<ContentItem[]> {
     if (this.config.baseUrl) {
       const [owner, repo] = this.config.repository.split('/');
-      const url = new URL(
-        `${this.config.baseUrl}/api/content/${owner}/${repo}/${this.collectionName}`
-      );
+      const url = new URL(`${this.config.baseUrl}/api/content/${owner}/${repo}/${this.schemaName}`);
       url.searchParams.set('branch', this.config.branch || 'main');
 
       // Enhanced filtering support
@@ -238,14 +274,14 @@ export class CollectionQuery {
     }
 
     // Fallback to direct GitHub API access
-    const collection = new CollectionRef(this.collectionName, this.octokit, this.config);
-    let items = await collection.get();
+    const schemaRef = new SchemaRef(this.schemaName, this.octokit, this.config);
+    let items = await schemaRef.get(this.debugActive);
 
     // Apply where filters
     if (this.filters._where) {
       this.filters._where.forEach((filter: any) => {
         items = items.filter(item => {
-          const fieldValue = item.data?.[filter.field] ?? item[filter.field];
+          const fieldValue = this.getNestedFieldValue(item, filter.field);
           return applyOperator(fieldValue, filter.operator, filter.value);
         });
       });
@@ -264,8 +300,8 @@ export class CollectionQuery {
     // Apply ordering
     if (this.ordering) {
       items.sort((a, b) => {
-        const aVal = a.data?.[this.ordering!.field] ?? a[this.ordering!.field];
-        const bVal = b.data?.[this.ordering!.field] ?? b[this.ordering!.field];
+        const aVal = this.getNestedFieldValue(a, this.ordering!.field);
+        const bVal = this.getNestedFieldValue(b, this.ordering!.field);
 
         if (aVal < bVal) return this.ordering!.direction === 'asc' ? -1 : 1;
         if (aVal > bVal) return this.ordering!.direction === 'asc' ? 1 : -1;
@@ -285,7 +321,7 @@ export class CollectionQuery {
 export class DocumentRef {
   constructor(
     private id: string,
-    private collectionName: string,
+    private schemaName: string,
     private octokit: Octokit,
     private config: GitCMSConfig
   ) {}
@@ -302,7 +338,7 @@ export class DocumentRef {
           const response = await this.octokit.rest.repos.getContent({
             owner,
             repo,
-            path: `content/${this.collectionName}/${this.id}.${ext}`,
+            path: `content/${this.schemaName}/${this.id}.${ext}`,
             ref: this.config.branch,
           });
 

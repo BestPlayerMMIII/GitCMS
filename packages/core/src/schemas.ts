@@ -110,7 +110,7 @@ export interface MediaField extends BaseField {
 // Reference field for relationships
 export interface ReferenceField extends BaseField {
   type: 'reference';
-  collection: string;
+  schema: string; // The schema name to reference
   multiple?: boolean;
   displayField?: string;
 }
@@ -810,8 +810,8 @@ export class SchemaUtils {
 
       case 'reference':
         const refField = field as ReferenceField;
-        if (!refField.collection) {
-          errors.push('Reference field must specify collection');
+        if (!refField.schema) {
+          errors.push('Reference field must specify schema');
         }
         break;
 

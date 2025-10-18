@@ -46,7 +46,7 @@ export interface ExtendedMediaMetadata {
   manualTags: string[];
 
   // Organization metadata
-  collections: string[];
+  collections: string[]; // Media collection IDs (for grouping media files, not content)
   labels: MediaLabel[];
   usage: MediaUsage[];
 

@@ -211,19 +211,19 @@ const cms = new GitCMS({
   branch: 'main', // optional
 });
 
-// Type-safe content fetching
+// Type-safe content fetching (SQL-like FROM syntax)
 const blogPosts = await cms
-  .collection('blog-posts')
+  .from('blog-posts')
   .where('published', true)
   .orderBy('publishedAt', 'desc')
   .limit(10)
   .get();
 
 // Individual content item
-const post = await cms.collection('blog-posts').doc('my-first-post').get();
+const post = await cms.from('blog-posts').doc('my-first-post').get();
 
-// Real-time updates (webhook-based)
-cms.collection('blog-posts').onUpdate(posts => {
+// Real-time updates (webhook-based, planned feature)
+cms.from('blog-posts').onUpdate(posts => {
   // Handle content updates
 });
 ```
@@ -332,16 +332,16 @@ compatibility
 
 ```typescript
 // Schema: projects, blog-posts, about
-const projects = await cms.collection('projects').get();
+const projects = await cms.from('projects').get();
 const aboutMe = await cms.doc('about').get();
 ```
 
 ### 2. E-commerce Catalog
 
 ```typescript
-// Schema: products, categories, collections
+// Schemas: products, categories
 const products = await cms
-  .collection('products')
+  .from('products')
   .where('category', 'electronics')
   .where('inStock', true)
   .get();
@@ -350,17 +350,17 @@ const products = await cms
 ### 3. Documentation Site
 
 ```typescript
-// Schema: docs, guides, api-reference
-const guides = await cms.collection('guides').orderBy('order').get();
+// Schemas: docs, guides, api-reference
+const guides = await cms.from('guides').orderBy('order').get();
 ```
 
 ### 4. Mobile App Content
 
 ```typescript
-// Schema: app-config, announcements, feature-flags
+// Schemas: app-config, announcements, feature-flags
 const appConfig = await cms.doc('app-config').get();
 const announcements = await cms
-  .collection('announcements')
+  .from('announcements')
   .where('active', true)
   .get();
 ```

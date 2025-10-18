@@ -5,7 +5,6 @@ export interface GitCMSRepositoryConfig {
   version: string;
   contentPath: string;
   mediaPath: string;
-  collections: string[];
   schemas: Record<string, any>;
   createdAt: string;
   [key: string]: any;
@@ -18,7 +17,6 @@ export const DEFAULT_GITCMS_CONFIG: Partial<GitCMSRepositoryConfig> = {
   version: '1.0.0',
   contentPath: 'content',
   mediaPath: 'media',
-  collections: [],
   schemas: {},
 } as const;
 
@@ -69,7 +67,6 @@ export function validateGitCMSConfig(config: any): config is GitCMSRepositoryCon
     typeof config.version === 'string' &&
     typeof config.contentPath === 'string' &&
     typeof config.mediaPath === 'string' &&
-    Array.isArray(config.collections) &&
     typeof config.schemas === 'object'
   );
 }

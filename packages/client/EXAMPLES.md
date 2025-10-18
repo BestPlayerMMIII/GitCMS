@@ -54,8 +54,8 @@ additional smart features that enhance the upload experience without requiring
 any changes to your client code.
 
 ```typescript
-// Get a collection with advanced querying
-const posts = client.collection('posts');
+// Get content from a schema with advanced querying
+const posts = client.from('posts');
 
 // Count total posts
 const totalPosts = await posts.count();
@@ -76,6 +76,15 @@ const recentPosts = await posts
   .limit(10)
   .get();
 
+// Nested field filtering with dot notation
+const publishedPosts = await posts
+  .where('metadata.status', '==', 'published')
+  .where('metadata.featured', true)
+  .where('author.verified', true)
+  .where('stats.likes', '>=', 50)
+  .orderBy('metadata.publishedAt', 'desc')
+  .get();
+
 // Search content
 const searchResults = await posts.search('react typescript').limit(5).get();
 
@@ -84,6 +93,72 @@ const popularPosts = await posts
   .where('category', 'in', ['tech', 'programming'])
   .where('likes', '>=', 50)
   .exists();
+```
+
+## Practical Example: Blog with Nested Metadata
+
+```typescript
+import { GitCMSClient } from '@git-cms/client';
+
+const client = new GitCMSClient({
+  repository: 'username/blog-repo',
+  token: process.env.GITHUB_TOKEN,
+});
+
+// Real-world content structure:
+// {
+//   id: 'my-post',
+//   title: 'My Post',
+//   content: '...',
+//   metadata: {
+//     status: 'published',
+//     publishedAt: '2024-10-15',
+//     featured: true,
+//     category: 'tech'
+//   },
+//   author: {
+//     name: 'John Doe',
+//     verified: true,
+//     role: 'admin'
+//   },
+//   stats: {
+//     views: 1500,
+//     likes: 75,
+//     comments: 23
+//   }
+// }
+
+// Get all published posts by verified authors
+const publishedByVerified = await client
+  .from('posts')
+  .where('metadata.status', '==', 'published')
+  .where('author.verified', true)
+  .orderBy('metadata.publishedAt', 'desc')
+  .get();
+
+// Get featured tech posts with high engagement
+const featuredTech = await client
+  .from('posts')
+  .where('metadata.featured', true)
+  .where('metadata.category', '==', 'tech')
+  .where('stats.views', '>', 1000)
+  .orderBy('stats.likes', 'desc')
+  .limit(5)
+  .get();
+
+// Check if any admin posts exist
+const hasAdminPosts = await client
+  .from('posts')
+  .where('author.role', '==', 'admin')
+  .exists();
+
+// Get most viewed published posts
+const topPosts = await client
+  .from('posts')
+  .where('metadata.status', '==', 'published')
+  .orderBy('stats.views', 'desc')
+  .limit(10)
+  .get();
 ```
 
 ## Simple Media Embedding
@@ -217,7 +292,7 @@ export default {
 // Example: Blog with progressive image loading
 async function renderBlogPost(postId) {
   // Get post content
-  const posts = client.collection('posts');
+  const posts = client.from('posts');
   const post = await posts.where('id', '==', postId).first();
 
   if (!post) return;
@@ -284,7 +359,7 @@ const client = new GitCMSClient(config);
 async function getBlogData() {
   // Get published posts
   const posts = await client
-    .collection('posts')
+    .from('posts')
     .where('status', '==', 'published')
     .orderBy('publishDate', 'desc')
     .limit(10)
@@ -292,9 +367,9 @@ async function getBlogData() {
 
   // Stats
   const stats = {
-    totalPosts: await client.collection('posts').count(),
+    totalPosts: await client.from('posts').count(),
     publishedPosts: await client
-      .collection('posts')
+      .from('posts')
       .where('status', '==', 'published')
       .count(),
   };

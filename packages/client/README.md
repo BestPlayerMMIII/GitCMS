@@ -19,19 +19,19 @@ const cms = new GitCMS({
   token: 'your-github-token', // Optional for public repos
 });
 
-// Fetch all blog posts
-const posts = await cms.collection('blog-posts').get();
+// Fetch all blog posts (using SQL-like FROM syntax)
+const posts = await cms.from('blog-posts').get();
 
 // Fetch published posts ordered by date
 const publishedPosts = await cms
-  .collection('blog-posts')
+  .from('blog-posts')
   .where('published', true)
   .orderBy('publishedAt', 'desc')
   .limit(10)
   .get();
 
 // Fetch a single post
-const post = await cms.collection('blog-posts').doc('my-first-post').get();
+const post = await cms.from('blog-posts').doc('my-first-post').get();
 
 // Fetch a standalone document
 const aboutPage = await cms.doc('about').get();
@@ -48,42 +48,89 @@ interface GitCMSConfig {
 }
 ```
 
-## Collections
+## Querying Content
 
-Collections represent groups of similar content items stored in your repository.
+Query content by schema type using the SQL-like `from()` method.
 
 ```typescript
-// Get all items in a collection
-const products = await cms.collection('products').get();
+// Get all items from a schema
+const products = await cms.from('products').get();
 
-// Query with filters
+// Query with filters (simple fields)
 const electronics = await cms
-  .collection('products')
+  .from('products')
   .where('category', 'electronics')
   .where('inStock', true)
   .get();
 
-// Order results
+// Query with nested fields (dot notation)
+const published = await cms
+  .from('blog-posts')
+  .where('metadata.status', '==', 'published')
+  .where('author.verified', true)
+  .get();
+
+// Order results (supports nested fields)
 const latestPosts = await cms
-  .collection('blog-posts')
+  .from('blog-posts')
   .orderBy('createdAt', 'desc')
+  .get();
+
+// Order by nested field
+const topRated = await cms
+  .from('products')
+  .orderBy('ratings.average', 'desc')
   .get();
 
 // Limit results
 const featuredProducts = await cms
-  .collection('products')
+  .from('products')
   .where('featured', true)
   .limit(5)
   .get();
 ```
+
+### Advanced Field Access
+
+GitCMS supports **dot notation** for accessing nested fields in your content:
+
+```typescript
+// Access top-level fields
+await cms.from('posts').where('title', '==', 'Hello World').get();
+
+// Access nested fields with dot notation
+await cms.from('posts').where('metadata.status', '==', 'published').get();
+await cms.from('posts').where('author.verified', true).get();
+await cms.from('posts').where('settings.visibility.public', true).get();
+
+// Works with orderBy too
+await cms.from('products').orderBy('pricing.retail', 'desc').get();
+await cms.from('posts').orderBy('metadata.publishedAt', 'desc').get();
+
+// Combine multiple nested filters
+const results = await cms
+  .from('posts')
+  .where('metadata.status', '==', 'published')
+  .where('author.role', '==', 'admin')
+  .where('stats.views', '>', 1000)
+  .orderBy('metadata.publishedAt', 'desc')
+  .get();
+```
+
+**How it works:**
+
+- Fields are checked in the exact path specified: `item.metadata.status`
+- If not found, the system tries `item.data.metadata.status` (for backward
+  compatibility)
+- This works for any depth: `a.b.c.d.e...`
 
 ## Documents
 
 Access individual content items by their ID.
 
 ```typescript
-// Get a single document from a collection
-const post = await cms.collection('blog-posts').doc('my-post-id').get();
+// Get a single document from a schema
+const post = await cms.from('blog-posts').doc('my-post-id').get();
 
 // Get a standalone document
 const config = await cms.doc('site-config').get();
@@ -93,7 +140,7 @@ const config = await cms.doc('site-config').get();
 
 ```typescript
 try {
-  const posts = await cms.collection('blog-posts').get();
+  const posts = await cms.from('blog-posts').get();
 } catch (error) {
   console.error('Failed to fetch posts:', error);
 }
@@ -162,5 +209,5 @@ interface BlogPost {
   publishedAt: string;
 }
 
-const posts = (await cms.collection('blog-posts').get()) as BlogPost[];
+const posts = (await cms.from('blog-posts').get()) as BlogPost[];
 ```
