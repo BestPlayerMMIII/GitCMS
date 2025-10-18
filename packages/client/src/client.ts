@@ -1,11 +1,14 @@
 import { Octokit } from '@octokit/rest';
 import type { GitCMSConfig, SchemaGroup, ContentItem } from './types';
-import { SchemaRef } from './collections';
+import { SchemaRef } from './contents';
+import { MediaManager, ContentMediaHelper } from './media';
 
 export class GitCMS {
   private octokit: Octokit;
   private config: GitCMSConfig;
   private transport: 'github' | 'http';
+  private _mediaManager: MediaManager;
+  private _contentMediaHelper: ContentMediaHelper;
 
   constructor(config: GitCMSConfig) {
     this.config = {
@@ -18,6 +21,24 @@ export class GitCMS {
     this.octokit = new Octokit({
       auth: config.token,
     });
+
+    this._mediaManager = new MediaManager(this.config);
+    this._contentMediaHelper = new ContentMediaHelper(this.config);
+  }
+
+  /**
+   * Access the media manager for working with GitCMS media
+   * Provides methods for extracting, rendering, and fetching media
+   */
+  get media(): MediaManager {
+    return this._mediaManager;
+  }
+
+  /**
+   * Access content media helper for convenient media operations on content items
+   */
+  get contentMedia(): ContentMediaHelper {
+    return this._contentMediaHelper;
   }
 
   /**

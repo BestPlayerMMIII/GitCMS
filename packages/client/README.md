@@ -211,3 +211,86 @@ interface BlogPost {
 
 const posts = (await cms.from('blog-posts').get()) as BlogPost[];
 ```
+
+## Media Management
+
+GitCMS provides a powerful media API for working with embedded media in your
+content. It supports **fast thumbnail loading** with **async full-resolution
+fetching** for optimal performance.
+
+### Quick Example
+
+```typescript
+import { GitCMS } from '@git-cms/client';
+
+const cms = new GitCMS({
+  repository: 'owner/repo',
+  token: 'your-token',
+});
+
+// Get a post with embedded media
+const post = await cms.from('posts').doc('my-post').get();
+
+// Extract media references (fast, synchronous)
+const mediaRefs = cms.media.extractFromHTML(post.content);
+
+// Get thumbnails immediately (fast)
+const thumbnail = cms.media.getThumbnail(mediaRefs[0]);
+
+// Fetch full resolution asynchronously
+const fullMedia = await cms.media.fetchFull(mediaRefs[0]);
+```
+
+### Progressive Enhancement Pattern
+
+```typescript
+// 1. Render with thumbnails immediately
+const fastHtml = cms.media.renderFast(post.content);
+document.getElementById('content').innerHTML = fastHtml;
+
+// 2. Load full resolution in background
+const fullHtml = await cms.media.renderFull(post.content, {
+  onProgress: (current, total, ref) => {
+    console.log(`Loading ${current}/${total}: ${ref.filename}`);
+  },
+});
+document.getElementById('content').innerHTML = fullHtml;
+```
+
+### Content Helper
+
+For convenient media operations on entire content items:
+
+```typescript
+// Extract ALL media (rich-text + fields)
+const allMedia = cms.contentMedia.extractAll(post);
+
+// Get all thumbnails
+const thumbnails = cms.contentMedia.getThumbnails(post);
+
+// Preload all media
+const fullMediaMap = await cms.contentMedia.preloadAll(post);
+
+// Render entire content item
+const fastPost = cms.contentMedia.renderFast(post);
+const fullPost = await cms.contentMedia.renderFull(post);
+```
+
+### Supported Media Types
+
+- **Images**: jpg, png, gif, webp, svg, etc.
+- **Videos**: mp4, webm, mov, etc.
+- **Audio**: mp3, wav, ogg, etc.
+- **3D Models**: glb, gltf, obj, fbx
+- **Documents**: pdf, doc, docx, txt
+
+### Media API Features
+
+- 🚀 **Fast thumbnails**: Instant display with embedded base64 data
+- 🔄 **Async loading**: Progressive enhancement for full resolution
+- 💾 **Smart caching**: Automatic caching of fetched media
+- 🎯 **Type-safe**: Full TypeScript support
+- 🎨 **Multiple formats**: Images, videos, audio, 3D models, documents
+- ⚡ **LFS support**: Handles Git LFS files automatically
+
+For complete documentation, see [MEDIA-API.md](./docs/MEDIA-API.md).

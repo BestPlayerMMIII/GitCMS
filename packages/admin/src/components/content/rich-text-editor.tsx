@@ -316,7 +316,7 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
           const thumbnailDataUrl = media.thumbnailUrl || media.url;
 
           // Create custom media embedding tag with thumbnail and reference
-          const mediaEmbed = `<gitcms-media data-path="${media.path}" data-filename="${media.filename}" data-thumbnail="${thumbnailDataUrl}" alt="${media.metadata?.alt || media.filename}" title="${media.filename || media.metadata?.description}"></gitcms-media>`;
+          const mediaEmbed = `<gitcms-media data-path="${media.path}" data-filename="${media.filename}" data-thumbnail="${thumbnailDataUrl}"></gitcms-media>`;
 
           editor.chain().focus().insertContent(mediaEmbed).run();
         } catch (error) {
@@ -327,8 +327,6 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
             .focus()
             .setImage({
               src: media.thumbnailUrl || media.url,
-              alt: media.metadata?.alt || media.filename,
-              title: media.metadata?.description || media.filename,
             })
             .run();
         }
