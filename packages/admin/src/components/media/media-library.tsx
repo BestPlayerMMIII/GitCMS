@@ -792,6 +792,7 @@ function MediaCard({
           <img
             src={media.thumbnailUrl || media.url}
             alt={media.metadata.alt || media.filename}
+            draggable={false}
             className="w-full h-full object-cover"
             loading="lazy"
             onError={e => {
@@ -819,11 +820,16 @@ function MediaCard({
       </div>
 
       {/* File Info */}
-      <div className="space-y-1">
-        <h3 className="text-sm font-medium text-gray-900 truncate" title={media.filename}>
+      <div className="space-y-1 select-none">
+        <h3
+          className="text-sm font-medium text-gray-900 truncate select-none"
+          title={media.filename}
+        >
           {media.filename}
         </h3>
-        <p className="text-xs text-gray-500">{MediaValidator.formatFileSize(media.size)}</p>
+        <p className="text-xs text-gray-500 select-none">
+          {MediaValidator.formatFileSize(media.size)}
+        </p>
       </div>
 
       {/* Actions */}
@@ -967,9 +973,9 @@ function MediaRow({
               </div>
             )}
             <div>
-              <div className="text-sm font-medium text-gray-900">{media.filename}</div>
+              <div className="text-sm font-medium text-gray-900 select-none">{media.filename}</div>
               {media.metadata.alt && (
-                <div className="text-sm text-gray-500">{media.metadata.alt}</div>
+                <div className="text-sm text-gray-500 select-none">{media.metadata.alt}</div>
               )}
             </div>
           </div>

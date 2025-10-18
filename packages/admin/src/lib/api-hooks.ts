@@ -369,9 +369,43 @@ export function useSchemaMutations(owner: string | null, repo: string | null) {
     [owner, repo]
   );
 
+  const renameSchema = useCallback(
+    async (oldSchemaId: string, newSchemaId: string) => {
+      if (!owner || !repo) {
+        throw new Error('Owner and repo are required');
+      }
+
+      const response = await fetch(`/api/schemas/rename?owner=${owner}&repo=${repo}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          oldSchemaId,
+          newSchemaId,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `Failed to rename schema: ${response.statusText}`);
+      }
+
+      // Invalidate ALL caches - schema rename affects everything
+      cacheInvalidation.invalidateRepoSchemas(owner, repo);
+      cacheInvalidation.invalidateRepoContent(owner, repo);
+      cacheInvalidation.invalidateRepoContent(owner, repo, oldSchemaId);
+      cacheInvalidation.invalidateRepoContent(owner, repo, newSchemaId);
+
+      return response.json();
+    },
+    [owner, repo]
+  );
+
   return {
     saveSchema,
     deleteSchema,
+    renameSchema,
   };
 }
 

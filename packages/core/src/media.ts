@@ -133,13 +133,14 @@ export const MEDIA_TYPES = {
     maxSize: 25 * 1024 * 1024, // 25MB
   },
   other: {
-    extensions: ['.zip', '.rar', '.json', '.xml', '.csv'] as readonly string[],
+    extensions: ['.zip', '.rar', '.json', '.xml', '.csv', '.glb'] as readonly string[],
     mimeTypes: [
       'application/zip',
       'application/x-rar-compressed',
       'application/json',
       'application/xml',
       'text/csv',
+      'model/gltf-binary',
     ] as readonly string[],
     maxSize: 50 * 1024 * 1024, // 50MB
   },
@@ -175,7 +176,14 @@ export class MediaValidator {
 
     // Check mime type
     const mediaTypeConfig = MEDIA_TYPES[mediaType as keyof typeof MEDIA_TYPES];
-    if (!mediaTypeConfig.mimeTypes.includes(file.type)) {
+    const fileMime = file.type || '';
+
+    // Some browsers or file pickers may not provide a precise MIME type (empty string)
+    // or return a generic 'application/octet-stream'. In those cases we fall back to
+    // extension-based validation (which we already used to determine mediaType).
+    const isGenericMime = fileMime === '' || fileMime === 'application/octet-stream';
+
+    if (!isGenericMime && !mediaTypeConfig.mimeTypes.includes(fileMime)) {
       return { valid: false, error: 'File type does not match its content' };
     }
 

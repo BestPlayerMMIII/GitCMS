@@ -365,7 +365,7 @@ export function ProgressiveLoading({
     );
   }
 
-  if (loading && !data) {
+  if (loading || !data) {
     return <>{skeleton}</>;
   }
 

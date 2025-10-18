@@ -157,6 +157,8 @@ export function MediaUploader({
         const preview = await createFilePreview(file);
         const lfsAnalysis = analyzeLFSRequirements(file);
 
+        console.log('LFS Analysis for', file.name, lfsAnalysis);
+
         const localFile: LocalUploadFile = Object.assign(file, {
           id: generateId(),
           preview,

@@ -99,6 +99,7 @@ export const DEFAULT_LFS_CONFIG: LFSConfig = {
     'gz',
     'bz2',
     // 3D/CAD
+    'glb',
     'obj',
     'fbx',
     'blend',

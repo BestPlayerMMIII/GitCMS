@@ -8,6 +8,20 @@ import { SchemaEditor } from '@/components/schemas/schema-editor';
 import { SchemaImportModal } from '@/components/schemas/schema-import-modal';
 import { ProgressiveLoading, SchemaListSkeleton } from '@/components/ui/loading';
 import { useRepoSchemas, useSchemaMutations, useCacheInvalidation } from '@/lib/api-hooks';
+
+// Track if we have content for a schema (for showing warnings)
+async function hasSchemaContent(owner: string, repo: string, schemaId: string): Promise<boolean> {
+  try {
+    const response = await fetch(
+      `/api/content?action=list&owner=${owner}&repo=${repo}&schemaId=${schemaId}`
+    );
+    if (!response.ok) return false;
+    const data = await response.json();
+    return data.items && data.items.length > 0;
+  } catch {
+    return false;
+  }
+}
 import { useRepository } from '@/contexts/repository-context';
 import type { GitCMSSchema } from '@git-cms/core';
 import { useNavigationHeader } from '@/contexts/navigation-context';
@@ -39,7 +53,7 @@ export default function SchemasPage() {
   });
 
   // Mutations with automatic cache invalidation
-  const { saveSchema, deleteSchema } = useSchemaMutations(
+  const { saveSchema, deleteSchema, renameSchema } = useSchemaMutations(
     repositoryInfo?.owner || null,
     repositoryInfo?.repo || null
   );
@@ -134,18 +148,44 @@ export default function SchemasPage() {
     }
 
     try {
-      // If schema ID changed, delete the old one
-      if (originalSchemaId && originalSchemaId !== schema.id) {
-        try {
-          await deleteSchema(originalSchemaId);
-        } catch (e) {
-          // Ignore error if old schema doesn't exist
-          console.warn('Failed to delete old schema:', e);
-        }
-      }
+      // Check if this is a schema ID rename operation
+      const isRenamingSchema = originalSchemaId && originalSchemaId !== schema.id;
 
-      // Save the schema with user-defined ID
-      await saveSchema(schema);
+      if (isRenamingSchema) {
+        // Check if schema has content - warn user about migration
+        const hasContent = await hasSchemaContent(
+          repositoryInfo.owner,
+          repositoryInfo.repo,
+          originalSchemaId!
+        );
+
+        if (hasContent) {
+          const confirmMsg =
+            `⚠️ Warning: This schema has existing content!\n\n` +
+            `Renaming "${originalSchemaId}" → "${schema.id}" will:\n` +
+            `✓ Move all content files to new directory\n` +
+            `✓ Update content metadata (schemaId field)\n` +
+            `✓ Update schema references in other schemas\n\n` +
+            `This operation is atomic but cannot be undone.\n\n` +
+            `Continue with rename?`;
+
+          if (!confirm(confirmMsg)) {
+            return; // User cancelled
+          }
+        }
+
+        // Execute atomic rename with cascading updates
+        console.log(`Renaming schema: ${originalSchemaId} → ${schema.id}`);
+        await renameSchema(originalSchemaId!, schema.id);
+
+        // Now update the schema content itself
+        await saveSchema(schema);
+
+        alert(`✓ Schema renamed successfully!\n\nAll content and references updated.`);
+      } else {
+        // Normal save (create or update without ID change)
+        await saveSchema(schema, originalSchemaId);
+      }
 
       // Return to list view
       setState({ view: 'list' });

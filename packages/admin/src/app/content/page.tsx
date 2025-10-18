@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, Suspense } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ProgressiveLoading, ContentGridSkeleton } from '@/components/ui/loading';
@@ -23,7 +23,7 @@ interface ContentItem {
   };
 }
 
-function ContentListContent() {
+export default function ContentList() {
   const { setHeader } = useNavigationHeader();
 
   const searchParams = useSearchParams();
@@ -216,6 +216,7 @@ function ContentListContent() {
     return `/content/edit?${params}`;
   };
 
+  // Filter content client-side (no loading state triggered)
   const filteredContent = contentList.filter(item => {
     const matchesSearch =
       searchQuery === '' ||
@@ -264,48 +265,9 @@ function ContentListContent() {
     return 'No description available';
   };
 
-  if (loading && !contentList.length) {
-    return (
-      <div className="bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading content...</p>
-        </div>
-      </div>
-    );
-  }
+  // Removed full-page loading state - now handled by ProgressiveLoading in content section
 
-  if (error && !contentList.length) {
-    return (
-      <div className="bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="bg-red-50 border border-red-200 rounded-lg p-6 max-w-md">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
-                  <path
-                    fillRule="evenodd"
-                    d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-              </div>
-              <div className="ml-3">
-                <h3 className="text-sm font-medium text-red-800">Error</h3>
-                <p className="text-sm text-red-700 mt-1">{error?.message}</p>
-              </div>
-            </div>
-          </div>
-          <button
-            onClick={refreshContent}
-            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-          >
-            Try Again
-          </button>
-        </div>
-      </div>
-    );
-  }
+  // Removed full-page error state - now handled by ProgressiveLoading in content section
 
   // Empty state when no repository is connected
   if (!repositoryInfo) {
@@ -430,10 +392,10 @@ function ContentListContent() {
       {/* Content List */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
         <ProgressiveLoading
-          loading={loading && !contentList.length}
+          loading={loading && contentList.length === 0}
           data={contentList}
           skeleton={<ContentGridSkeleton count={6} />}
-          error={error}
+          error={error && contentList.length === 0 ? error : null}
           onRetry={refreshContent}
         >
           {filteredContent.length === 0 ? (
@@ -468,7 +430,7 @@ function ContentListContent() {
             </div>
           ) : (
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-              {filteredContent.map(async item => (
+              {filteredContent.map(item => (
                 <div
                   key={`${item.schemaId}-${item.id}`}
                   className="bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow"
@@ -670,13 +632,5 @@ function ContentListContent() {
         </div>
       )}
     </div>
-  );
-}
-
-export default function ContentList() {
-  return (
-    <Suspense fallback={<ContentGridSkeleton />}>
-      <ContentListContent />
-    </Suspense>
   );
 }

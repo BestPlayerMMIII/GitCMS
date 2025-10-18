@@ -10,7 +10,7 @@ import { NetworkUtils, formatFileSize } from '@git-cms/core';
  * Shows persistent upload progress even when user switches tabs
  */
 export function UploadStatusIndicator() {
-  const { files, isUploading, clearCompleted } = useUploadContext();
+  const { files, isUploading, clearAll } = useUploadContext();
 
   const activeUploads = files.filter(f => f.status === 'uploading' || f.status === 'pending');
   const completedUploads = files.filter(f => f.status === 'success');
@@ -42,10 +42,10 @@ export function UploadStatusIndicator() {
                 : 'Upload Queue'}
           </span>
         </div>
-        {completedUploads.length > 0 && !isUploading && (
+        {!isUploading && (
           <button
             type="button"
-            onClick={clearCompleted}
+            onClick={clearAll}
             className="text-xs text-gray-500 hover:text-gray-700"
           >
             Clear

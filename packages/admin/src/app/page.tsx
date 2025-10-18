@@ -132,12 +132,6 @@ export default function HomePage() {
                   >
                     Manage Content
                   </a>
-                  <a
-                    href="/demo/rich-editor"
-                    className="block w-full bg-purple-600 text-white py-2 px-4 rounded-md hover:bg-purple-700 transition-colors text-center text-sm"
-                  >
-                    Try Rich Editor Demo
-                  </a>
                 </div>
               </div>
             </div>
