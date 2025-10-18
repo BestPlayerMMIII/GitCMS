@@ -6,6 +6,7 @@ import { RepositoryPicker } from '@/components/repository-picker';
 import { PageSubHeader } from '@/components/page-header';
 import { ArrowRight } from 'lucide-react';
 import { useNavigationHeader } from '@/contexts/navigation-context';
+import { LoadingSpinner } from '@/components/ui/loading';
 
 interface Repository {
   owner: string;
@@ -69,7 +70,7 @@ export default function ConnectRepositoryPage() {
                         className="flex items-center space-x-2 px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         {connecting ? (
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                          <LoadingSpinner size="sm" color="white" />
                         ) : (
                           <ArrowRight className="h-4 w-4" />
                         )}

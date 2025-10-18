@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { validateContentId, validateSchemaId } from '@/lib/api-hooks';
 import { useRepository } from '@/contexts/repository-context';
+import { LoadingSpinner } from './loading';
 
 interface IdValidationInputProps {
   value: string;
@@ -116,7 +117,7 @@ export function IdValidationInput({
     if (isValidating) {
       return (
         <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-          <div className="animate-spin rounded-full h-4 w-4 border-2 border-gray-300 border-t-blue-600"></div>
+          <LoadingSpinner size="sm" color="gray" />
         </div>
       );
     }
@@ -153,7 +154,7 @@ export function IdValidationInput({
   };
 
   const getInputClassName = () => {
-    let baseClassName = `w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10 ${className}`;
+    let baseClassName = `w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10`;
 
     if (validation && value.trim()) {
       if (validation.valid) {
@@ -173,17 +174,18 @@ export function IdValidationInput({
   };
 
   return (
-    <div className="relative">
-      <input
-        type="text"
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        placeholder={placeholder}
-        disabled={disabled}
-        className={getInputClassName()}
-      />
-      {getValidationIcon()}
-
+    <div>
+      <div className={`relative flex items-center ${className}`}>
+        <input
+          type="text"
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          placeholder={placeholder}
+          disabled={disabled}
+          className={getInputClassName()}
+        />
+        {getValidationIcon()}
+      </div>
       {validation && value.trim() && (
         <div className={`mt-1 text-xs ${validation.valid ? 'text-green-600' : 'text-red-600'}`}>
           {validation.message}

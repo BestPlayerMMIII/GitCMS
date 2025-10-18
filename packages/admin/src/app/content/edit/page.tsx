@@ -4,9 +4,11 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { SchemaForm } from '@/components/content/schema-form';
 import { useRepoSchema, useContentItem, useContentMutations } from '@/lib/api-hooks';
-import { ProgressiveLoading } from '@/components/ui/loading';
+import { PageLoading, ProgressiveLoading } from '@/components/ui/loading';
 import { PageSubHeader } from '@/components/page-header';
 import { useNavigationHeader } from '@/contexts/navigation-context';
+import Suspenser from '@/components/suspenser';
+import Link from 'next/link';
 
 interface ContentEditorProps {
   owner: string;
@@ -28,7 +30,7 @@ interface ContentData {
   };
 }
 
-export default function ContentEditor() {
+function ContentEditor() {
   const searchParams = useSearchParams();
   const { setHeader } = useNavigationHeader();
 
@@ -361,14 +363,7 @@ export default function ContentEditor() {
       <ProgressiveLoading
         loading={true}
         data={null}
-        skeleton={
-          <div className="bg-gray-50 flex items-center justify-center">
-            <div className="text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-              <p className="mt-4 text-gray-600">Loading content editor...</p>
-            </div>
-          </div>
-        }
+        skeleton={<PageLoading message="Loading content editor..." />}
       >
         <div></div>
       </ProgressiveLoading>
@@ -377,7 +372,7 @@ export default function ContentEditor() {
 
   if (displayError) {
     return (
-      <div className="bg-gray-50 flex items-center justify-center">
+      <div className="bg-gray-50 flex items-center justify-center min-h-screen">
         <div className="text-center">
           <div className="bg-red-50 border border-red-200 rounded-lg p-6 max-w-md">
             <div className="flex items-center">
@@ -396,12 +391,11 @@ export default function ContentEditor() {
               </div>
             </div>
           </div>
-          <button
-            onClick={() => setSaveError(null)}
-            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-          >
-            Try Again
-          </button>
+          <Link href={'/content'}>
+            <button className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+              Back
+            </button>
+          </Link>
         </div>
       </div>
     );
@@ -437,5 +431,13 @@ export default function ContentEditor() {
         />
       </div>
     </div>
+  );
+}
+
+export default function ContentEditorPage() {
+  return (
+    <Suspenser>
+      <ContentEditor />
+    </Suspenser>
   );
 }

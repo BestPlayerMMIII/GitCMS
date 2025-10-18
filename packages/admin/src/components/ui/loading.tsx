@@ -238,7 +238,7 @@ export function TableSkeleton({ rows = 5, columns = 4 }: { rows?: number; column
 
 // Loading spinner component
 interface LoadingSpinnerProps {
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'sm' | 'md' | 'lg' | 'xl';
   color?: 'blue' | 'gray' | 'white';
   className?: string;
 }
@@ -252,6 +252,7 @@ export function LoadingSpinner({
     sm: 'h-4 w-4',
     md: 'h-8 w-8',
     lg: 'h-12 w-12',
+    xl: 'h-32 w-32',
   };
 
   const colorClasses = {
@@ -267,12 +268,30 @@ export function LoadingSpinner({
   );
 }
 
+// Page loading component
+interface PageLoadingProps {
+  message?: string;
+  options?: {
+    size?: 'sm' | 'md' | 'lg' | 'xl';
+    color?: 'blue' | 'gray' | 'white';
+    vcenter?: boolean;
+  };
+  className?: string;
+}
+
 // Full page loading component
-export function PageLoading({ message = 'Loading...' }: { message?: string }) {
+export function PageLoading({
+  message = 'Loading...',
+  options = {},
+  className = '',
+}: PageLoadingProps) {
+  options = { size: 'lg', color: 'blue', vcenter: true, ...options };
   return (
-    <div className="bg-gray-50 flex items-center justify-center">
+    <div
+      className={`bg-gray-50 flex items-center justify-center${options.vcenter ? ' min-h-screen' : ''} ${className}`}
+    >
       <div className="text-center">
-        <LoadingSpinner size="lg" />
+        <LoadingSpinner size={options.size} color={options.color} className="mx-auto" />
         <p className="mt-4 text-gray-600">{message}</p>
       </div>
     </div>

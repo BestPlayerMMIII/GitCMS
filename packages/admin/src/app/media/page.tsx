@@ -7,8 +7,9 @@ import { PageSubHeader } from '@/components/page-header';
 import Link from 'next/link';
 import { useEffect } from 'react';
 import { useNavigationHeader } from '@/contexts/navigation-context';
+import Suspenser from '@/components/suspenser';
 
-export default function MediaPage() {
+function Media() {
   const { setHeader } = useNavigationHeader();
   useEffect(() => {
     setHeader(
@@ -69,9 +70,15 @@ export default function MediaPage() {
 
   return (
     <div className="bg-gray-50">
-      <div className="max-w-7xl mx-auto py-6">
-        <MediaLibrary owner={repositoryInfo.owner} repo={repositoryInfo.repo} mode="library" />
-      </div>
+      <MediaLibrary owner={repositoryInfo.owner} repo={repositoryInfo.repo} mode="library" />
     </div>
+  );
+}
+
+export default function MediaPage() {
+  return (
+    <Suspenser>
+      <Media />
+    </Suspenser>
   );
 }

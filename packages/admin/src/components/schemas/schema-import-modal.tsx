@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import type { GitCMSSchema } from '@git-cms/core';
 import { useEnhancedSchemaImport } from '../../lib/api-hooks';
-import { LoadingSpinner } from '../ui/loading';
+import { LoadingSpinner, PageLoading } from '../ui/loading';
 
 interface SchemaImportModalProps {
   isOpen: boolean;
@@ -400,12 +400,7 @@ export function SchemaImportModal({ isOpen, onClose, onImport }: SchemaImportMod
                   </div>
                 )}
 
-                {state.step === 'importing' && (
-                  <div className="mt-4 text-center">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-                    <p className="mt-2 text-sm text-gray-500">Importing schemas...</p>
-                  </div>
-                )}
+                {state.step === 'importing' && <PageLoading message="Importing schemas..." />}
 
                 {state.step === 'success' && (
                   <div className="mt-4 text-center">

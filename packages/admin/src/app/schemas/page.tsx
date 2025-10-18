@@ -25,13 +25,14 @@ async function hasSchemaContent(owner: string, repo: string, schemaId: string): 
 import { useRepository } from '@/contexts/repository-context';
 import type { GitCMSSchema } from '@git-cms/core';
 import { useNavigationHeader } from '@/contexts/navigation-context';
+import Suspenser from '@/components/suspenser';
 
 interface SchemaPageState {
   view: 'list' | 'edit' | 'create' | 'import';
   selectedSchema?: GitCMSSchema;
 }
 
-export default function SchemasPage() {
+function Schemas() {
   const searchParams = useSearchParams();
   const [state, setState] = useState<SchemaPageState>({ view: 'list' });
   const [importModalOpen, setImportModalOpen] = useState(false);
@@ -351,5 +352,13 @@ export default function SchemasPage() {
         </>
       )}
     </div>
+  );
+}
+
+export default function SchemasPage() {
+  return (
+    <Suspenser>
+      <Schemas />
+    </Suspenser>
   );
 }

@@ -3,12 +3,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ProgressiveLoading, ContentGridSkeleton } from '@/components/ui/loading';
+import { ProgressiveLoading, ContentGridSkeleton, PageLoading } from '@/components/ui/loading';
 import { useRepoSchemas, useContentMutations, useContentList } from '@/lib/api-hooks';
 import { useRepository } from '@/contexts/repository-context';
 import type { GitCMSSchema } from '@git-cms/core';
 import { PageSubHeader } from '@/components/page-header';
 import { useNavigationHeader } from '@/contexts/navigation-context';
+import Suspenser from '@/components/suspenser';
 
 interface ContentItem {
   id: string;
@@ -23,7 +24,7 @@ interface ContentItem {
   };
 }
 
-export default function ContentList() {
+function ContentList() {
   const { setHeader } = useNavigationHeader();
 
   const searchParams = useSearchParams();
@@ -521,10 +522,7 @@ export default function ContentList() {
                     </p>
 
                     {loadingSchemas ? (
-                      <div className="flex items-center justify-center py-8">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                        <span className="ml-3 text-gray-600">Loading schemas...</span>
-                      </div>
+                      <PageLoading message="Loading schemas..." />
                     ) : schemasList.length === 0 ? (
                       <div className="text-center py-8">
                         <svg
@@ -632,5 +630,13 @@ export default function ContentList() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function ContentListPage() {
+  return (
+    <Suspenser>
+      <ContentList />
+    </Suspenser>
   );
 }

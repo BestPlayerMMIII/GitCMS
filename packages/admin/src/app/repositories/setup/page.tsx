@@ -5,6 +5,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { SetupWizard } from '@/components/setup-wizard';
 import { PageSubHeader } from '@/components/page-header';
 import { useNavigationHeader } from '@/contexts/navigation-context';
+import Suspenser from '@/components/suspenser';
+import { PageLoading } from '@/components/ui/loading';
 
 interface Repository {
   owner: string;
@@ -14,7 +16,7 @@ interface Repository {
   defaultBranch: string;
 }
 
-export default function SetupPage() {
+function Setup() {
   const { setHeader } = useNavigationHeader();
   useEffect(() => {
     setHeader(
@@ -65,11 +67,7 @@ export default function SetupPage() {
   }, [searchParams, router]);
 
   if (loading) {
-    return (
-      <div className="bg-gray-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-gray-900"></div>
-      </div>
-    );
+    return <PageLoading message="" options={{ size: 'xl', color: 'gray' }} />;
   }
 
   if (!repository) {
@@ -95,5 +93,13 @@ export default function SetupPage() {
         <SetupWizard repository={repository} />
       </main>
     </div>
+  );
+}
+
+export default function SetupPage() {
+  return (
+    <Suspenser>
+      <Setup />
+    </Suspenser>
   );
 }
