@@ -26,6 +26,37 @@ async function getContentPath(owner: string, repo: string, token: string | null)
   }
 }
 
+/**
+ * Get nested field value from an item using dot notation
+ * Supports: 'field', 'data.field', 'metadata.status', 'nested.deep.property'
+ */
+function getNestedFieldValue(item: any, fieldPath: string): any {
+  // Split the path by dots to handle nested properties
+  const pathParts = fieldPath.split('.');
+
+  // Try to get the value following the path
+  let value = item;
+  for (const part of pathParts) {
+    if (value === null || value === undefined) {
+      break;
+    }
+    value = value[part];
+  }
+
+  // If we found a value, return it
+  if (value !== undefined) {
+    return value;
+  }
+
+  // Fallback: try looking in 'data' object if the direct path didn't work
+  // This maintains backward compatibility with data.field access
+  if (!fieldPath.startsWith('data.')) {
+    return getNestedFieldValue(item, 'data.' + fieldPath);
+  }
+
+  return undefined;
+}
+
 function applyQuery(items: any[], url: URL): any[] {
   let result = items.slice();
 
@@ -36,26 +67,48 @@ function applyQuery(items: any[], url: URL): any[] {
       result = result.filter(item => {
         return filters.every(filter => {
           const { field, operator, value } = filter;
-          const itemValue = item.data?.[field] ?? item[field];
+          const itemValue = getNestedFieldValue(item, field);
           return applyOperator(itemValue, operator, value);
         });
       });
     } catch {}
   }
 
-  const orderBy = url.searchParams.get('orderBy');
-  const order = (url.searchParams.get('order') as 'asc' | 'desc') || 'asc';
-  if (orderBy) {
-    result.sort((a, b) => {
-      const av = a.data?.[orderBy] ?? a[orderBy];
-      const bv = b.data?.[orderBy] ?? b[orderBy];
-      if (av == null && bv == null) return 0;
-      if (av == null) return order === 'asc' ? -1 : 1;
-      if (bv == null) return order === 'asc' ? 1 : -1;
-      if (av < bv) return order === 'asc' ? -1 : 1;
-      if (av > bv) return order === 'asc' ? 1 : -1;
-      return 0;
-    });
+  // Support both single and multiple orderings
+  const orderByParam = url.searchParams.get('orderBy');
+  if (orderByParam) {
+    try {
+      // Try parsing as JSON array (new format for multiple orderings)
+      const orderings = JSON.parse(orderByParam) as { field: string; direction: 'asc' | 'desc' }[];
+      result.sort((a, b) => {
+        // Compare items by each ordering criterion in sequence
+        for (const ordering of orderings) {
+          const av = getNestedFieldValue(a, ordering.field);
+          const bv = getNestedFieldValue(b, ordering.field);
+
+          if (av == null && bv == null) continue;
+          if (av == null) return ordering.direction === 'asc' ? -1 : 1;
+          if (bv == null) return ordering.direction === 'asc' ? 1 : -1;
+          if (av < bv) return ordering.direction === 'asc' ? -1 : 1;
+          if (av > bv) return ordering.direction === 'asc' ? 1 : -1;
+          // If equal, continue to next ordering criterion
+        }
+        return 0;
+      });
+    } catch {
+      // Fallback: treat as single field (old format for backward compatibility)
+      const order = (url.searchParams.get('order') as 'asc' | 'desc') || 'asc';
+      result.sort((a, b) => {
+        const av = getNestedFieldValue(a, orderByParam);
+        const bv = getNestedFieldValue(b, orderByParam);
+        if (av == null && bv == null) return 0;
+        if (av == null) return order === 'asc' ? -1 : 1;
+        if (bv == null) return order === 'asc' ? 1 : -1;
+        if (av < bv) return order === 'asc' ? -1 : 1;
+        if (av > bv) return order === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
   }
 
   const offset = Number(url.searchParams.get('offset') || 0);

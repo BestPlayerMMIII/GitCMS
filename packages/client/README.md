@@ -82,6 +82,15 @@ const topRated = await cms
   .orderBy('ratings.average', 'desc')
   .get();
 
+// Multiple order criteria (tiebreakers)
+// First sort by priority (desc), then by publishedAt (desc) for ties
+const prioritizedPosts = await cms
+  .from('blog-posts')
+  .where('metadata.status', '==', 'published')
+  .orderBy('metadata.priority', 'desc')
+  .orderBy('metadata.publishedAt', 'desc')
+  .get();
+
 // Limit results
 const featuredProducts = await cms
   .from('products')
@@ -123,6 +132,37 @@ const results = await cms
 - If not found, the system tries `item.data.metadata.status` (for backward
   compatibility)
 - This works for any depth: `a.b.c.d.e...`
+
+### Multiple Ordering (Tiebreakers)
+
+When you need to sort by multiple criteria, you can chain `orderBy()` calls.
+Each subsequent `orderBy()` acts as a tiebreaker for the previous one:
+
+```typescript
+// Sort by priority (desc), then by date (desc) for items with same priority
+const posts = await cms
+  .from('blog-posts')
+  .where('metadata.status', '==', 'published')
+  .orderBy('metadata.priority', 'desc') // Primary sort
+  .orderBy('metadata.publishedAt', 'desc') // Tiebreaker
+  .get();
+
+// Sort by category (asc), then price (asc), then name (asc)
+const products = await cms
+  .from('products')
+  .orderBy('category', 'asc') // 1st: by category
+  .orderBy('price', 'asc') // 2nd: by price (within same category)
+  .orderBy('name', 'asc') // 3rd: by name (within same category & price)
+  .get();
+```
+
+**How it works:**
+
+- Items are first sorted by the first `orderBy()` criterion
+- When two items have equal values for the first criterion, the second criterion
+  is used
+- This continues for all chained `orderBy()` calls
+- The order of `orderBy()` calls matters - they're applied in sequence
 
 ## Documents
 

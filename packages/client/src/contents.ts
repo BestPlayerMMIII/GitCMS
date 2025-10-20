@@ -145,7 +145,7 @@ export class SchemaRef {
 
 export class SchemaQuery {
   private filters: Record<string, any> = {};
-  private ordering: { field: string; direction: 'asc' | 'desc' } | null = null;
+  private orderings: { field: string; direction: 'asc' | 'desc' }[] = [];
   private limitCount: number | null = null;
   private debugActive: boolean = true;
 
@@ -169,7 +169,7 @@ export class SchemaQuery {
   }
 
   orderBy(field: string, direction: 'asc' | 'desc' = 'asc'): SchemaQuery {
-    this.ordering = { field, direction };
+    this.orderings.push({ field, direction });
     return this;
   }
 
@@ -259,9 +259,9 @@ export class SchemaQuery {
         }
       }
 
-      if (this.ordering) {
-        url.searchParams.set('orderBy', this.ordering.field);
-        url.searchParams.set('order', this.ordering.direction);
+      if (this.orderings.length > 0) {
+        // For API calls, send all orderings
+        url.searchParams.set('orderBy', JSON.stringify(this.orderings));
       }
       if (this.limitCount != null) url.searchParams.set('limit', String(this.limitCount));
 
@@ -297,14 +297,18 @@ export class SchemaQuery {
       });
     }
 
-    // Apply ordering
-    if (this.ordering) {
+    // Apply ordering (with multiple sort criteria)
+    if (this.orderings.length > 0) {
       items.sort((a, b) => {
-        const aVal = this.getNestedFieldValue(a, this.ordering!.field);
-        const bVal = this.getNestedFieldValue(b, this.ordering!.field);
+        // Compare items by each ordering criterion in sequence
+        for (const ordering of this.orderings) {
+          const aVal = this.getNestedFieldValue(a, ordering.field);
+          const bVal = this.getNestedFieldValue(b, ordering.field);
 
-        if (aVal < bVal) return this.ordering!.direction === 'asc' ? -1 : 1;
-        if (aVal > bVal) return this.ordering!.direction === 'asc' ? 1 : -1;
+          if (aVal < bVal) return ordering.direction === 'asc' ? -1 : 1;
+          if (aVal > bVal) return ordering.direction === 'asc' ? 1 : -1;
+          // If equal, continue to next ordering criterion
+        }
         return 0;
       });
     }
