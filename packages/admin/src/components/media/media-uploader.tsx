@@ -391,6 +391,14 @@ export function MediaUploader({
   const hasLargeFiles = pendingFiles.some(f => f.size > 100 * 1024 * 1024);
   const lfsFiles = pendingFiles.filter(f => f.lfsAnalysis?.shouldTrack);
 
+  const sanitizeFileType = (type: string) => {
+    if (['image', 'video', 'audio', 'document', 'other'].includes(type)) {
+      return type + '/*';
+    } else if (type.startsWith('.')) {
+      return type;
+    } else return '.' + type;
+  };
+
   return (
     <div className={`space-y-4 ${className}`}>
       {/* Network Status Bar */}
@@ -476,7 +484,7 @@ export function MediaUploader({
           ref={fileInputRef}
           type="file"
           multiple={multiple}
-          accept={acceptedTypes?.join(',')}
+          accept={acceptedTypes?.map(type => sanitizeFileType(type)).join(',')}
           onChange={handleFileInputChange}
           className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
         />

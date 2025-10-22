@@ -27,7 +27,6 @@ export function MediaPickerModal({
   acceptedTypes,
   title = 'Select Media',
 }: MediaPickerModalProps) {
-  const [currentTab, setCurrentTab] = useState<'library' | 'upload'>('library');
   const [selectedMedia, setSelectedMedia] = useState<GitCMSMediaFile[]>([]);
 
   // Prevent form submissions within the modal from affecting parent forms
@@ -71,23 +70,6 @@ export function MediaPickerModal({
     [multiple, onSelect, onClose]
   );
 
-  // Handle upload completion
-  const handleUploadComplete = useCallback(
-    (uploadedFiles: GitCMSMediaFile[]) => {
-      if (multiple) {
-        setSelectedMedia(prev => [...prev, ...uploadedFiles]);
-      } else if (uploadedFiles.length > 0) {
-        // For single selection, immediately select first uploaded file and close
-        onSelect(uploadedFiles[0]);
-        onClose();
-      }
-
-      // Switch to library tab to show uploaded files
-      setCurrentTab('library');
-    },
-    [multiple, onSelect, onClose]
-  );
-
   // Handle confirm selection (for multiple selection)
   const handleConfirmSelection = useCallback(() => {
     if (selectedMedia.length > 0) {
@@ -99,7 +81,6 @@ export function MediaPickerModal({
   // Handle modal close
   const handleClose = useCallback(() => {
     setSelectedMedia([]);
-    setCurrentTab('library');
     onClose();
   }, [onClose]);
 
@@ -127,47 +108,6 @@ export function MediaPickerModal({
           <div className="flex items-center justify-between p-6 border-b border-gray-200">
             <div className="flex items-center space-x-4">
               <h2 className="text-xl font-semibold text-gray-900">{title}</h2>
-              {owner && repo && (
-                <span className="text-sm text-gray-500">
-                  {owner}/{repo}
-                </span>
-              )}
-            </div>
-
-            {/* Tab Buttons */}
-            <div className="flex items-center space-x-1 bg-gray-100 rounded-lg p-1">
-              <button
-                type="button"
-                onClick={e => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setCurrentTab('library');
-                }}
-                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                  currentTab === 'library'
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                <Grid3X3 className="w-4 h-4 mr-1.5 inline" />
-                Library
-              </button>
-              <button
-                type="button"
-                onClick={e => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setCurrentTab('upload');
-                }}
-                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                  currentTab === 'upload'
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                <Upload className="w-4 h-4 mr-1.5 inline" />
-                Upload
-              </button>
             </div>
 
             {/* Close Button */}
@@ -186,35 +126,18 @@ export function MediaPickerModal({
 
           {/* Content */}
           <div className="flex-1 overflow-y-auto">
-            {currentTab === 'library' ? (
-              <MediaLibrary
-                owner={owner}
-                repo={repo}
-                onSelect={handleMediaSelect}
-                multiple={multiple}
-                acceptedTypes={acceptedTypes}
-                mode="picker"
-              />
-            ) : (
-              <div className="p-6">
-                <MediaUploader
-                  owner={owner}
-                  repo={repo}
-                  acceptedTypes={acceptedTypes}
-                  multiple={multiple}
-                  maxFiles={multiple ? 10 : 1}
-                  onUploadComplete={handleUploadComplete}
-                  onError={(error: string) => {
-                    console.error('Upload error:', error);
-                    // TODO: Show error toast/notification
-                  }}
-                />
-              </div>
-            )}
+            <MediaLibrary
+              owner={owner}
+              repo={repo}
+              onSelect={handleMediaSelect}
+              multiple={multiple}
+              acceptedTypes={acceptedTypes}
+              mode="picker"
+            />
           </div>
 
           {/* Footer (for multiple selection) */}
-          {multiple && selectedMedia.length > 0 && currentTab === 'library' && (
+          {multiple && selectedMedia.length > 0 && (
             <div className="border-t border-gray-200 p-4 bg-gray-50">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-4">

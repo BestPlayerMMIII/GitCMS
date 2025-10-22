@@ -565,7 +565,7 @@ export function MediaField({ field, value, onChange, error, disabled }: BaseFiel
   }, []);
 
   // Get accepted media types from field configuration
-  const acceptedTypes = mediaField.mediaTypes || undefined;
+  const acceptedTypes = mediaField.accept || undefined;
   const multiple = mediaField.multiple || false;
 
   // Parse current value
