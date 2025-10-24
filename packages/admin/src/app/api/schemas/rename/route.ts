@@ -49,7 +49,8 @@ async function getContentPath(
   accessToken: string
 ): Promise<string> {
   try {
-    const config = await getGitCMSConfig(owner, repo, accessToken);
+    const config = await getGitCMSConfig(accessToken, owner, repo);
+    console.log('fetched config for content path:', config);
     return getCentralizedContentPath(config);
   } catch (error) {
     console.warn('Failed to get config, using default content path');
@@ -201,6 +202,8 @@ async function renameSchemaWithCascade(
   // Step 5: Handle content migration
   const contentPath = await getContentPath(github, owner, repo, accessToken);
   const oldContentDir = `${contentPath}/${oldSchemaId}`;
+
+  console.log('old content directory:', oldContentDir);
 
   let contentItems: any[] = [];
 

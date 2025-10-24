@@ -7,21 +7,12 @@ import { SchemaList } from '@/components/schemas/schema-list';
 import { SchemaEditor } from '@/components/schemas/schema-editor';
 import { SchemaImportModal } from '@/components/schemas/schema-import-modal';
 import { ProgressiveLoading, SchemaListSkeleton } from '@/components/ui/loading';
-import { useRepoSchemas, useSchemaMutations, useCacheInvalidation } from '@/lib/api-hooks';
-
-// Track if we have content for a schema (for showing warnings)
-async function hasSchemaContent(owner: string, repo: string, schemaId: string): Promise<boolean> {
-  try {
-    const response = await fetch(
-      `/api/content?action=list&owner=${owner}&repo=${repo}&schemaId=${schemaId}`
-    );
-    if (!response.ok) return false;
-    const data = await response.json();
-    return data.items && data.items.length > 0;
-  } catch {
-    return false;
-  }
-}
+import {
+  useRepoSchemas,
+  useSchemaMutations,
+  useCacheInvalidation,
+  fetchContentList,
+} from '@/lib/api-hooks';
 import { useRepository } from '@/contexts/repository-context';
 import type { GitCMSSchema } from '@git-cms/core';
 import { useNavigationHeader } from '@/contexts/navigation-context';
@@ -154,11 +145,9 @@ function Schemas() {
 
       if (isRenamingSchema) {
         // Check if schema has content - warn user about migration
-        const hasContent = await hasSchemaContent(
-          repositoryInfo.owner,
-          repositoryInfo.repo,
-          originalSchemaId!
-        );
+        const hasContent =
+          (await fetchContentList(repositoryInfo.owner, repositoryInfo.repo, originalSchemaId!))
+            .length > 0;
 
         if (hasContent) {
           const confirmMsg =

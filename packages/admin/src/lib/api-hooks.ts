@@ -5,7 +5,7 @@
  * with appropriate loading states and cache invalidation strategies.
  */
 
-import { useCallback, useState, useEffect } from 'react';
+import { useCallback } from 'react';
 import type { GitCMSSchema } from '@git-cms/core';
 import {
   useApiData,
@@ -124,6 +124,35 @@ export function useRepoSchemas(
 }
 
 // Hook for content list
+export const fetchContentList = async (owner: string, repo: string, schemaId?: string) => {
+  if (!owner || !repo) {
+    throw new Error('Owner and repo are required');
+  }
+
+  const params = new URLSearchParams({
+    action: 'list',
+    owner,
+    repo,
+  });
+
+  if (schemaId) {
+    params.set('schemaId', schemaId);
+  }
+
+  const response = await fetch(`/api/content?${params}`);
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch content: ${response.statusText}`);
+  }
+
+  const data: ContentListResponse = await response.json();
+
+  if (!data.success) {
+    throw new Error(data.error || 'Failed to fetch content');
+  }
+
+  return data.items || [];
+};
 export function useContentList(
   owner: string | null,
   repo: string | null,
@@ -134,35 +163,7 @@ export function useContentList(
 
   return useApiData({
     key: owner && repo ? createCacheKey.contentList(owner, repo, schemaId) : 'disabled',
-    fetcher: async () => {
-      if (!owner || !repo) {
-        throw new Error('Owner and repo are required');
-      }
-
-      const params = new URLSearchParams({
-        action: 'list',
-        owner,
-        repo,
-      });
-
-      if (schemaId) {
-        params.set('schemaId', schemaId);
-      }
-
-      const response = await fetch(`/api/content?${params}`);
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch content: ${response.statusText}`);
-      }
-
-      const data: ContentListResponse = await response.json();
-
-      if (!data.success) {
-        throw new Error(data.error || 'Failed to fetch content');
-      }
-
-      return data.items || [];
-    },
+    fetcher: fetchContentList.bind(null, owner!, repo!, schemaId),
     ttl: DEFAULT_TTL.CONTENT_LIST,
     repoScope: owner && repo ? `${owner}/${repo}` : undefined,
     enabled: enabled && Boolean(owner && repo),
