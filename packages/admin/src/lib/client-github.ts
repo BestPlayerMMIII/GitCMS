@@ -21,18 +21,77 @@
 import { Octokit } from '@octokit/rest';
 import type { GitHubFileContent, GitHubCommitResponse, Repository, User } from '@git-cms/core';
 
-// Token cache to avoid excessive endpoint calls
+// ============================================================================
+// Global Token Cache (shared across all instances)
+// ============================================================================
+
 interface TokenCache {
   token: string;
   expiresAt: number;
 }
 
+// Single global cache shared by all ClientGitHubApi instances
+let globalTokenCache: TokenCache | null = null;
+// GitHub OAuth tokens don't expire automatically, so we can cache longer
+// We'll refresh every 30 minutes to detect revocations faster
+const TOKEN_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
+
+/**
+ * Get the GitHub access token from the secure endpoint
+ * Uses global caching to minimize server requests across ALL instances
+ */
+async function getGlobalAccessToken(): Promise<string> {
+  // Check if we have a valid cached token
+  if (globalTokenCache && globalTokenCache.expiresAt > Date.now()) {
+    return globalTokenCache.token;
+  }
+
+  // Fetch fresh token from secure endpoint
+  const response = await fetch('/api/auth/token', {
+    method: 'GET',
+    credentials: 'include', // Include session cookies
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error('Not authenticated. Please sign in.');
+    }
+    throw new Error(`Failed to get access token: ${response.statusText}`);
+  }
+
+  const data = await response.json();
+
+  if (!data.accessToken) {
+    throw new Error('No access token in response');
+  }
+
+  // Cache the token globally
+  globalTokenCache = {
+    token: data.accessToken,
+    expiresAt: Date.now() + TOKEN_CACHE_TTL,
+  };
+
+  return data.accessToken;
+}
+
+/**
+ * Clear the global token cache (useful after auth changes)
+ */
+export function clearGlobalTokenCache(): void {
+  globalTokenCache = null;
+}
+
+// ============================================================================
+// Client GitHub API Class
+// ============================================================================
+
 export class ClientGitHubApi {
   private owner: string;
   private repo: string;
   private branch: string;
-  private tokenCache: TokenCache | null = null;
-  private readonly TOKEN_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
   constructor(owner: string, repo: string, branch: string = 'main') {
     this.owner = owner;
@@ -41,44 +100,10 @@ export class ClientGitHubApi {
   }
 
   /**
-   * Get the GitHub access token from the secure endpoint
-   * Uses internal caching to minimize server requests
+   * Get the GitHub access token (uses global cache)
    */
-  private async getAccessToken(): Promise<string> {
-    // Check if we have a valid cached token
-    if (this.tokenCache && this.tokenCache.expiresAt > Date.now()) {
-      return this.tokenCache.token;
-    }
-
-    // Fetch fresh token from secure endpoint
-    const response = await fetch('/api/auth/token', {
-      method: 'GET',
-      credentials: 'include', // Include session cookies
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      if (response.status === 401) {
-        throw new Error('Not authenticated. Please sign in.');
-      }
-      throw new Error(`Failed to get access token: ${response.statusText}`);
-    }
-
-    const data = await response.json();
-
-    if (!data.accessToken) {
-      throw new Error('No access token in response');
-    }
-
-    // Cache the token
-    this.tokenCache = {
-      token: data.accessToken,
-      expiresAt: Date.now() + this.TOKEN_CACHE_TTL,
-    };
-
-    return data.accessToken;
+  async getAccessToken(): Promise<string> {
+    return getGlobalAccessToken();
   }
 
   /**
@@ -91,9 +116,10 @@ export class ClientGitHubApi {
 
   /**
    * Clear the token cache (useful after auth changes)
+   * @deprecated Use clearGlobalTokenCache() instead
    */
   public clearTokenCache(): void {
-    this.tokenCache = null;
+    clearGlobalTokenCache();
   }
 
   // ============================================================================
