@@ -4,6 +4,7 @@ import { useState } from 'react';
 import type { GitCMSSchema } from '@git-cms/core';
 import { useEnhancedSchemaImport } from '../../lib/api-hooks';
 import { LoadingSpinner, PageLoading } from '../ui/loading';
+import { fetchData } from '@/lib/api-router';
 
 interface SchemaImportModalProps {
   isOpen: boolean;
@@ -94,7 +95,7 @@ export function SchemaImportModal({ isOpen, onClose, onImport }: SchemaImportMod
         includePrivate: state.includePrivate.toString(),
       });
 
-      const response = await fetch(`/api/schemas/import?${params}`);
+      const response = await fetchData(`/api/schemas/import?${params}`);
 
       if (!response.ok) {
         const errorData = await response.json();

@@ -15,6 +15,7 @@ import {
   globalCache,
   type UseApiDataResult,
 } from './api-cache';
+import { fetchData } from './api-router';
 
 // Types for content items
 interface ContentItem {
@@ -56,7 +57,7 @@ export function useRegistrySchemas(): UseApiDataResult<GitCMSSchema[]> {
   return useApiData({
     key: createCacheKey.registrySchemas(),
     fetcher: async () => {
-      const response = await fetch('/api/schemas?action=list');
+      const response = await fetchData('/api/schemas?action=list');
       if (!response.ok) {
         throw new Error(`Failed to fetch registry schemas: ${response.statusText}`);
       }
@@ -99,12 +100,12 @@ export function useRepoSchemas(
         repo,
       });
 
-      const response = await fetch(`/api/schemas/storage?${params}`);
+      const response = await fetchData(`/api/schemas/storage?${params}`);
 
       if (!response.ok) {
         // If fallback is enabled and we get a 404/error, try registry schemas
         if (fallbackToRegistry && (response.status === 404 || response.status === 500)) {
-          const fallbackResponse = await fetch('/api/schemas?action=list');
+          const fallbackResponse = await fetchData('/api/schemas?action=list');
           if (fallbackResponse.ok) {
             const fallbackData: SchemaListResponse = await fallbackResponse.json();
             return fallbackData.schemas || [];
@@ -139,7 +140,7 @@ export const fetchContentList = async (owner: string, repo: string, schemaId?: s
     params.set('schemaId', schemaId);
   }
 
-  const response = await fetch(`/api/content?${params}`);
+  const response = await fetchData(`/api/content?${params}`);
 
   if (!response.ok) {
     throw new Error(`Failed to fetch content: ${response.statusText}`);
@@ -199,7 +200,7 @@ export function useContentItem(
         contentId,
       });
 
-      const response = await fetch(`/api/content?${params}`);
+      const response = await fetchData(`/api/content?${params}`);
 
       if (!response.ok) {
         throw new Error(`Failed to fetch content item: ${response.statusText}`);
@@ -243,7 +244,7 @@ export function useRepoSchema(
         schemaId,
       });
 
-      const response = await fetch(`/api/schemas/storage?${params}`);
+      const response = await fetchData(`/api/schemas/storage?${params}`);
 
       if (!response.ok) {
         throw new Error(`Failed to fetch schema: ${response.statusText}`);
@@ -285,7 +286,7 @@ export function useRepoSetup(
         repo,
       });
 
-      const response = await fetch(`/api/schemas/storage?${params}`);
+      const response = await fetchData(`/api/schemas/storage?${params}`);
 
       if (!response.ok) {
         throw new Error(`Failed to check repository setup: ${response.statusText}`);
@@ -315,20 +316,23 @@ export function useSchemaMutations(owner: string | null, repo: string | null) {
         throw new Error('Owner and repo are required');
       }
 
-      const response = await fetch(`/api/schemas/storage?action=save&owner=${owner}&repo=${repo}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          schema,
-          originalSchemaId,
-          commitMessage:
-            originalSchemaId && originalSchemaId !== schema.id
-              ? `Rename schema: ${originalSchemaId} → ${schema.id}`
-              : `Update schema: ${schema.metadata?.name || schema.id}`,
-        }),
-      });
+      const response = await fetchData(
+        `/api/schemas/storage?action=save&owner=${owner}&repo=${repo}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            schema,
+            originalSchemaId,
+            commitMessage:
+              originalSchemaId && originalSchemaId !== schema.id
+                ? `Rename schema: ${originalSchemaId} → ${schema.id}`
+                : `Update schema: ${schema.metadata?.name || schema.id}`,
+          }),
+        }
+      );
 
       if (!response.ok) {
         const errorData = await response.json();
@@ -349,7 +353,7 @@ export function useSchemaMutations(owner: string | null, repo: string | null) {
         throw new Error('Owner and repo are required');
       }
 
-      const response = await fetch(
+      const response = await fetchData(
         `/api/schemas/storage?owner=${owner}&repo=${repo}&schemaId=${schemaId}`,
         {
           method: 'DELETE',
@@ -376,7 +380,7 @@ export function useSchemaMutations(owner: string | null, repo: string | null) {
         throw new Error('Owner and repo are required');
       }
 
-      const response = await fetch(`/api/schemas/rename?owner=${owner}&repo=${repo}`, {
+      const response = await fetchData(`/api/schemas/rename?owner=${owner}&repo=${repo}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -449,7 +453,7 @@ export function useContentMutations(owner: string | null, repo: string | null) {
         payload.originalContentId = originalContentId;
       }
 
-      const response = await fetch(`/api/content?${params}`, {
+      const response = await fetchData(`/api/content?${params}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -490,7 +494,7 @@ export function useContentMutations(owner: string | null, repo: string | null) {
         contentId,
       });
 
-      const response = await fetch(`/api/content?${params}`, {
+      const response = await fetchData(`/api/content?${params}`, {
         method: 'DELETE',
       });
 
@@ -545,7 +549,7 @@ export function useGitHubConfig(
         throw new Error('Owner and repo are required');
       }
 
-      const response = await fetch(`/api/github/config?owner=${owner}&repo=${repo}`);
+      const response = await fetchData(`/api/github/config?owner=${owner}&repo=${repo}`);
       if (!response.ok) {
         throw new Error('Failed to check configuration');
       }
@@ -560,7 +564,7 @@ export function useGitHubConfig(
 export function useGitHubConfigMutations() {
   const initializeGitCMS = useCallback(
     async (config: { owner: string; repo: string; config: any }) => {
-      const response = await fetch('/api/github/config', {
+      const response = await fetchData('/api/github/config', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -598,7 +602,7 @@ export function useGitHubRepositories(
   return useApiData({
     key: 'github:repositories',
     fetcher: async () => {
-      const response = await fetch('/api/github/repositories');
+      const response = await fetchData('/api/github/repositories');
       if (!response.ok) {
         throw new Error('Failed to fetch repositories');
       }
@@ -626,7 +630,7 @@ export function usePublicSchemas(
         throw new Error('Owner and repo are required');
       }
 
-      const response = await fetch(`/api/schemas/public?owner=${owner}&repo=${repo}`);
+      const response = await fetchData(`/api/schemas/public?owner=${owner}&repo=${repo}`);
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.error || `Failed to fetch schemas: ${response.statusText}`);
@@ -678,7 +682,7 @@ export function useEnhancedSchemaImport(
         includePrivate: includePrivate.toString(),
       });
 
-      const response = await fetch(`/api/schemas/import?${params}`);
+      const response = await fetchData(`/api/schemas/import?${params}`);
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.error || `Failed to fetch schemas: ${response.statusText}`);
@@ -722,7 +726,7 @@ export async function validateContentId(
     params.set('currentId', currentContentId);
   }
 
-  const response = await fetch(`/api/content?${params}`);
+  const response = await fetchData(`/api/content?${params}`);
   if (!response.ok) {
     throw new Error('Failed to validate content ID');
   }
@@ -750,7 +754,7 @@ export async function validateSchemaId(
     params.set('currentId', currentSchemaId);
   }
 
-  const response = await fetch(`/api/schemas/storage?${params}`);
+  const response = await fetchData(`/api/schemas/storage?${params}`);
   if (!response.ok) {
     throw new Error('Failed to validate schema ID');
   }
@@ -780,7 +784,7 @@ export async function saveSchemaWithRename(
     originalSchemaId,
   };
 
-  const response = await fetch(`/api/schemas/storage?${params}`, {
+  const response = await fetchData(`/api/schemas/storage?${params}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

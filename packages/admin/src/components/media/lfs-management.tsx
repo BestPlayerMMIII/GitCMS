@@ -25,6 +25,7 @@ import {
   LFSUtils,
   formatFileSize,
 } from '@git-cms/core';
+import { fetchData } from '@/lib/api-router';
 
 interface LFSManagementProps {
   owner: string;
@@ -59,7 +60,7 @@ export function LFSManagement({ owner, repo, className = '' }: LFSManagementProp
       setIsLoading(true);
 
       // Fetch LFS status from API
-      const response = await fetch(`/api/lfs/status?owner=${owner}&repo=${repo}`);
+      const response = await fetchData(`/api/lfs/status?owner=${owner}&repo=${repo}`);
 
       if (response.ok) {
         const data = await response.json();
@@ -105,7 +106,7 @@ export function LFSManagement({ owner, repo, className = '' }: LFSManagementProp
     try {
       setIsInitializing(true);
 
-      const response = await fetch('/api/lfs/initialize', {
+      const response = await fetchData('/api/lfs/initialize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ owner, repo }),
@@ -128,7 +129,7 @@ export function LFSManagement({ owner, repo, className = '' }: LFSManagementProp
   const addLFSPattern = useCallback(
     async (pattern: string, description?: string) => {
       try {
-        const response = await fetch('/api/lfs/patterns', {
+        const response = await fetchData('/api/lfs/patterns', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ owner, repo, pattern, description }),
@@ -156,7 +157,7 @@ export function LFSManagement({ owner, repo, className = '' }: LFSManagementProp
   const removeLFSPattern = useCallback(
     async (pattern: string) => {
       try {
-        const response = await fetch('/api/lfs/patterns', {
+        const response = await fetchData('/api/lfs/patterns', {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ owner, repo, pattern }),

@@ -12,6 +12,7 @@ import {
   NetworkUtils as CoreNetworkUtils,
 } from '@git-cms/core';
 import { useUploadContext } from '@/contexts/upload-context';
+import { fetchData } from '@/lib/api-router';
 
 // Re-export network utilities from core for consistency
 const NetworkUtils = {
@@ -228,7 +229,7 @@ export function MediaUploader({
         formData.append('repo', repo);
         if (folder) formData.append('folder', folder);
 
-        const response = await fetch('/api/media?action=upload', {
+        const response = await fetchData('/api/media?action=upload', {
           method: 'POST',
           body: formData,
         });

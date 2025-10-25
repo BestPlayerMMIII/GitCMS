@@ -31,6 +31,7 @@ import {
   HardDrive,
 } from 'lucide-react';
 import { PageLoading } from '../ui/loading';
+import { fetchData } from '@/lib/api-router';
 
 interface MediaLibraryProps {
   owner?: string;
@@ -89,9 +90,10 @@ export function MediaLibrary({
     if (!showHidden) {
       result = result.filter(item => {
         const filename = item.filename;
-        const pathParts = item.path.split('/');
-        // Filter out files that start with . or are in folders that start with .
-        return !filename.startsWith('.') && !pathParts.some(part => part.startsWith('.'));
+        // Only filter out files whose filename starts with .
+        // Don't filter based on the folder path (e.g., .gitcms is our media folder)
+        const isHidden = filename.startsWith('.');
+        return !isHidden;
       });
     }
 
@@ -124,7 +126,7 @@ export function MediaLibrary({
       // Request medium-sized thumbnails for good balance of quality and performance
       params.set('thumbnailSize', 'medium');
 
-      const response = await fetch(`/api/media?${params}`);
+      const response = await fetchData(`/api/media?${params}`);
       const data = await response.json();
 
       if (!response.ok) {
@@ -305,7 +307,7 @@ export function MediaLibrary({
       params.set('owner', owner || mediaFile.repository?.owner || '');
       params.set('repo', repo || mediaFile.repository?.repo || '');
 
-      const response = await fetch(`/api/media?${params}`, {
+      const response = await fetchData(`/api/media?${params}`, {
         method: 'DELETE',
       });
 

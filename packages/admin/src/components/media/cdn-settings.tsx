@@ -24,6 +24,7 @@ import {
   Smartphone,
   Tablet,
 } from 'lucide-react';
+import { fetchData } from '@/lib/api-router';
 
 interface CDNSettingsProps {
   owner: string;
@@ -60,7 +61,7 @@ export default function CDNSettings({
 
   const checkPagesStatus = async () => {
     try {
-      const response = await fetch(`/api/github/pages?owner=${owner}&repo=${repo}`);
+      const response = await fetchData(`/api/github/pages?owner=${owner}&repo=${repo}`);
       const data = await response.json();
       setPagesStatus(data.enabled ? 'enabled' : 'disabled');
     } catch (error) {
@@ -71,7 +72,7 @@ export default function CDNSettings({
   const enableGitHubPages = async () => {
     setIsTestingPages(true);
     try {
-      const response = await fetch('/api/github/pages', {
+      const response = await fetchData('/api/github/pages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ owner, repo, source: 'main' }),
@@ -93,7 +94,7 @@ export default function CDNSettings({
   const testProviders = async () => {
     setIsTestingProviders(true);
     try {
-      const response = await fetch('/api/cdn/test', {
+      const response = await fetchData('/api/cdn/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ owner, repo }),
