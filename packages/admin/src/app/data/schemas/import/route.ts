@@ -1,0 +1,316 @@
+/**
+ * Enhanced Repository Schema Import API
+ *
+ * Fetches schemas from both public and private GitHub repositories
+ * using the user's authentication when available
+ */
+
+import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
+import { GitHubApiClient } from '@git-cms/core';
+import type { GitCMSSchema } from '@git-cms/core';
+
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const owner = searchParams.get('owner');
+    const repo = searchParams.get('repo');
+    const branch = searchParams.get('branch') || 'main';
+    const includePrivate = searchParams.get('includePrivate') === 'true';
+
+    if (!owner || !repo) {
+      return NextResponse.json(
+        { error: 'Owner and repo parameters are required' },
+        { status: 400 }
+      );
+    }
+
+    // Get user session for authenticated requests
+    const session = await getServerSession(authOptions);
+
+    if (includePrivate && !session?.accessToken) {
+      return NextResponse.json(
+        { error: 'Authentication required to access private repositories' },
+        { status: 401 }
+      );
+    }
+
+    return handleEnhancedFetch(owner, repo, branch, session?.accessToken || null);
+  } catch (error) {
+    console.error('Repository schema import API error:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}
+
+/**
+ * Fetch schemas from public or private repositories
+ */
+async function handleEnhancedFetch(
+  owner: string,
+  repo: string,
+  branch: string,
+  accessToken: string | null
+) {
+  try {
+    const schemasPath = '.gitcms/schemas';
+
+    // Use authenticated GitHub client if token available
+    if (accessToken) {
+      const github = new GitHubApiClient(accessToken, owner, repo);
+
+      try {
+        // Check repository access and get metadata
+        const repoInfo = await github.getRepository();
+
+        // Get schemas directory contents
+        let contents;
+        try {
+          contents = await github.getDirectory(schemasPath);
+        } catch (error: any) {
+          if (error.code === 'NOT_FOUND') {
+            return NextResponse.json({
+              schemas: [],
+              total: 0,
+              repository: {
+                owner,
+                repo,
+                branch,
+                fullName: repoInfo.fullName,
+                private: repoInfo.private,
+              },
+              message: 'No .gitcms/schemas directory found in this repository',
+            });
+          }
+          throw error;
+        }
+
+        const schemaFiles = contents.filter(
+          (item: any) => item.type === 'file' && item.name.endsWith('.json')
+        );
+
+        if (schemaFiles.length === 0) {
+          return NextResponse.json({
+            schemas: [],
+            total: 0,
+            repository: {
+              owner,
+              repo,
+              branch,
+              fullName: repoInfo.fullName,
+              private: repoInfo.private,
+            },
+            message: 'No schema files (.json) found in .gitcms/schemas directory',
+          });
+        }
+
+        // Fetch each schema file content using authenticated API
+        const schemas: GitCMSSchema[] = [];
+        const errors: string[] = [];
+
+        for (const file of schemaFiles) {
+          try {
+            const content = await github.getFileContent(file.path);
+            const schema = JSON.parse(content);
+
+            // Basic validation to ensure it's a GitCMS schema
+            if (schema && typeof schema === 'object' && schema.id && schema.fields) {
+              schemas.push(schema);
+            } else {
+              errors.push(`Invalid schema format in ${file.name}`);
+            }
+          } catch (error) {
+            errors.push(
+              `Error processing ${file.name}: ${error instanceof Error ? error.message : 'Unknown error'}`
+            );
+          }
+        }
+
+        return NextResponse.json({
+          schemas,
+          total: schemas.length,
+          repository: {
+            owner,
+            repo,
+            branch,
+            fullName: repoInfo.fullName,
+            private: repoInfo.private,
+          },
+          ...(errors.length > 0 && { warnings: errors }),
+        });
+      } catch (error: any) {
+        if (error.code === 'NOT_FOUND') {
+          return NextResponse.json({ error: 'Repository not found or no access' }, { status: 404 });
+        }
+        if (error.code === 'FORBIDDEN') {
+          return NextResponse.json({ error: 'No access to this repository' }, { status: 403 });
+        }
+        throw error;
+      }
+    } else {
+      // Fall back to public API for unauthenticated requests
+      return handlePublicRepositoryFetch(owner, repo, branch);
+    }
+  } catch (error) {
+    console.error('Failed to fetch repository schemas:', error);
+    return NextResponse.json(
+      {
+        error: error instanceof Error ? error.message : 'Failed to fetch schemas from repository',
+        schemas: [],
+        total: 0,
+      },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * Fallback to public repository API (same as existing implementation)
+ */
+async function handlePublicRepositoryFetch(owner: string, repo: string, branch: string) {
+  const schemasPath = '.gitcms/schemas';
+
+  // First, check if the repository exists and is public
+  const repoResponse = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
+    headers: {
+      Accept: 'application/vnd.github.v3+json',
+      'User-Agent': 'GitCMS-Admin',
+    },
+  });
+
+  if (!repoResponse.ok) {
+    if (repoResponse.status === 404) {
+      return NextResponse.json({ error: 'Repository not found or not public' }, { status: 404 });
+    }
+    throw new Error(`GitHub API error: ${repoResponse.statusText}`);
+  }
+
+  const repoData = await repoResponse.json();
+
+  // Check if repository is public
+  if (repoData.private) {
+    return NextResponse.json(
+      {
+        error: 'Repository is private. Please authenticate to access private repositories.',
+        requiresAuth: true,
+      },
+      { status: 403 }
+    );
+  }
+
+  // Try to get the contents of the schemas directory
+  const contentsResponse = await fetch(
+    `https://api.github.com/repos/${owner}/${repo}/contents/${schemasPath}?ref=${branch}`,
+    {
+      headers: {
+        Accept: 'application/vnd.github.v3+json',
+        'User-Agent': 'GitCMS-Admin',
+      },
+    }
+  );
+
+  if (!contentsResponse.ok) {
+    if (contentsResponse.status === 404) {
+      return NextResponse.json({
+        schemas: [],
+        total: 0,
+        repository: {
+          owner,
+          repo,
+          branch,
+          url: repoData.html_url,
+          description: repoData.description,
+          private: repoData.private,
+        },
+        message: 'No .gitcms/schemas directory found in this repository',
+      });
+    }
+    throw new Error(`GitHub API error: ${contentsResponse.statusText}`);
+  }
+
+  const contents = await contentsResponse.json();
+
+  if (!Array.isArray(contents)) {
+    return NextResponse.json({
+      schemas: [],
+      total: 0,
+      repository: {
+        owner,
+        repo,
+        branch,
+        url: repoData.html_url,
+        description: repoData.description,
+        private: repoData.private,
+      },
+      message: '.gitcms/schemas is not a directory',
+    });
+  }
+
+  // Filter for JSON files
+  const schemaFiles = contents.filter(
+    (item: any) => item.type === 'file' && item.name.endsWith('.json')
+  );
+
+  if (schemaFiles.length === 0) {
+    return NextResponse.json({
+      schemas: [],
+      total: 0,
+      repository: {
+        owner,
+        repo,
+        branch,
+        url: repoData.html_url,
+        description: repoData.description,
+        private: repoData.private,
+      },
+      message: 'No schema files (.json) found in .gitcms/schemas directory',
+    });
+  }
+
+  // Fetch each schema file content
+  const schemas: GitCMSSchema[] = [];
+  const errors: string[] = [];
+
+  for (const file of schemaFiles) {
+    try {
+      const fileResponse = await fetch(file.download_url, {
+        headers: {
+          'User-Agent': 'GitCMS-Admin',
+        },
+      });
+
+      if (!fileResponse.ok) {
+        errors.push(`Failed to fetch ${file.name}: ${fileResponse.statusText}`);
+        continue;
+      }
+
+      const content = await fileResponse.text();
+      const schema = JSON.parse(content);
+
+      // Basic validation to ensure it's a GitCMS schema
+      if (schema && typeof schema === 'object' && schema.id && schema.fields) {
+        schemas.push(schema);
+      } else {
+        errors.push(`Invalid schema format in ${file.name}`);
+      }
+    } catch (error) {
+      errors.push(
+        `Error processing ${file.name}: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    }
+  }
+
+  return NextResponse.json({
+    schemas,
+    total: schemas.length,
+    repository: {
+      owner,
+      repo,
+      branch,
+      url: repoData.html_url,
+      description: repoData.description,
+      private: repoData.private,
+    },
+    ...(errors.length > 0 && { warnings: errors }),
+  });
+}
