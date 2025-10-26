@@ -33,7 +33,9 @@ import {
 import { PageLoading } from '../ui/loading';
 import { fetchData } from '@/lib/api-router';
 
-interface MediaLibraryProps {
+import { AuthenticatedImage } from './authenticated-image';
+
+export interface MediaLibraryProps {
   owner?: string;
   repo?: string;
   onSelect?: (media: GitCMSMediaFile) => void;
@@ -787,29 +789,19 @@ function MediaCard({
       {/* Media Preview */}
       <div className="aspect-square bg-gray-100 rounded-lg mb-2 flex items-center justify-center overflow-hidden">
         {media.mediaType === 'image' ? (
-          <img
-            src={media.thumbnailUrl || media.url}
+          <AuthenticatedImage
+            owner={media.repository.owner}
+            repo={media.repository.repo}
+            path={media.path}
             alt={media.metadata.alt || media.filename}
-            draggable={false}
+            thumbnailUrl={media.thumbnailUrl}
             className="w-full h-full object-cover"
-            loading="lazy"
-            onError={e => {
-              console.error('Failed to load image:', media.thumbnailUrl || media.url);
-              const target = e.target as HTMLImageElement;
-              target.style.display = 'none';
-              // Show fallback icon
-              const parent = target.parentElement;
-              if (parent && !parent.querySelector('.fallback-icon')) {
-                const fallbackDiv = document.createElement('div');
-                fallbackDiv.className = 'fallback-icon text-gray-400';
-                fallbackDiv.innerHTML = `
-                  <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" />
-                  </svg>
-                  <p className="text-xs mt-1">Image not available</p>
-                `;
-                parent.appendChild(fallbackDiv);
-              }
+            useThumbnail={!media.thumbnailUrl}
+            thumbnailOptions={{
+              maxWidth: 200,
+              maxHeight: 200,
+              quality: 0.7,
+              format: 'image/jpeg',
             }}
           />
         ) : (

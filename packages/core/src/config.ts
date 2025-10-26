@@ -15,9 +15,8 @@ export interface GitCMSRepositoryConfig {
  */
 export const DEFAULT_GITCMS_CONFIG: Partial<GitCMSRepositoryConfig> = {
   version: '1.0.0',
-  contentPath: 'content',
-  mediaPath: 'media',
-  schemas: {},
+  contentPath: '.gitcms/content',
+  mediaPath: '.gitcms/media',
 } as const;
 
 /**

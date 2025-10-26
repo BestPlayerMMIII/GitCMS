@@ -62,10 +62,12 @@ export function SetupWizard({ repository }: SetupWizardProps) {
       } else {
         setStep('configure');
         // Use suggested setup from detected structure
-        if (gitcmsConfig.contentStructure?.suggestedSetup) {
+        const suggestedSetup = gitcmsConfig.contentStructure?.suggestedSetup;
+        if (suggestedSetup) {
           setSetupConfig(prev => ({
             ...prev,
-            contentPath: gitcmsConfig.contentStructure.suggestedSetup,
+            contentPath: suggestedSetup.contentPath,
+            mediaPath: suggestedSetup.mediaPath,
           }));
         }
       }

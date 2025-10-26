@@ -25,9 +25,13 @@ const THUMBNAIL_SIZES = {
 
 const DEFAULT_THUMBNAIL_CONFIG = {
   size: 'medium' as keyof typeof THUMBNAIL_SIZES,
-  quality: 0.8, // For canvas toDataURL
+  quality: 0.8,
   format: 'webp' as const,
 };
+
+// Maximum file size for thumbnail generation (10MB)
+// Files larger than this will be loaded on-demand by AuthenticatedImage component
+const MAX_THUMBNAIL_SIZE = 10 * 1024 * 1024;
 
 /**
  * Generate thumbnail from base64 image data using Canvas API (client-side)
@@ -271,26 +275,32 @@ async function handleGetRepositoryMedia(
             type: getMimeTypeFromExtension(file.name),
           } as File) || 'other';
 
-        const imageUrl = GitHubMediaStorage.generateGitHubUrl(owner, repo, file.path);
         let thumbnailUrl: string | undefined;
 
-        // For images, optionally fetch content and create thumbnail data URL
-        if (includeContent && mediaType === 'image') {
-          try {
-            const fileContent = await githubClient.getFile(file.path);
-            if (fileContent.content) {
-              const mimeType = getMimeTypeFromExtension(file.name);
-              // Generate client-side thumbnail using Canvas API
-              thumbnailUrl = await generateThumbnail(fileContent.content, mimeType, thumbnailSize);
+        // Generate thumbnails for images (client-side using Canvas API)
+        if (mediaType === 'image') {
+          const isVeryLargeFile = actualSize > MAX_THUMBNAIL_SIZE;
+
+          if (includeContent && !isVeryLargeFile) {
+            try {
+              const fileContent = await githubClient.getFile(file.path);
+
+              if (fileContent.content && fileContent.encoding === 'base64') {
+                const mimeType = getMimeTypeFromExtension(file.name);
+                thumbnailUrl = await generateThumbnail(
+                  fileContent.content,
+                  mimeType,
+                  thumbnailSize
+                );
+              }
+              // If content not available (file >1MB or LFS), AuthenticatedImage will fetch on-demand
+            } catch (error: any) {
+              console.warn(
+                `Failed to generate thumbnail for ${file.path} (${(actualSize / 1024).toFixed(1)}KB):`,
+                error.message || error
+              );
             }
-          } catch (error) {
-            console.warn(`Failed to fetch content for ${file.path}:`, error);
-            // Fall back to GitHub raw URL
-            thumbnailUrl = imageUrl;
           }
-        } else if (mediaType === 'image') {
-          // If not including content, use GitHub URL as fallback
-          thumbnailUrl = imageUrl;
         }
 
         const mediaFile: GitCMSMediaFile = {
@@ -298,10 +308,10 @@ async function handleGetRepositoryMedia(
           filename: file.name,
           originalName: file.name,
           path: file.path,
-          size: actualSize, // Use the actual size (LFS-aware)
+          size: actualSize,
           mimeType: getMimeTypeFromExtension(file.name),
           mediaType,
-          url: imageUrl,
+          url: GitHubMediaStorage.generateGitHubUrl(owner, repo, file.path),
           thumbnailUrl,
           metadata: {
             folder: MediaPathManager.extractFolderFromPath(file.path, mediaPath) || undefined,
@@ -312,8 +322,6 @@ async function handleGetRepositoryMedia(
         };
 
         mediaFiles.push(mediaFile);
-
-        // Register in memory registry
         defaultMediaRegistry.register(mediaFile);
       }
     }

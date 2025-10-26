@@ -10,6 +10,7 @@ import React, {
   useContext,
 } from 'react';
 import { MediaPickerModal } from '../media/media-picker-modal';
+import { AuthenticatedImage } from '../media/authenticated-image';
 import { File as FileIcon } from 'lucide-react';
 import { type FieldDefinition, type FieldOption, type GitCMSSchema } from '@git-cms/core';
 import RichTextEditor from './rich-text-editor';
@@ -605,18 +606,27 @@ export function MediaField({ field, value, onChange, error, disabled }: BaseFiel
           {currentMedia.map((media: any, index: number) => (
             <div key={index} className="relative group">
               <div className="aspect-square bg-gray-100 rounded-lg overflow-hidden">
-                {media.mediaType === 'image' ? (
+                {media.mediaType === 'image' && repositoryContext ? (
+                  <AuthenticatedImage
+                    owner={repositoryContext.owner}
+                    repo={repositoryContext.repo}
+                    path={media.path}
+                    alt={media.filename || 'Media'}
+                    thumbnailUrl={media.thumbnailUrl}
+                    className="w-full h-full object-cover"
+                    useThumbnail={!media.thumbnailUrl}
+                    thumbnailOptions={{
+                      maxWidth: 200,
+                      maxHeight: 200,
+                      quality: 0.7,
+                      format: 'image/jpeg',
+                    }}
+                  />
+                ) : media.mediaType === 'image' ? (
                   <img
                     src={media.thumbnailUrl || media.url}
                     alt={media.filename || 'Media'}
                     className="w-full h-full object-cover"
-                    onError={e => {
-                      // Fallback to original URL if thumbnail fails
-                      const target = e.target as HTMLImageElement;
-                      if (target.src === media.thumbnailUrl && media.url) {
-                        target.src = media.url;
-                      }
-                    }}
                   />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center">

@@ -1,5 +1,10 @@
 import { createGitHubClient } from '@/lib/client-github';
-import { GitHubApiClient, defaultSchemas, createGitCMSConfig } from '@git-cms/core';
+import {
+  GitHubApiClient,
+  defaultSchemas,
+  createGitCMSConfig,
+  DEFAULT_GITCMS_CONFIG,
+} from '@git-cms/core';
 
 /**
  * Get GitHub repository config (client-callable)
@@ -35,7 +40,6 @@ export async function githubConfigGET(
   const configExists = await client.fileExists('.gitcms/config.json');
 
   let config = null;
-  let contentStructure = null;
 
   if (configExists) {
     try {
@@ -46,39 +50,25 @@ export async function githubConfigGET(
     }
   }
 
-  // Check for common content directories
-  const commonPaths = ['content', 'posts', 'blog', 'data', 'src/content'];
-  const detectedPaths = [];
+  const contentStructure = {
+    detectedPaths: [],
+    suggestedSetup: {
+      contentPath: config?.contentPath || DEFAULT_GITCMS_CONFIG.contentPath,
+      mediaPath: config?.mediaPath || DEFAULT_GITCMS_CONFIG.mediaPath,
+    },
+  };
 
-  for (const path of commonPaths) {
-    try {
-      const dirExists = await client.getDirectory(path);
-      if (dirExists && dirExists.length > 0) {
-        detectedPaths.push({
-          path,
-          files: dirExists.filter(item => item.type === 'file').length,
-          dirs: dirExists.filter(item => item.type === 'dir').length,
-        });
-      }
-    } catch (error) {
-      // Directory doesn't exist, skip
-    }
-  }
-
-  contentStructure = {
-    detectedPaths,
-    suggestedSetup: detectedPaths.length > 0 ? detectedPaths[0].path : 'content',
+  const repository = {
+    owner,
+    name: repo,
+    fullName: `${owner}/${repo}`,
   };
 
   return {
     hasGitCMS: configExists,
     config,
     contentStructure,
-    repository: {
-      owner,
-      name: repo,
-      fullName: `${owner}/${repo}`,
-    },
+    repository,
   };
 }
 

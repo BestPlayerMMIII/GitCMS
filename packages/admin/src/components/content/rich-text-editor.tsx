@@ -39,53 +39,7 @@ import {
 import { useCallback, useState } from 'react';
 import { useMediaPicker } from '../media/media-picker-modal';
 import { type GitCMSMediaFile } from '@git-cms/core';
-
-// Utility function to generate thumbnail data URL
-const generateThumbnailDataUrl = async (imageUrl: string): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const img = new globalThis.Image();
-    img.crossOrigin = 'anonymous';
-
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      if (!ctx) {
-        reject(new Error('Could not get canvas context'));
-        return;
-      }
-
-      // Set thumbnail size (max 200x200)
-      const maxSize = 200;
-      let { width, height } = img;
-
-      if (width > height) {
-        if (width > maxSize) {
-          height = (height * maxSize) / width;
-          width = maxSize;
-        }
-      } else {
-        if (height > maxSize) {
-          width = (width * maxSize) / height;
-          height = maxSize;
-        }
-      }
-
-      canvas.width = width;
-      canvas.height = height;
-
-      // Draw and convert to data URL
-      ctx.drawImage(img, 0, 0, width, height);
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
-      resolve(dataUrl);
-    };
-
-    img.onerror = () => {
-      reject(new Error('Failed to load image'));
-    };
-
-    img.src = imageUrl;
-  });
-};
+import { useMediaThumbnail } from '@/hooks/use-media-thumbnail';
 
 // Custom TipTap extension for GitCMS media embedding
 const GitCMSMedia = Node.create({
@@ -222,6 +176,18 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
   const [linkUrl, setLinkUrl] = useState('');
   const { openPicker, MediaPicker } = useMediaPicker();
 
+  // Use the thumbnail generator hook
+  const { getThumbnail } = useMediaThumbnail({
+    owner: owner || '',
+    repo: repo || '',
+    thumbnailOptions: {
+      maxWidth: 200,
+      maxHeight: 200,
+      quality: 0.7,
+      format: 'image/jpeg',
+    },
+  });
+
   // Create lowlight instance for code highlighting
   const lowlight = createLowlight();
 
@@ -306,33 +272,41 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
 
   const handleMediaSelect = useCallback(
     async (selectedMedia: GitCMSMediaFile | GitCMSMediaFile[]) => {
-      if (editor) {
+      if (editor && owner && repo) {
         // Handle both single media and array (take first if array)
         const media = Array.isArray(selectedMedia) ? selectedMedia[0] : selectedMedia;
         if (!media) return;
 
         try {
-          // Generate thumbnail data URL for immediate display
-          const thumbnailDataUrl = media.thumbnailUrl || media.url;
+          // Generate thumbnail data URL from GitHub with authentication
+          const thumbnailDataUrl = await getThumbnail(media.path);
 
           // Create custom media embedding tag with thumbnail and reference
-          const mediaEmbed = `<gitcms-media data-path="${media.path}" data-filename="${media.filename}" data-thumbnail="${thumbnailDataUrl}"></gitcms-media>`;
+          // This stores the thumbnail as a data URL directly in the content
+          const mediaEmbed = `<gitcms-media data-path="${media.path}" data-filename="${media.filename}" data-thumbnail="${thumbnailDataUrl}" alt="${media.filename}" title="${media.filename}"></gitcms-media>`;
 
           editor.chain().focus().insertContent(mediaEmbed).run();
         } catch (error) {
           console.error('Failed to generate thumbnail:', error);
-          // Fallback to regular image tag
-          editor
-            .chain()
-            .focus()
-            .setImage({
-              src: media.thumbnailUrl || media.url,
-            })
-            .run();
+          // Fallback: try to use pre-generated thumbnail if available
+          if (media.thumbnailUrl) {
+            const mediaEmbed = `<gitcms-media data-path="${media.path}" data-filename="${media.filename}" data-thumbnail="${media.thumbnailUrl}" alt="${media.filename}" title="${media.filename}"></gitcms-media>`;
+            editor.chain().focus().insertContent(mediaEmbed).run();
+          } else {
+            // Last fallback: use regular image tag
+            editor
+              .chain()
+              .focus()
+              .setImage({
+                src: media.url,
+                alt: media.filename,
+              })
+              .run();
+          }
         }
       }
     },
-    [editor]
+    [editor, owner, repo, getThumbnail]
   );
 
   if (!editor) {

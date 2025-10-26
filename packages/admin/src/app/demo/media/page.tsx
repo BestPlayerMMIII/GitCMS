@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { MediaLibrary } from '@/components/media/media-library';
+import { AuthenticatedImage } from '@/components/media/authenticated-image';
 import { useMediaPicker } from '@/components/media/media-picker-modal';
 import { Camera, Upload, Grid3X3, Eye } from 'lucide-react';
 import { MediaUploader } from '@/components/media/media-uploader';
@@ -197,10 +198,20 @@ export default function MediaManagementDemo() {
                           <div key={index} className="relative group">
                             <div className="aspect-square bg-gray-100 rounded-lg overflow-hidden">
                               {media.mediaType === 'image' ? (
-                                <img
-                                  src={media.url}
+                                <AuthenticatedImage
+                                  owner={demoOwner}
+                                  repo={demoRepo}
+                                  path={media.path}
                                   alt={media.filename}
+                                  thumbnailUrl={media.thumbnailUrl}
                                   className="w-full h-full object-cover"
+                                  useThumbnail={!media.thumbnailUrl}
+                                  thumbnailOptions={{
+                                    maxWidth: 200,
+                                    maxHeight: 200,
+                                    quality: 0.7,
+                                    format: 'image/jpeg',
+                                  }}
                                 />
                               ) : (
                                 <div className="w-full h-full flex items-center justify-center">

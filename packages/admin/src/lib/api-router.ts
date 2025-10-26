@@ -16,43 +16,42 @@
  */
 
 // Content
-import { contentGET, contentPOST, contentDELETE } from '@/app/data/content.data';
-import { contentParsePOST } from '@/app/data/content/parse.data';
+import { contentGET, contentPOST, contentDELETE } from '@/lib/data/content.data';
+import { contentParsePOST } from '@/lib/data/content/parse.data';
 
 // GitHub
-import { githubRepositoriesGET } from '@/app/data/github/repositories.data';
-import { githubConfigGET, githubConfigPOST } from '@/app/data/github/config.data';
-import { githubFilesGET, githubFilesPOST, githubFilesDELETE } from '@/app/data/github/files.data';
+import { githubRepositoriesGET } from '@/lib/data/github/repositories.data';
+import { githubConfigGET, githubConfigPOST } from '@/lib/data/github/config.data';
+import { githubFilesGET, githubFilesPOST, githubFilesDELETE } from '@/lib/data/github/files.data';
 import {
   githubPagesGET,
   githubPagesPOST,
   githubPagesPUT,
   githubPagesDELETE,
-} from '@/app/data/github/pages.data';
-import { gitcmsConfigGET } from '@/app/data/github/repositories/gitcms-config.data';
+} from '@/lib/data/github/pages.data';
+import { gitcmsConfigGET } from '@/lib/data/github/repositories/gitcms-config.data';
 
 // Schemas
 import {
   schemasStorageGET,
   schemasStoragePOST,
   schemasStorageDELETE,
-} from '@/app/data/schemas/storage.data';
-import { schemasGET, schemasPOST } from '@/app/data/schemas.data';
-import { schemasPublicGET } from '@/app/data/schemas/public.data';
-import { schemasRenamePOST } from '@/app/data/schemas/rename.data';
-import { schemasImportGET } from '@/app/data/schemas/import.data';
+} from '@/lib/data/schemas/storage.data';
+import { schemasGET, schemasPOST } from '@/lib/data/schemas.data';
+import { schemasPublicGET } from '@/lib/data/schemas/public.data';
+import { schemasRenamePOST } from '@/lib/data/schemas/rename.data';
+import { schemasImportGET } from '@/lib/data/schemas/import.data';
 
 // LFS
-import { lfsStatusGET, lfsStatusPOST } from '@/app/data/lfs/status.data';
-import { lfsInitializePOST } from '@/app/data/lfs/initialize.data';
-import { lfsPatternsPOST, lfsPatternsDELETE } from '@/app/data/lfs/patterns.data';
+import { lfsStatusGET, lfsStatusPOST } from '@/lib/data/lfs/status.data';
+import { lfsInitializePOST } from '@/lib/data/lfs/initialize.data';
+import { lfsPatternsPOST, lfsPatternsDELETE } from '@/lib/data/lfs/patterns.data';
 
 // Media
-import { mediaGET, mediaPOST, mediaPUT, mediaDELETE } from '@/app/data/media.data';
+import { mediaGET, mediaPOST, mediaPUT, mediaDELETE } from '@/lib/data/media.data';
 
 // Debug
-import { debugTokenGET } from '@/app/data/debug/token.data';
-import { headers } from 'next/headers';
+import { debugTokenGET } from '@/lib/data/debug/token.data';
 
 // ============================================================================
 // Router Types
@@ -175,7 +174,7 @@ export async function fetchData(
       statusText: 'OK',
       json: async () => data,
       text: async () => JSON.stringify(data),
-      headers: new Headers({ 'Content-Type': 'application/json' }),
+      headers: { 'Content-Type': 'application/json' },
     };
   } catch (error: any) {
     // Return error response
@@ -185,7 +184,7 @@ export async function fetchData(
       statusText: error.statusText || 'Internal Server Error',
       json: async () => ({ error: error.message || 'An error occurred' }),
       text: async () => JSON.stringify({ error: error.message || 'An error occurred' }),
-      headers: new Headers({ 'Content-Type': 'application/json' }),
+      headers: { 'Content-Type': 'application/json' },
     };
   }
 }
