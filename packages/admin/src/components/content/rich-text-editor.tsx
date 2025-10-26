@@ -38,7 +38,12 @@ import {
 } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import { useMediaPicker } from '../media/media-picker-modal';
-import { type GitCMSMediaFile, getThumbnailPath } from '@git-cms/core';
+import {
+  type GitCMSMediaFile,
+  fetchAuthenticatedThumbnail,
+  getMediaTypeFromFilename,
+  getDefaultThumbnail,
+} from '@git-cms/core';
 import { createGitHubClient } from '@/lib/client-github';
 
 // Custom TipTap extension for GitCMS media embedding
@@ -178,54 +183,30 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
 
   /**
    * Fetch thumbnail with authentication and convert to base64 data URL
-   * This works for private repositories
+   * Uses the centralized fetchAuthenticatedThumbnail from @git-cms/core
+   * For images: fetches actual thumbnail from thumbnails/ subfolder
+   * For videos/audio/documents: returns appropriate placeholder SVG automatically
    */
-  const fetchThumbnailAsDataUrl = useCallback(
-    async (mediaPath: string): Promise<string> => {
+  const getThumbnailForMedia = useCallback(
+    async (mediaPath: string, filename: string): Promise<string> => {
       if (!owner || !repo) {
-        throw new Error('Owner and repo are required');
+        // Fallback to default placeholder if no repo info
+        const mediaType = getMediaTypeFromFilename(filename);
+        return getDefaultThumbnail(mediaType);
       }
 
       try {
-        // Get thumbnail path (in thumbnails subfolder)
-        const thumbnailPath = getThumbnailPath(mediaPath);
-
         // Create GitHub client with OAuth
         const githubClient = createGitHubClient(owner, repo);
         const token = await (githubClient as any).getAccessToken();
 
-        // Fetch thumbnail content with authentication
-        const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${thumbnailPath}`;
-        const response = await fetch(apiUrl, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            Accept: 'application/vnd.github.raw',
-          },
-        });
-
-        if (!response.ok) {
-          throw new Error(`Failed to fetch thumbnail: ${response.status}`);
-        }
-
-        // Get blob and convert to base64 data URL
-        const blob = await response.blob();
-
-        return new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onloadend = () => {
-            if (typeof reader.result === 'string') {
-              resolve(reader.result);
-            } else {
-              reject(new Error('Failed to read thumbnail'));
-            }
-          };
-          reader.onerror = reject;
-          reader.readAsDataURL(blob);
-        });
+        // Use centralized thumbnail fetching (handles all media types and caching)
+        return await fetchAuthenticatedThumbnail(owner, repo, mediaPath, token);
       } catch (error) {
         console.error('Failed to fetch thumbnail:', error);
-        // Return a placeholder on error
-        return 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 300 300"%3E%3Crect fill="%23E5E7EB" width="300" height="300"/%3E%3Cpath fill="%239CA3AF" d="M150 90c-22.1 0-40 17.9-40 40s17.9 40 40 40 40-17.9 40-40-17.9-40-40-40zm0 60c-11 0-20-9-20-20s9-20 20-20 20 9 20 20-9 20-20 20z"/%3E%3Cpath fill="%239CA3AF" d="M240 60H60c-11 0-20 9-20 20v140c0 11 9 20 20 20h180c11 0 20-9 20-20V80c0-11-9-20-20-20zm0 160H60V80h180v140zm-30-100l-40 53.3-30-40-50 66.7h180l-60-80z"/%3E%3C/svg%3E';
+        // Return appropriate placeholder based on media type
+        const mediaType = getMediaTypeFromFilename(filename);
+        return getDefaultThumbnail(mediaType);
       }
     },
     [owner, repo]
@@ -294,19 +275,19 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
     }
   }, [editor, linkUrl]);
 
-  const addImage = useCallback(() => {
+  const addMedia = useCallback(() => {
     if (owner && repo) {
       openPicker({
         onSelect: handleMediaSelect,
         owner,
         repo,
         multiple: false,
-        acceptedTypes: ['image'],
-        title: 'Insert Image',
+        acceptedTypes: ['image', 'video', 'audio', 'document'],
+        title: 'Insert Media',
       });
     } else {
       // Fallback to URL prompt if no repository info
-      const url = window.prompt('Image URL:');
+      const url = window.prompt('Media URL:');
       if (url && editor) {
         editor.chain().focus().setImage({ src: url }).run();
       }
@@ -322,8 +303,9 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
 
         try {
           // Fetch thumbnail with authentication and get base64 data URL
-          // This is the thumbnail that will be displayed in the editor preview
-          const thumbnailDataUrl = await fetchThumbnailAsDataUrl(media.path);
+          // For images: fetches actual thumbnail from repository
+          // For videos/documents/audio: returns appropriate placeholder SVG
+          const thumbnailDataUrl = await getThumbnailForMedia(media.path, media.filename);
 
           // Create custom media embedding tag
           // - data-thumbnail: base64 data URL for immediate display in editor and client
@@ -345,7 +327,7 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
         }
       }
     },
-    [editor, owner, repo, fetchThumbnailAsDataUrl]
+    [editor, owner, repo, getThumbnailForMedia]
   );
 
   if (!editor) {
@@ -493,7 +475,7 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
               >
                 <LinkIcon size={16} />
               </ToolbarButton>
-              <ToolbarButton onClick={addImage} title="Add Image">
+              <ToolbarButton onClick={addMedia} title="Add Media">
                 <ImageIcon size={16} />
               </ToolbarButton>
               <ToolbarButton

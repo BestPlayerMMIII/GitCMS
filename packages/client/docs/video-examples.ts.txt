@@ -1,0 +1,402 @@
+/**
+ * GitCMS Video & Document Embedding Examples
+ * 
+ * This file demonstrates how to properly embed and render videos, audio files,
+ * and documents using the GitCMS client library.
+ */
+
+import { 
+  GitCMS, 
+  MediaManager,
+  injectMediaStyles,
+  enableProgressiveMediaLoading 
+} from '@git-cms/client';
+
+// ============================================================================
+// Example 1: Basic Setup
+// ============================================================================
+
+export function example1_basicSetup() {
+  // Inject GitCMS media styles into the document (call once)
+  injectMediaStyles();
+
+  // Create a MediaManager instance
+  const mediaManager = new MediaManager({
+    repository: 'owner/repo',
+    token: 'your-github-token', // Required for private repos
+    branch: 'main',
+  });
+
+  return mediaManager;
+}
+
+// ============================================================================
+// Example 2: Fast Rendering with Thumbnails
+// ============================================================================
+
+export async function example2_fastRendering() {
+  const cms = new GitCMS({
+    repository: 'owner/repo',
+    token: 'your-token',
+  });
+
+  // Fetch a blog post with embedded videos and documents
+  const post = await cms.from('posts').doc('my-video-tutorial').get();
+
+  // Render with thumbnails/placeholders (fast, no API calls for media)
+  const htmlWithThumbnails = cms.media.renderFast(post.content);
+
+  // Display immediately
+  document.getElementById('content')!.innerHTML = htmlWithThumbnails;
+}
+
+// ============================================================================
+// Example 3: Full Rendering with Actual Media
+// ============================================================================
+
+export async function example3_fullRendering() {
+  const cms = new GitCMS({
+    repository: 'owner/repo',
+    token: 'your-token',
+  });
+
+  const post = await cms.from('posts').doc('my-video-tutorial').get();
+
+  // Render with actual video/audio/document elements (async)
+  const htmlWithFullMedia = await cms.media.renderFull(post.content, {
+    onProgress: (current, total, reference) => {
+      console.log(`Loading ${current}/${total}: ${reference.filename}`);
+      // Update progress bar
+      updateProgressBar((current / total) * 100);
+    },
+  });
+
+  document.getElementById('content')!.innerHTML = htmlWithFullMedia;
+}
+
+// ============================================================================
+// Example 4: Progressive Enhancement (Recommended)
+// ============================================================================
+
+export async function example4_progressiveEnhancement() {
+  injectMediaStyles();
+
+  const cms = new GitCMS({
+    repository: 'owner/repo',
+    token: 'your-token',
+  });
+
+  const post = await cms.from('posts').doc('my-video-tutorial').get();
+
+  // Step 1: Show thumbnails immediately (fast load)
+  const fastHtml = cms.media.renderFast(post.content);
+  const container = document.getElementById('content')!;
+  container.innerHTML = fastHtml;
+
+  // Step 2: Enable click-to-load for videos and documents
+  // Users click on placeholders to load actual media
+  enableProgressiveMediaLoading(container, cms.media.getManager());
+}
+
+// ============================================================================
+// Example 5: Video Gallery with Click-to-Play
+// ============================================================================
+
+export async function example5_videoGallery() {
+  injectMediaStyles();
+
+  const cms = new GitCMS({
+    repository: 'tutorials/videos',
+    token: 'your-token',
+  });
+
+  // Fetch video gallery content
+  const gallery = await cms.from('galleries').doc('react-tutorials').get();
+
+  // Render with thumbnails showing play buttons
+  const html = cms.media.renderFast(gallery.content);
+  const container = document.getElementById('video-gallery')!;
+  container.innerHTML = html;
+
+  // Enable click-to-play
+  enableProgressiveMediaLoading(container, cms.media.getManager());
+
+  // Videos will load when users click the play button
+}
+
+// ============================================================================
+// Example 6: Document Library with Download Links
+// ============================================================================
+
+export async function example6_documentLibrary() {
+  injectMediaStyles();
+
+  const cms = new GitCMS({
+    repository: 'company/docs',
+    token: 'your-token',
+  });
+
+  // Fetch document library
+  const docs = await cms.from('resources').doc('user-manuals').get();
+
+  // For documents, renderFull creates proper download links
+  const html = await cms.media.renderFull(docs.content, {
+    onProgress: (current, total) => {
+      console.log(`Preparing ${current}/${total} documents`);
+    },
+  });
+
+  document.getElementById('documents')!.innerHTML = html;
+
+  // Users can now click to download PDFs, Word docs, etc.
+}
+
+// ============================================================================
+// Example 7: Mixed Media Content (Images + Videos + Documents)
+// ============================================================================
+
+export async function example7_mixedMediaContent() {
+  injectMediaStyles();
+
+  const cms = new GitCMS({
+    repository: 'blog/content',
+    token: 'your-token',
+  });
+
+  // Fetch content with various media types
+  const article = await cms.from('articles').doc('product-review').get();
+
+  // Fast render shows:
+  // - Images: thumbnails
+  // - Videos: poster images with play button
+  // - Documents: preview thumbnails with download prompt
+  const fastHtml = cms.media.renderFast(article.content);
+  const container = document.getElementById('article')!;
+  container.innerHTML = fastHtml;
+
+  // Enable progressive loading
+  enableProgressiveMediaLoading(container, cms.media.getManager());
+}
+
+// ============================================================================
+// Example 8: Preloading Critical Videos
+// ============================================================================
+
+export async function example8_preloadCriticalVideos() {
+  const cms = new GitCMS({
+    repository: 'tutorials/videos',
+    token: 'your-token',
+  });
+
+  const tutorial = await cms.from('tutorials').doc('intro-video').get();
+
+  // Extract all media references
+  const mediaRefs = cms.media.extractFromHTML(tutorial.content);
+
+  // Preload the first video (above the fold)
+  const criticalMedia = mediaRefs.filter(ref => ref.mediaType === 'video').slice(0, 1);
+  
+  if (criticalMedia.length > 0) {
+    const fullData = await cms.media.fetchFull(criticalMedia[0]);
+    console.log('Critical video loaded:', fullData.url);
+  }
+
+  // Render the full content
+  const html = await cms.media.renderFull(tutorial.content);
+  document.getElementById('tutorial')!.innerHTML = html;
+}
+
+// ============================================================================
+// Example 9: Custom Video Player Integration
+// ============================================================================
+
+export async function example9_customVideoPlayer() {
+  const cms = new GitCMS({
+    repository: 'media/videos',
+    token: 'your-token',
+  });
+
+  const video = await cms.from('videos').doc('tutorial-1').get();
+
+  // Extract video media reference
+  const mediaRefs = cms.media.extractFromHTML(video.content);
+  const videoRef = mediaRefs.find(ref => ref.mediaType === 'video');
+
+  if (videoRef) {
+    // Fetch full video data
+    const fullData = await cms.media.fetchFull(videoRef);
+
+    // Initialize custom video player (e.g., Video.js, Plyr)
+    const player = new CustomVideoPlayer('#video-player', {
+      src: fullData.url,
+      poster: cms.media.getThumbnail(videoRef), // Use thumbnail as poster
+      type: videoRef.mimeType,
+    });
+  }
+}
+
+// ============================================================================
+// Example 10: React Component with Video Embedding
+// ============================================================================
+
+import React, { useEffect, useState } from 'react';
+
+export function VideoArticle({ articleId }: { articleId: string }) {
+  const [content, setContent] = useState<string>('');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    injectMediaStyles();
+
+    const cms = new GitCMS({
+      repository: 'blog/content',
+      token: process.env.GITHUB_TOKEN,
+    });
+
+    async function loadArticle() {
+      try {
+        const article = await cms.from('articles').doc(articleId).get();
+
+        // Show thumbnails immediately
+        const fastHtml = cms.media.renderFast(article.content);
+        setContent(fastHtml);
+        setLoading(false);
+
+        // Load full media in background
+        const fullHtml = await cms.media.renderFull(article.content);
+        setContent(fullHtml);
+      } catch (error) {
+        console.error('Failed to load article:', error);
+        setLoading(false);
+      }
+    }
+
+    loadArticle();
+  }, [articleId]);
+
+  if (loading) {
+    return <div>Loading...</div>;
+  }
+
+  return (
+    <div 
+      className="article-content"
+      dangerouslySetInnerHTML={{ __html: content }}
+    />
+  );
+}
+
+// ============================================================================
+// Example 11: Vue Component with Progressive Loading
+// ============================================================================
+
+export const VueVideoArticle = {
+  template: `
+    <div class="article-content" v-html="content" ref="container"></div>
+  `,
+  data() {
+    return {
+      content: '',
+    };
+  },
+  async mounted() {
+    injectMediaStyles();
+
+    const cms = new GitCMS({
+      repository: 'blog/content',
+      token: process.env.GITHUB_TOKEN,
+    });
+
+    const article = await cms.from('articles').doc(this.articleId).get();
+
+    // Fast render
+    this.content = cms.media.renderFast(article.content);
+
+    // Enable progressive loading
+    this.$nextTick(() => {
+      enableProgressiveMediaLoading(
+        this.$refs.container as HTMLElement,
+        cms.media.getManager()
+      );
+    });
+  },
+  props: {
+    articleId: {
+      type: String,
+      required: true,
+    },
+  },
+};
+
+// ============================================================================
+// Example 12: Handling Large Video Files with LFS
+// ============================================================================
+
+export async function example12_lfsVideoHandling() {
+  const cms = new GitCMS({
+    repository: 'videos/library',
+    token: 'your-token',
+  });
+
+  const video = await cms.from('videos').doc('4k-demo').get();
+
+  // Extract video reference
+  const mediaRefs = cms.media.extractFromHTML(video.content);
+  const videoRef = mediaRefs.find(ref => ref.mediaType === 'video');
+
+  if (videoRef) {
+    // Fetch with LFS resolution
+    const fullData = await cms.media.fetchFull(videoRef, {
+      resolveLFS: true, // Handle Git LFS pointers
+      timeout: 60000, // 60 second timeout for large files
+      onProgress: (loaded, total) => {
+        console.log(`Downloaded: ${loaded}/${total} bytes`);
+      },
+    });
+
+    // Use the download URL for streaming
+    console.log('Video URL:', fullData.url);
+    console.log('File size:', fullData.size, 'bytes');
+  }
+}
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+function updateProgressBar(percent: number) {
+  const progressBar = document.getElementById('progress-bar');
+  if (progressBar) {
+    progressBar.style.width = `${percent}%`;
+  }
+}
+
+class CustomVideoPlayer {
+  constructor(selector: string, options: any) {
+    // Custom video player implementation
+    console.log('Initializing custom player', selector, options);
+  }
+}
+
+// ============================================================================
+// Usage Summary
+// ============================================================================
+
+/**
+ * Quick Start:
+ * 
+ * 1. Import and inject styles:
+ *    import { injectMediaStyles } from '@git-cms/client';
+ *    injectMediaStyles();
+ * 
+ * 2. Create MediaManager or GitCMS instance
+ * 
+ * 3. Choose rendering strategy:
+ *    - Fast: renderFast() - Shows thumbnails/placeholders
+ *    - Full: renderFull() - Loads actual media
+ *    - Progressive: renderFast() + enableProgressiveMediaLoading()
+ * 
+ * 4. Display content in your app
+ * 
+ * See VIDEO-DOCUMENT-EMBEDDING.md for complete documentation.
+ */

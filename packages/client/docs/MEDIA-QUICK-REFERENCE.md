@@ -254,5 +254,32 @@ cms.media.getCacheStats()
 For complete documentation with detailed examples:
 
 - [MEDIA-API.md](./MEDIA-API.md) - Complete API reference
+- [VIDEO-DOCUMENT-EMBEDDING.md](./VIDEO-DOCUMENT-EMBEDDING.md) - **Video, audio,
+  and document embedding guide**
 - [media-examples.ts](./media-examples.ts) - 10 practical examples
 - [EXAMPLES.md](./EXAMPLES.md) - General client examples
+
+## Video & Document Support
+
+GitCMS fully supports videos, audio files, and documents with optimized
+rendering:
+
+```typescript
+import {
+  injectMediaStyles,
+  enableProgressiveMediaLoading,
+} from '@git-cms/client';
+
+// 1. Inject styles (once)
+injectMediaStyles();
+
+// 2. Render content with media
+const html = cms.media.renderFast(content); // Shows thumbnails/placeholders
+container.innerHTML = html;
+
+// 3. Enable click-to-load for videos/documents
+enableProgressiveMediaLoading(container, cms.media);
+```
+
+**See [VIDEO-DOCUMENT-EMBEDDING.md](./VIDEO-DOCUMENT-EMBEDDING.md) for complete
+details.**

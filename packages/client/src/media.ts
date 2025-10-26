@@ -254,7 +254,7 @@ export class MediaManager {
 
   /**
    * Replace <gitcms-media> tags with standard <img>, <video>, or appropriate HTML
-   * Uses thumbnails for fast initial render
+   * Uses thumbnails for fast initial render (for images) or placeholders (for videos/docs)
    */
   renderFast(html: string): string {
     const references = this.extractFromHTML(html);
@@ -262,6 +262,11 @@ export class MediaManager {
 
     references.forEach(ref => {
       const thumbnail = this.getThumbnail(ref);
+
+      // For videos and documents, we need a different approach:
+      // - Images: use thumbnail as src
+      // - Videos/Audio: use thumbnail as poster, actual media needs fetchFull
+      // - Documents: use thumbnail as placeholder, link to download
       const replacement = this.generateHTMLElement(ref, thumbnail, true);
 
       // Replace the gitcms-media tag with appropriate HTML element
@@ -407,12 +412,42 @@ export class MediaManager {
       return fullData;
     }
 
-    // For files <= 1MB, GitHub includes content in base64
+    // Strategy for different media types:
+    // - Small images (< 1MB): use base64 data URL for inline embedding
+    // - Videos, audio, documents: ALWAYS use download URL (too large for base64)
+    // - Large files (> 1MB): use download URL
+
+    const shouldUseDownloadUrl =
+      reference.mediaType === 'video' ||
+      reference.mediaType === 'audio' ||
+      reference.mediaType === 'document' ||
+      reference.mediaType === '3d' ||
+      fileData.size > 1024 * 1024; // > 1MB
+
+    if (shouldUseDownloadUrl) {
+      // Use download URL directly for large files and non-image media
+      if (!downloadUrl) {
+        throw new Error('No download URL available for file');
+      }
+
+      const fullData: FullMediaData = {
+        reference,
+        url: downloadUrl,
+        downloadUrl,
+        size: fileData.size,
+      };
+
+      this.cache.set(reference.path, fullData);
+      return fullData;
+    }
+
+    // For small images, try to use base64 data URL
     if (fileData.content) {
       try {
-        // Decode base64 content
+        // GitHub returns content with newlines removed already, but just in case
+        const cleanContent = fileData.content.replace(/\n/g, '');
         const mimeType = reference.mimeType || 'application/octet-stream';
-        const dataUrl = `data:${mimeType};base64,${fileData.content}`;
+        const dataUrl = `data:${mimeType};base64,${cleanContent}`;
 
         const fullData: FullMediaData = {
           reference,
@@ -428,8 +463,7 @@ export class MediaManager {
       }
     }
 
-    // For files > 1MB or if content processing failed, use download URL directly
-    // This works in both browser and Node.js environments
+    // Fallback to download URL
     if (!downloadUrl) {
       throw new Error('No download URL available for file');
     }
@@ -463,30 +497,92 @@ export class MediaManager {
     const title = reference.title ? ` title="${this.escapeHTML(reference.title)}"` : '';
     const dataAttr = isThumbnail ? ' data-gitcms-thumbnail="true"' : '';
 
+    // Add data-path attribute to enable progressive enhancement
+    const pathAttr = ` data-gitcms-path="${this.escapeHTML(reference.path)}"`;
+
     switch (reference.mediaType) {
       case 'image':
-        return `<img src="${url}" alt="${alt}"${title}${dataAttr} loading="lazy" />`;
+        // Images: use the URL directly (can be thumbnail or full)
+        return `<img src="${url}" alt="${alt}"${title}${dataAttr}${pathAttr} loading="lazy" />`;
 
       case 'video':
-        return `<video controls${title}${dataAttr} preload="metadata">
+        if (isThumbnail) {
+          // Fast render: show placeholder with thumbnail as poster
+          // The thumbnail is an image preview, not the actual video
+          return `<div class="gitcms-video-placeholder"${dataAttr}${pathAttr} data-filename="${this.escapeHTML(reference.filename)}">
+  <img src="${url}" alt="${alt}"${title} class="gitcms-video-poster" />
+  <div class="gitcms-video-overlay">
+    <svg width="64" height="64" viewBox="0 0 24 24" fill="white" style="opacity: 0.9">
+      <path d="M8 5v14l11-7z"/>
+    </svg>
+    <p style="color: white; margin-top: 8px; font-size: 14px;">Click to load video</p>
+  </div>
+</div>`;
+        } else {
+          // Full render: actual video element with proper source
+          return `<video controls${title}${pathAttr} preload="metadata" style="max-width: 100%; height: auto;">
   <source src="${url}" type="${reference.mimeType || 'video/mp4'}">
   Your browser does not support the video tag.
 </video>`;
+        }
 
       case 'audio':
-        return `<audio controls${title}${dataAttr} preload="metadata">
+        if (isThumbnail) {
+          // Fast render: show placeholder with waveform icon
+          return `<div class="gitcms-audio-placeholder"${dataAttr}${pathAttr} data-filename="${this.escapeHTML(reference.filename)}">
+  <svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor" style="color: #6b7280;">
+    <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+  </svg>
+  <p style="margin-top: 8px; font-size: 14px; color: #374151;">${alt}</p>
+  <p style="margin-top: 4px; font-size: 12px; color: #6b7280;">Click to load audio</p>
+</div>`;
+        } else {
+          // Full render: actual audio element
+          return `<audio controls${title}${pathAttr} preload="metadata" style="max-width: 100%;">
   <source src="${url}" type="${reference.mimeType || 'audio/mpeg'}">
   Your browser does not support the audio tag.
 </audio>`;
+        }
+
+      case 'document':
+        if (isThumbnail) {
+          // Fast render: show document preview with thumbnail
+          return `<div class="gitcms-document-placeholder"${dataAttr}${pathAttr} data-filename="${this.escapeHTML(reference.filename)}">
+  <img src="${url}" alt="${alt}" class="gitcms-document-thumbnail" style="width: 120px; height: 120px; object-fit: cover; border-radius: 8px;" />
+  <div style="margin-top: 12px;">
+    <p style="font-weight: 500; font-size: 14px; color: #111827;">${alt}</p>
+    <p style="margin-top: 4px; font-size: 12px; color: #6b7280;">Click to download</p>
+  </div>
+</div>`;
+        } else {
+          // Full render: download link with proper URL
+          return `<a href="${url}" download="${reference.filename}"${title}${pathAttr} class="gitcms-document-link" style="display: inline-flex; align-items: center; gap: 8px; padding: 12px 16px; background: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 8px; text-decoration: none; color: #111827; transition: all 0.2s;">
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" style="color: #6b7280;">
+    <path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zM6 20V4h7v5h5v11H6z"/>
+  </svg>
+  <span style="font-weight: 500;">${alt}</span>
+</a>`;
+        }
 
       case '3d':
-        // For 3D models, you might want to use a viewer library
-        return `<a href="${url}" download="${reference.filename}"${title}${dataAttr} class="gitcms-3d-model">
+        // For 3D models, show a download link
+        if (isThumbnail) {
+          return `<div class="gitcms-3d-placeholder"${dataAttr}${pathAttr} data-filename="${this.escapeHTML(reference.filename)}">
+  <svg width="64" height="64" viewBox="0 0 24 24" fill="currentColor" style="color: #6b7280;">
+    <path d="M21 16.5c0 .38-.21.71-.53.88l-7.9 4.44c-.16.12-.36.18-.57.18-.21 0-.41-.06-.57-.18l-7.9-4.44A.991.991 0 0 1 3 16.5v-9c0-.38.21-.71.53-.88l7.9-4.44c.16-.12.36-.18.57-.18.21 0 .41.06.57.18l7.9 4.44c.32.17.53.5.53.88v9z"/>
+  </svg>
+  <p style="margin-top: 8px; font-size: 14px; color: #374151;">${alt} (3D Model)</p>
+  <p style="margin-top: 4px; font-size: 12px; color: #6b7280;">Click to download</p>
+</div>`;
+        } else {
+          return `<a href="${url}" download="${reference.filename}"${title}${pathAttr} class="gitcms-3d-model">
   📦 ${alt} (3D Model)
 </a>`;
+        }
 
       default:
-        return `<a href="${url}" download="${reference.filename}"${title}${dataAttr} class="gitcms-media-file">
+        // Other file types: show as download link
+        return `<a href="${url}" download="${reference.filename}"${title}${dataAttr}${pathAttr} class="gitcms-media-file">
   📎 ${alt}
 </a>`;
     }
