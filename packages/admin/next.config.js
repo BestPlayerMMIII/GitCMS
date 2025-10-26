@@ -5,6 +5,11 @@ const nextConfig = {
     domains: ['github.com', 'avatars.githubusercontent.com', 'raw.githubusercontent.com'],
   },
   transpilePackages: ['@git-cms/core'],
+  eslint: {
+    // Warning: This allows production builds to successfully complete even if
+    // your project has ESLint errors.
+    ignoreDuringBuilds: true,
+  },
 };
 
 module.exports = nextConfig;

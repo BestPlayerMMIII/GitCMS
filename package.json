@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "Universal GitHub-Based Content Management System",
   "private": true,
+  "type": "module",
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
