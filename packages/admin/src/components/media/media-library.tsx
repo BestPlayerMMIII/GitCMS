@@ -248,6 +248,7 @@ export function MediaLibrary({
 
   // Handle media selection
   const handleMediaSelect = (mediaFile: GitCMSMediaFile) => {
+    console.log('Media selected:', mediaFile);
     if (mode === 'picker' && onSelect) {
       if (multiple) {
         const newSelected = new Set(selectedMedia);
@@ -796,13 +797,6 @@ function MediaCard({
             alt={media.metadata.alt || media.filename}
             thumbnailUrl={media.thumbnailUrl}
             className="w-full h-full object-cover"
-            useThumbnail={!media.thumbnailUrl}
-            thumbnailOptions={{
-              maxWidth: 200,
-              maxHeight: 200,
-              quality: 0.7,
-              format: 'image/jpeg',
-            }}
           />
         ) : (
           getMediaTypeIcon(media.mediaType)

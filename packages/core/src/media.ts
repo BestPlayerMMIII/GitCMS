@@ -296,6 +296,16 @@ export class GitHubMediaStorage {
       // Upload to GitHub
       const response = await githubClient.uploadBinaryFile(path, base64Content, message);
 
+      // Generate thumbnailUrl if this is an image
+      let thumbnailUrl: string | undefined;
+      const mediaType = MediaValidator.getMediaType(file) || 'other';
+
+      if (mediaType === 'image' && options.generateThumbnail !== false) {
+        // Import thumbnail utilities dynamically to avoid circular dependencies
+        const { getThumbnailUrl } = await import('./thumbnail');
+        thumbnailUrl = getThumbnailUrl(owner, repo, path);
+      }
+
       // Generate media file object
       const mediaFile: GitCMSMediaFile = {
         id: this.generateDeterministicId(path),
@@ -304,8 +314,9 @@ export class GitHubMediaStorage {
         path,
         size: file.size,
         mimeType: file.type,
-        mediaType: MediaValidator.getMediaType(file) || 'other',
+        mediaType,
         url: this.generateGitHubUrl(owner, repo, path),
+        thumbnailUrl,
         metadata: {
           folder: options.folder,
           tags: options.tags || [],

@@ -10,6 +10,10 @@ import {
   GitHubApiClient,
   getGitCMSConfig,
   getMediaPath as getCentralizedMediaPath,
+  generateThumbnailBlob,
+  generateThumbnailDataUrl,
+  thumbnailBlobToFile,
+  getThumbnailPath,
 } from '@git-cms/core';
 import { createGitHubClient } from '@/lib/client-github';
 
@@ -17,78 +21,9 @@ import { createGitHubClient } from '@/lib/client-github';
 // Thumbnail Configuration (Client-Side)
 // ============================================================================
 
-const THUMBNAIL_SIZES = {
-  small: { width: 150, height: 150 },
-  medium: { width: 200, height: 200 },
-  large: { width: 300, height: 300 },
-} as const;
-
-const DEFAULT_THUMBNAIL_CONFIG = {
-  size: 'medium' as keyof typeof THUMBNAIL_SIZES,
-  quality: 0.8,
-  format: 'webp' as const,
-};
-
 // Maximum file size for thumbnail generation (10MB)
 // Files larger than this will be loaded on-demand by AuthenticatedImage component
 const MAX_THUMBNAIL_SIZE = 10 * 1024 * 1024;
-
-/**
- * Generate thumbnail from base64 image data using Canvas API (client-side)
- */
-async function generateThumbnail(
-  base64Content: string,
-  mimeType: string,
-  size: keyof typeof THUMBNAIL_SIZES = 'medium'
-): Promise<string> {
-  try {
-    // Get thumbnail dimensions
-    const { width, height } = THUMBNAIL_SIZES[size];
-
-    // Create image element
-    const img = new Image();
-
-    // Load the image
-    await new Promise<void>((resolve, reject) => {
-      img.onload = () => resolve();
-      img.onerror = () => reject(new Error('Failed to load image'));
-      img.src = `data:${mimeType};base64,${base64Content}`;
-    });
-
-    // Create canvas
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    if (!ctx) throw new Error('Failed to get canvas context');
-
-    // Calculate scaling to fit/cover
-    const scale = Math.max(width / img.width, height / img.height);
-    const scaledWidth = img.width * scale;
-    const scaledHeight = img.height * scale;
-
-    // Center the image
-    const x = (width - scaledWidth) / 2;
-    const y = (height - scaledHeight) / 2;
-
-    // Set canvas size
-    canvas.width = width;
-    canvas.height = height;
-
-    // Draw image (centered and scaled)
-    ctx.drawImage(img, x, y, scaledWidth, scaledHeight);
-
-    // Convert to data URL
-    // Check if browser supports WebP
-    const supportsWebP = canvas.toDataURL('image/webp').startsWith('data:image/webp');
-    const format = supportsWebP ? 'image/webp' : 'image/jpeg';
-    const thumbnailDataUrl = canvas.toDataURL(format, DEFAULT_THUMBNAIL_CONFIG.quality);
-
-    return thumbnailDataUrl;
-  } catch (error) {
-    console.error('Failed to generate thumbnail:', error);
-    // Return original image as fallback
-    return `data:${mimeType};base64,${base64Content}`;
-  }
-}
 
 // ============================================================================
 // API Functions
@@ -242,10 +177,6 @@ async function handleGetRepositoryMedia(
     const mediaPath = await getMediaPath(owner, repo, accessToken);
     const files = await githubClient.getDirectory(mediaPath);
 
-    // Check if we should include image content (for thumbnails)
-    const includeContent = params?.includeContent === 'true' || params?.includeContent === true;
-    const thumbnailSize = (params?.thumbnailSize as keyof typeof THUMBNAIL_SIZES) || 'medium';
-
     // Convert GitHub files to media files
     const mediaFiles: GitCMSMediaFile[] = [];
 
@@ -277,29 +208,24 @@ async function handleGetRepositoryMedia(
 
         let thumbnailUrl: string | undefined;
 
-        // Generate thumbnails for images (client-side using Canvas API)
+        // For images, try to fetch the pre-generated thumbnail from GitHub
         if (mediaType === 'image') {
-          const isVeryLargeFile = actualSize > MAX_THUMBNAIL_SIZE;
+          try {
+            const thumbnailPath = getThumbnailPath(file.path);
 
-          if (includeContent && !isVeryLargeFile) {
-            try {
-              const fileContent = await githubClient.getFile(file.path);
+            // Check if thumbnail exists and fetch it
+            const thumbnailFile = await githubClient.getFile(thumbnailPath);
 
-              if (fileContent.content && fileContent.encoding === 'base64') {
-                const mimeType = getMimeTypeFromExtension(file.name);
-                thumbnailUrl = await generateThumbnail(
-                  fileContent.content,
-                  mimeType,
-                  thumbnailSize
-                );
-              }
-              // If content not available (file >1MB or LFS), AuthenticatedImage will fetch on-demand
-            } catch (error: any) {
-              console.warn(
-                `Failed to generate thumbnail for ${file.path} (${(actualSize / 1024).toFixed(1)}KB):`,
-                error.message || error
-              );
+            if (thumbnailFile.content && thumbnailFile.encoding === 'base64') {
+              // Convert base64 to data URL
+              const mimeType = 'image/webp'; // Thumbnails are WebP
+              thumbnailUrl = `data:${mimeType};base64,${thumbnailFile.content}`;
+              console.log(`Loaded thumbnail for: ${file.name}`);
             }
+          } catch (error) {
+            // Thumbnail doesn't exist or failed to fetch - that's okay
+            // The AuthenticatedImage component will handle it
+            console.debug(`No thumbnail found for: ${file.name}`);
           }
         }
 
@@ -441,7 +367,51 @@ async function handleUploadMedia(data: any, accessToken: string) {
       `Upload successful for file: ${file.name} (${fileSizeMB.toFixed(1)}MB) to path: ${path}`
     );
 
-    // Register in memory
+    // Generate and upload thumbnail for images
+    if (validation.mediaType === 'image' && options.generateThumbnail !== false) {
+      try {
+        console.log(`Generating thumbnail for ${file.name}...`);
+
+        // Generate thumbnail as data URL (uses centralized utility from @git-cms/core)
+        const thumbnailDataUrl = await generateThumbnailDataUrl(file, {
+          maxWidth: 300,
+          maxHeight: 300,
+          quality: 0.8,
+          format: 'image/webp',
+        });
+
+        // Generate thumbnail blob for GitHub upload
+        const thumbnailBlob = await generateThumbnailBlob(file, {
+          maxWidth: 300,
+          maxHeight: 300,
+          quality: 0.8,
+          format: 'image/webp',
+        });
+
+        // Convert to File for upload
+        const thumbnailFile = thumbnailBlobToFile(thumbnailBlob, file.name);
+
+        // Get thumbnail path (in thumbnails subfolder)
+        const thumbnailPath = getThumbnailPath(path);
+
+        // Convert thumbnail to base64
+        const thumbnailBase64 = await GitHubMediaStorage['fileToBase64'](thumbnailFile);
+
+        // Upload thumbnail to GitHub
+        const thumbnailMessage = `Add thumbnail for: ${file.name}`;
+        await githubClient.uploadBinaryFile(thumbnailPath, thumbnailBase64, thumbnailMessage);
+
+        console.log(`Thumbnail uploaded successfully to: ${thumbnailPath}`);
+
+        // Add thumbnail data URL to mediaFile object
+        mediaFile.thumbnailUrl = thumbnailDataUrl;
+
+        console.log(`Thumbnail data URL added to media file`);
+      } catch (thumbnailError) {
+        // Don't fail the entire upload if thumbnail generation fails
+        console.warn(`Failed to generate/upload thumbnail for ${file.name}:`, thumbnailError);
+      }
+    } // Register in memory
     defaultMediaRegistry.register(mediaFile);
 
     return {
@@ -527,6 +497,49 @@ async function handleBatchUpload(data: any, accessToken: string) {
           repo,
           options
         );
+
+        // Generate and upload thumbnail for images
+        if (validation.mediaType === 'image' && options.generateThumbnail !== false) {
+          try {
+            console.log(`Generating thumbnail for ${file.name}...`);
+
+            // Generate thumbnail as data URL (uses centralized utility from @git-cms/core)
+            const thumbnailDataUrl = await generateThumbnailDataUrl(file, {
+              maxWidth: 300,
+              maxHeight: 300,
+              quality: 0.8,
+              format: 'image/webp',
+            });
+
+            // Generate thumbnail blob for GitHub upload
+            const thumbnailBlob = await generateThumbnailBlob(file, {
+              maxWidth: 300,
+              maxHeight: 300,
+              quality: 0.8,
+              format: 'image/webp',
+            });
+
+            // Convert to File for upload
+            const thumbnailFile = thumbnailBlobToFile(thumbnailBlob, file.name);
+
+            // Get thumbnail path (in thumbnails subfolder)
+            const thumbnailPath = getThumbnailPath(path);
+
+            // Convert thumbnail to base64
+            const thumbnailBase64 = await GitHubMediaStorage['fileToBase64'](thumbnailFile);
+
+            // Upload thumbnail to GitHub
+            const thumbnailMessage = `Add thumbnail for: ${file.name}`;
+            await githubClient.uploadBinaryFile(thumbnailPath, thumbnailBase64, thumbnailMessage);
+
+            // Add thumbnail data URL to mediaFile object
+            mediaFile.thumbnailUrl = thumbnailDataUrl;
+
+            console.log(`Thumbnail uploaded and data URL added for: ${file.name}`);
+          } catch (thumbnailError) {
+            console.warn(`Failed to generate/upload thumbnail for ${file.name}:`, thumbnailError);
+          }
+        }
 
         // Register in memory
         defaultMediaRegistry.register(mediaFile);

@@ -614,13 +614,6 @@ export function MediaField({ field, value, onChange, error, disabled }: BaseFiel
                     alt={media.filename || 'Media'}
                     thumbnailUrl={media.thumbnailUrl}
                     className="w-full h-full object-cover"
-                    useThumbnail={!media.thumbnailUrl}
-                    thumbnailOptions={{
-                      maxWidth: 200,
-                      maxHeight: 200,
-                      quality: 0.7,
-                      format: 'image/jpeg',
-                    }}
                   />
                 ) : media.mediaType === 'image' ? (
                   <img

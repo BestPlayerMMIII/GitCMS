@@ -1,4 +1,10 @@
 import { Octokit } from '@octokit/rest';
+import {
+  getThumbnailPath,
+  getThumbnailUrl,
+  getDefaultThumbnail,
+  getMediaTypeFromFilename,
+} from '@git-cms/core';
 import type { GitCMSConfig } from './types';
 
 /**
@@ -154,15 +160,41 @@ export class MediaManager {
 
   /**
    * Get thumbnail URL for immediate display
-   * Returns embedded thumbnail if available, otherwise returns a placeholder
+   * Returns embedded data URL, GitHub thumbnail URL, or default placeholder
    */
   getThumbnail(reference: MediaReference): string {
+    // Priority 1: Use embedded data-thumbnail if it's a valid data URL
     if (reference.thumbnail) {
-      return reference.thumbnail;
+      // Check if it's a valid data URL (starts with "data:")
+      if (reference.thumbnail.startsWith('data:')) {
+        return reference.thumbnail;
+      }
+      // If it's a GitHub URL, return it as-is
+      if (reference.thumbnail.startsWith('http')) {
+        return reference.thumbnail;
+      }
     }
 
-    // Return a placeholder based on media type
-    return this.getPlaceholder(reference.mediaType);
+    // Priority 2: Try to build GitHub thumbnail URL (for public repos or when baseUrl is configured)
+    if (this.config.repository) {
+      const [owner, repo] = this.config.repository.split('/');
+      const branch = this.config.branch || 'main';
+
+      // Only use raw.githubusercontent.com for public repos or when explicitly configured
+      // For private repos, this won't work without auth, so fall back to default
+      if (this.config.baseUrl || !this.config.token) {
+        try {
+          return getThumbnailUrl(owner, repo, reference.path, branch);
+        } catch (error) {
+          console.warn('Failed to generate thumbnail URL:', error);
+        }
+      }
+    }
+
+    // Priority 3: Return a default placeholder based on media type
+    // Map '3d' to 'other' since core package doesn't have a '3d' type
+    const coreMediaType = reference.mediaType === '3d' ? 'other' : reference.mediaType || 'image';
+    return getDefaultThumbnail(coreMediaType);
   }
 
   /**
@@ -289,6 +321,13 @@ export class MediaManager {
   }
 
   /**
+   * Remove a specific item from cache
+   */
+  removeCacheItem(path: string): void {
+    this.cache.delete(path);
+  }
+
+  /**
    * Get cache statistics
    */
   getCacheStats(): { size: number; keys: string[] } {
@@ -352,31 +391,54 @@ export class MediaManager {
       throw new Error('Invalid response from GitHub');
     }
 
+    const fileData = response.data as any;
+    const downloadUrl = fileData.download_url;
+
     // Check if it's an LFS pointer
-    if (options.resolveLFS && this.isLFSPointer(response.data.content)) {
-      // For LFS files, use the download URL
-      const downloadUrl = (response.data as any).download_url;
+    if (options.resolveLFS && fileData.content && this.isLFSPointer(fileData.content)) {
+      // For LFS files, use the download URL directly
       const fullData: FullMediaData = {
         reference,
         url: downloadUrl,
         downloadUrl,
-        size: response.data.size,
+        size: fileData.size,
       };
       this.cache.set(reference.path, fullData);
       return fullData;
     }
 
-    // Decode base64 content
-    const content = Buffer.from(response.data.content, 'base64');
-    const mimeType = reference.mimeType || 'application/octet-stream';
-    const dataUrl = `data:${mimeType};base64,${response.data.content}`;
+    // For files <= 1MB, GitHub includes content in base64
+    if (fileData.content) {
+      try {
+        // Decode base64 content
+        const mimeType = reference.mimeType || 'application/octet-stream';
+        const dataUrl = `data:${mimeType};base64,${fileData.content}`;
+
+        const fullData: FullMediaData = {
+          reference,
+          url: dataUrl,
+          size: fileData.size,
+          downloadUrl,
+        };
+
+        this.cache.set(reference.path, fullData);
+        return fullData;
+      } catch (error) {
+        console.warn('Failed to process base64 content, falling back to download URL');
+      }
+    }
+
+    // For files > 1MB or if content processing failed, use download URL directly
+    // This works in both browser and Node.js environments
+    if (!downloadUrl) {
+      throw new Error('No download URL available for file');
+    }
 
     const fullData: FullMediaData = {
       reference,
-      url: dataUrl,
-      content: content.buffer,
-      size: content.length,
-      downloadUrl: (response.data as any).download_url,
+      url: downloadUrl,
+      downloadUrl,
+      size: fileData.size,
     };
 
     this.cache.set(reference.path, fullData);
@@ -480,38 +542,15 @@ export class MediaManager {
   }
 
   private inferMediaType(filename: string): MediaReference['mediaType'] {
-    const ext = filename.split('.').pop()?.toLowerCase();
-
-    const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'ico'];
-    const videoExts = ['mp4', 'webm', 'ogg', 'mov', 'avi'];
-    const audioExts = ['mp3', 'wav', 'ogg', 'm4a'];
-    const modelExts = ['glb', 'gltf', 'obj', 'fbx'];
-    const documentExts = ['pdf', 'doc', 'docx', 'txt'];
-
-    if (imageExts.includes(ext || '')) return 'image';
-    if (videoExts.includes(ext || '')) return 'video';
-    if (audioExts.includes(ext || '')) return 'audio';
-    if (modelExts.includes(ext || '')) return '3d';
-    if (documentExts.includes(ext || '')) return 'document';
-
-    return 'other';
+    // Use the centralized utility from @git-cms/core
+    return getMediaTypeFromFilename(filename) as MediaReference['mediaType'];
   }
 
   private getPlaceholder(mediaType?: MediaReference['mediaType']): string {
-    // Return a simple SVG placeholder
-    const placeholders: Record<string, string> = {
-      image:
-        'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="200" height="200"%3E%3Crect fill="%23ddd" width="200" height="200"/%3E%3Ctext x="50%25" y="50%25" text-anchor="middle" fill="%23999" font-size="14"%3EImage%3C/text%3E%3C/svg%3E',
-      video:
-        'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="200" height="200"%3E%3Crect fill="%23ddd" width="200" height="200"/%3E%3Ctext x="50%25" y="50%25" text-anchor="middle" fill="%23999" font-size="14"%3EVideo%3C/text%3E%3C/svg%3E',
-      audio:
-        'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="200" height="200"%3E%3Crect fill="%23ddd" width="200" height="200"/%3E%3Ctext x="50%25" y="50%25" text-anchor="middle" fill="%23999" font-size="14"%3EAudio%3C/text%3E%3C/svg%3E',
-      '3d': 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="200" height="200"%3E%3Crect fill="%23ddd" width="200" height="200"/%3E%3Ctext x="50%25" y="50%25" text-anchor="middle" fill="%23999" font-size="14"%3E3D Model%3C/text%3E%3C/svg%3E',
-      document:
-        'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="200" height="200"%3E%3Crect fill="%23ddd" width="200" height="200"/%3E%3Ctext x="50%25" y="50%25" text-anchor="middle" fill="%23999" font-size="14"%3EDocument%3C/text%3E%3C/svg%3E',
-    };
-
-    return placeholders[mediaType || 'other'] || placeholders.image;
+    // Use the centralized default thumbnails from @git-cms/core
+    // Map '3d' to 'other' since core package doesn't have a '3d' type
+    const coreMediaType = mediaType === '3d' ? 'other' : mediaType || 'image';
+    return getDefaultThumbnail(coreMediaType);
   }
 
   private escapeHTML(str: string): string {

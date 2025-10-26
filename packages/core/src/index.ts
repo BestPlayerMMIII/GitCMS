@@ -10,6 +10,7 @@ export * from './media-organization';
 export * from './config';
 export * from './network-monitor';
 export * from './git-lfs';
+export * from './thumbnail';
 
 // Additional GitHub types export
 export type { GitHubFileContent, GitHubCommitResponse } from './github';

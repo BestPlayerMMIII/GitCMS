@@ -205,13 +205,6 @@ export default function MediaManagementDemo() {
                                   alt={media.filename}
                                   thumbnailUrl={media.thumbnailUrl}
                                   className="w-full h-full object-cover"
-                                  useThumbnail={!media.thumbnailUrl}
-                                  thumbnailOptions={{
-                                    maxWidth: 200,
-                                    maxHeight: 200,
-                                    quality: 0.7,
-                                    format: 'image/jpeg',
-                                  }}
                                 />
                               ) : (
                                 <div className="w-full h-full flex items-center justify-center">

@@ -2,12 +2,11 @@
 
 import { useState, useEffect } from 'react';
 import { createGitHubClient } from '@/lib/client-github';
-import { getMimeType } from '@/lib/mime-types';
 import {
-  generateThumbnail,
-  getCachedThumbnail,
-  type ThumbnailOptions,
-} from '@/lib/thumbnail-generator';
+  buildAuthenticatedThumbnailUrl,
+  fetchAuthenticatedThumbnail,
+  getThumbnailPath,
+} from '@git-cms/core';
 
 interface AuthenticatedImageProps {
   owner: string;
@@ -17,12 +16,6 @@ interface AuthenticatedImageProps {
   className?: string;
   thumbnailUrl?: string;
   onError?: () => void;
-  /** Whether to generate a thumbnail instead of showing full image */
-  useThumbnail?: boolean;
-  /** Thumbnail generation options */
-  thumbnailOptions?: ThumbnailOptions;
-  /** Callback with generated thumbnail data URL (for storing in content) */
-  onThumbnailGenerated?: (dataUrl: string) => void;
 }
 
 /**
@@ -31,19 +24,15 @@ interface AuthenticatedImageProps {
  *
  * Features:
  * - Uses OAuth tokens for authentication
- * - Creates object URLs to avoid data URL size limits
- * - Properly cleans up resources on unmount
+ * - Fetches pre-generated thumbnails from GitHub (in thumbnails/ subfolder)
+ * - Converts to base64 data URLs for direct embedding
  * - Shows loading and error states
- * - Optional thumbnail generation with caching
  *
  * @param owner - GitHub repository owner
  * @param repo - GitHub repository name
  * @param path - File path within the repository
  * @param alt - Alt text for the image
  * @param thumbnailUrl - Optional pre-generated thumbnail (data URL)
- * @param useThumbnail - Whether to generate a thumbnail (default: false, shows full image)
- * @param thumbnailOptions - Options for thumbnail generation (size, quality, format)
- * @param onThumbnailGenerated - Callback with generated thumbnail data URL
  * @param onError - Optional error callback
  */
 export function AuthenticatedImage({
@@ -54,87 +43,41 @@ export function AuthenticatedImage({
   className = '',
   thumbnailUrl,
   onError,
-  useThumbnail = false,
-  thumbnailOptions,
-  onThumbnailGenerated,
 }: AuthenticatedImageProps) {
   const [imageSrc, setImageSrc] = useState<string | null>(thumbnailUrl || null);
   const [loading, setLoading] = useState(!thumbnailUrl);
   const [error, setError] = useState(false);
 
+  const handleError = () => {
+    setError(true);
+    setLoading(false);
+    onError?.();
+  };
+
   useEffect(() => {
-    // If we have a pre-generated thumbnail, use it
+    // If we have a pre-generated thumbnail URL, use it
     if (thumbnailUrl) {
       setImageSrc(thumbnailUrl);
       setLoading(false);
       return;
     }
 
-    // Check if we have a cached thumbnail
-    if (useThumbnail) {
-      const cached = getCachedThumbnail(owner, repo, path, thumbnailOptions);
-      if (cached) {
-        setImageSrc(cached);
-        setLoading(false);
-        onThumbnailGenerated?.(cached);
-        return;
-      }
-    }
-
     let mounted = true;
-    let objectUrl: string | null = null;
 
     async function fetchImage() {
       try {
         const github = createGitHubClient(owner, repo);
         const token = await (github as any).getAccessToken();
 
-        const mimeType = getMimeType(path, 'image/jpeg');
+        // directly fetch authenticated thumbnail
+        const thumbnail = await fetchAuthenticatedThumbnail(owner, repo, path, token);
 
-        // Fetch raw file content from GitHub API
-        const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
-        const response = await fetch(apiUrl, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            Accept: 'application/vnd.github.raw',
-          },
-        });
-
-        if (!response.ok) {
-          throw new Error(`GitHub API error: ${response.status} ${response.statusText}`);
-        }
-
-        if (!mounted) return;
-
-        const blob = await response.blob();
-
-        // Generate thumbnail if requested
-        if (useThumbnail) {
-          const thumbnailDataUrl = await generateThumbnail(
-            blob,
-            owner,
-            repo,
-            path,
-            thumbnailOptions
-          );
-
-          if (!mounted) return;
-
-          setImageSrc(thumbnailDataUrl);
-          setLoading(false);
-          onThumbnailGenerated?.(thumbnailDataUrl);
-        } else {
-          // Use Object URL for full-size image
-          objectUrl = URL.createObjectURL(blob);
-          setImageSrc(objectUrl);
-          setLoading(false);
-        }
+        setImageSrc(thumbnail);
+        setLoading(false);
       } catch (err) {
         console.error('Failed to load authenticated image:', err);
         if (mounted) {
-          setError(true);
-          setLoading(false);
-          onError?.();
+          handleError();
         }
       }
     }
@@ -143,21 +86,8 @@ export function AuthenticatedImage({
 
     return () => {
       mounted = false;
-      // Only revoke object URLs (not data URLs from thumbnails)
-      if (objectUrl) {
-        URL.revokeObjectURL(objectUrl);
-      }
     };
-  }, [
-    owner,
-    repo,
-    path,
-    thumbnailUrl,
-    useThumbnail,
-    thumbnailOptions,
-    onThumbnailGenerated,
-    onError,
-  ]);
+  }, [owner, repo, path, thumbnailUrl, onError]);
 
   if (loading) {
     return (
@@ -197,10 +127,7 @@ export function AuthenticatedImage({
       className={className}
       draggable={false}
       loading="lazy"
-      onError={() => {
-        setError(true);
-        onError?.();
-      }}
+      onError={handleError}
     />
   );
 }
