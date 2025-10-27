@@ -113,6 +113,6 @@ export class GitCMS {
    * Get content from a schema (SQL-like FROM syntax)
    */
   from(schemaName: string): SchemaRef {
-    return new SchemaRef(schemaName, this.octokit, this.config);
+    return new SchemaRef(schemaName, this.octokit, this.config, this.transport);
   }
 }

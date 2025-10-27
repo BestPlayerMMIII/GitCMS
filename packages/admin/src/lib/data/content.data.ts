@@ -6,6 +6,7 @@ import {
   defaultValidationEngine,
   type GitCMSSchema,
 } from '@git-cms/core';
+import * as IndexManager from '@/lib/data/index-manager';
 
 // Content item interface
 export interface ContentItem {
@@ -432,6 +433,9 @@ async function createContentData(
     `Create ${schemaId} content: ${contentId}`
   );
 
+  // Update index
+  await IndexManager.addToIndex(github, contentPath, schemaId, `${contentId}.json`);
+
   return {
     success: true,
     content: contentItem,
@@ -526,6 +530,15 @@ async function updateContentData(
     } catch (deleteError) {
       console.warn(`Could not delete old content file ${originalFilePath}:`, deleteError);
     }
+
+    // Update index to reflect rename
+    await IndexManager.renameInIndex(
+      github,
+      contentPath,
+      schemaId,
+      `${originalContentId}.json`,
+      `${contentId}.json`
+    );
   } else {
     try {
       const currentFile = await github.getFile(newFilePath);
@@ -540,6 +553,9 @@ async function updateContentData(
         [{ path: newFilePath, content: fileContent }],
         `Create ${schemaId} content: ${contentId}${publish ? ' (published)' : ''}`
       );
+
+      // Add to index if creating new file
+      await IndexManager.addToIndex(github, contentPath, schemaId, `${contentId}.json`);
     }
   }
 
@@ -562,6 +578,9 @@ async function deleteContentData(
 
   const file = await github.getFile(filePath);
   await github.deleteFile(filePath, `Delete content: ${contentId}`, file.sha);
+
+  // Update index
+  await IndexManager.removeFromIndex(github, contentPath, schemaId, `${contentId}.json`);
 
   return {
     success: true,

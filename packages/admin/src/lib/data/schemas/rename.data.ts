@@ -6,6 +6,7 @@ import {
   getContentPath as getCentralizedContentPath,
   getGitCMSConfig,
 } from '@git-cms/core';
+import * as IndexManager from '@/lib/data/index-manager';
 
 /**
  * Schema Rename API - Handles atomic schema ID changes with cascading updates
@@ -175,12 +176,13 @@ async function renameSchemaWithCascade(
   console.log('old content directory:', oldContentDir);
 
   let contentItems: any[] = [];
+  let contentFilenames: string[] = [];
 
   try {
     const files = await github.getDirectory(oldContentDir);
 
     for (const file of files) {
-      if (file.name.endsWith('.json') && file.type === 'file') {
+      if (file.name.endsWith('.json') && file.type === 'file' && !file.name.startsWith('.')) {
         try {
           const contentStr = await github.getFileContent(file.path);
           const contentItem: ContentItem = JSON.parse(contentStr);
@@ -199,6 +201,7 @@ async function renameSchemaWithCascade(
           filesToDelete.push(file.path);
 
           contentItems.push({ id: contentItem.id, path: newContentPath });
+          contentFilenames.push(file.name);
         } catch (error) {
           console.warn(`Failed to process content file ${file.path}:`, error);
         }
@@ -217,6 +220,29 @@ async function renameSchemaWithCascade(
         filesToCreate,
         `Rename schema: ${oldSchemaId} → ${newSchemaId}`
       );
+    }
+
+    // Migrate the index file
+    if (contentFilenames.length > 0) {
+      try {
+        await IndexManager.migrateIndex(
+          github,
+          contentPath,
+          oldSchemaId,
+          newSchemaId,
+          contentFilenames
+        );
+      } catch (indexError) {
+        console.warn('Failed to migrate index:', indexError);
+        // Don't fail the whole operation if index migration fails
+      }
+    } else {
+      // Ensure metadata directory exists even if no content
+      try {
+        await IndexManager.ensureMetadataDir(github, contentPath, newSchemaId);
+      } catch (metadataError) {
+        console.warn('Failed to ensure metadata directory:', metadataError);
+      }
     }
 
     // Delete all old files sequentially

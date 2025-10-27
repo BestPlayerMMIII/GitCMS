@@ -6,8 +6,9 @@
  */
 
 import { createGitHubClient } from '@/lib/client-github';
-import { GitHubApiClient } from '@git-cms/core';
+import { GitHubApiClient, getGitCMSConfig, getContentPath } from '@git-cms/core';
 import type { GitCMSSchema, GitHubFileContent } from '@git-cms/core';
+import * as IndexManager from '@/lib/data/index-manager';
 
 // ============================================================================
 // CLIENT-CALLABLE FUNCTIONS
@@ -260,6 +261,31 @@ async function saveSchemaData(
   const schemaPath = `.gitcms/schemas/${schema.id}.json`;
   const content = JSON.stringify(schema, null, 2);
   const message = commitMessage || `Update schema: ${schema.metadata?.name || schema.id}`;
+
+  // Get content path to ensure metadata directory exists
+  let contentPath = 'content'; // default
+  try {
+    const config = await getGitCMSConfig(
+      await (github as any).getAccessToken(),
+      (github as any).owner,
+      (github as any).repo
+    );
+    contentPath = getContentPath(config);
+  } catch (error) {
+    console.warn('Failed to get content path, using default:', error);
+  }
+
+  // Ensure metadata directory exists for new or renamed schema
+  const isNewSchema = !originalSchemaId;
+  const isRenaming = originalSchemaId && originalSchemaId !== schema.id;
+
+  if (isNewSchema || isRenaming) {
+    try {
+      await IndexManager.ensureMetadataDir(github, contentPath, schema.id);
+    } catch (error) {
+      console.warn(`Failed to ensure metadata directory for ${schema.id}:`, error);
+    }
+  }
 
   // Handle schema renaming
   if (originalSchemaId && originalSchemaId !== schema.id) {

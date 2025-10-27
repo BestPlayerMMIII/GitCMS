@@ -84,8 +84,9 @@ configuration:
 
 - **When**: No `token` or `baseUrl` provided
 - **Best for**: Public repositories, client-side applications
-- **Rate limits**: 60 requests/hour per IP
+- **Rate limits**: 60 requests/hour per IP (generous on raw URLs)
 - **Security**: No credentials exposed
+- **Requirements**: Index files (see below)
 
 ```typescript
 const cms = new GitCMS({
@@ -93,6 +94,17 @@ const cms = new GitCMS({
   // No token needed!
 });
 ```
+
+**Important**: Public mode requires `index.json` files in each schema directory
+for reliable operation:
+
+```json
+// content/posts/_index.json
+["post-1.json", "post-2.json", "welcome.md"]
+```
+
+**Alternative**: Use authenticated mode (server-side) or proxy mode for
+production.
 
 #### 2. **Authenticated Mode** (For private repos or higher limits)
 

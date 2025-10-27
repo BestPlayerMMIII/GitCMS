@@ -1,12 +1,13 @@
 import { Octokit } from '@octokit/rest';
-import type { GitCMSConfig, ContentItem } from './types';
+import type { GitCMSConfig, ContentItem, TransportMode } from './types';
 import { Operator, applyOperator } from '@git-cms/core';
 
 export class SchemaRef {
   constructor(
     private name: string,
     private octokit: Octokit,
-    private config: GitCMSConfig
+    private config: GitCMSConfig,
+    private transport: TransportMode
   ) {}
 
   /**
@@ -28,7 +29,68 @@ export class SchemaRef {
       return json.items as ContentItem[];
     }
 
-    // Direct GitHub API access (public or authenticated mode)
+    // Public mode: use raw.githubusercontent.com (no auth required)
+    if (this.transport === 'public') {
+      try {
+        const [owner, repo] = this.config.repository.split('/');
+        const branch = this.config.branch || 'main';
+
+        // For public mode, we need to try fetching the index file from .metadata directory
+
+        const items: ContentItem[] = [];
+
+        // Try to fetch an index file from .metadata directory
+        const indexUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/content/${this.name}/.metadata/index.json`;
+        try {
+          const indexResponse = await fetch(indexUrl);
+          if (indexResponse.ok) {
+            const indexData = await indexResponse.json();
+            if (Array.isArray(indexData)) {
+              // Index file contains list of file names
+              for (const fileName of indexData) {
+                try {
+                  const fileUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/content/${this.name}/${fileName}`;
+                  const fileResponse = await fetch(fileUrl);
+
+                  if (fileResponse.ok) {
+                    const content = await fileResponse.text();
+
+                    if (fileName.endsWith('.json')) {
+                      items.push(JSON.parse(content));
+                    } else if (fileName.endsWith('.md')) {
+                      const item = this.parseMarkdown(content, fileName);
+                      items.push(item);
+                    }
+                  }
+                } catch (fileError) {
+                  if (debug) console.error(`Error fetching file ${fileName}:`, fileError);
+                }
+              }
+              return items;
+            }
+          }
+        } catch (indexError) {
+          // Index file doesn't exist
+        }
+
+        // If everything fails, return empty array
+        if (debug) {
+          console.warn(
+            `GitCMS Public Mode: Unable to list files in schema "${this.name}". ` +
+              `For public repositories, consider:\n` +
+              `1. Creating a content/${this.name}/index.json file with an array of file names\n` +
+              `2. Using authenticated mode with a token (server-side only)\n` +
+              `3. Using proxy mode with a custom API endpoint`
+          );
+        }
+        return items;
+      } catch (error) {
+        if (debug) console.error(`Error fetching content from schema ${this.name}:`, error);
+        return [];
+      }
+    }
+
+    // Authenticated mode: use GitHub API with token
     try {
       const [owner, repo] = this.config.repository.split('/');
       const response = await this.octokit.rest.repos.getContent({
@@ -77,21 +139,28 @@ export class SchemaRef {
    * Query content with filters
    */
   where(field: string, operator: Operator, value: any): SchemaQuery {
-    return new SchemaQuery(this.name, this.octokit, this.config).where(field, operator, value);
+    return new SchemaQuery(this.name, this.octokit, this.config, this.transport).where(
+      field,
+      operator,
+      value
+    );
   }
 
   /**
    * Order content results
    */
   orderBy(field: string, direction: 'asc' | 'desc' = 'asc'): SchemaQuery {
-    return new SchemaQuery(this.name, this.octokit, this.config).orderBy(field, direction);
+    return new SchemaQuery(this.name, this.octokit, this.config, this.transport).orderBy(
+      field,
+      direction
+    );
   }
 
   /**
    * Limit content results
    */
   limit(count: number): SchemaQuery {
-    return new SchemaQuery(this.name, this.octokit, this.config).limit(count);
+    return new SchemaQuery(this.name, this.octokit, this.config, this.transport).limit(count);
   }
 
   /**
@@ -148,7 +217,8 @@ export class SchemaQuery {
   constructor(
     private schemaName: string,
     private octokit: Octokit,
-    private config: GitCMSConfig
+    private config: GitCMSConfig,
+    private transport: TransportMode
   ) {}
 
   debug(active: boolean): SchemaQuery {
@@ -271,7 +341,7 @@ export class SchemaQuery {
     }
 
     // Direct GitHub API fallback (public or authenticated mode)
-    const schemaRef = new SchemaRef(this.schemaName, this.octokit, this.config);
+    const schemaRef = new SchemaRef(this.schemaName, this.octokit, this.config, this.transport);
     let items = await schemaRef.get(this.debugActive);
 
     // Apply where filters
