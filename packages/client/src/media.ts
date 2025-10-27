@@ -5,7 +5,7 @@ import {
   getDefaultThumbnail,
   getMediaTypeFromFilename,
 } from '@git-cms/core';
-import type { GitCMSConfig } from './types';
+import type { GitCMSConfig, TransportMode } from './types';
 
 /**
  * Represents a media item extracted from content
@@ -64,15 +64,17 @@ export interface MediaFetchOptions {
 export class MediaManager {
   private octokit: Octokit;
   private config: GitCMSConfig;
+  private transport: TransportMode;
   private cache: Map<string, FullMediaData> = new Map();
 
-  constructor(config: GitCMSConfig) {
+  constructor(config: GitCMSConfig, transport: TransportMode) {
     this.config = {
       branch: 'main',
       ...config,
     };
+    this.transport = transport;
     this.octokit = new Octokit({
-      auth: config.token,
+      auth: transport === 'authenticated' ? config.token : undefined,
     });
   }
 
@@ -180,9 +182,9 @@ export class MediaManager {
       const [owner, repo] = this.config.repository.split('/');
       const branch = this.config.branch || 'main';
 
-      // Only use raw.githubusercontent.com for public repos or when explicitly configured
-      // For private repos, this won't work without auth, so fall back to default
-      if (this.config.baseUrl || !this.config.token) {
+      // For proxy mode with baseUrl, or public/authenticated modes without token
+      // In public mode or when baseUrl is available, we can use direct URLs
+      if (this.transport === 'proxy' || this.transport === 'public' || !this.config.token) {
         try {
           return getThumbnailUrl(owner, repo, reference.path, branch);
         } catch (error) {
@@ -214,12 +216,12 @@ export class MediaManager {
     const [owner, repo] = this.config.repository.split('/');
 
     try {
-      // Use HTTP API if available (faster for public repos or when configured)
-      if (this.config.baseUrl) {
+      // Use HTTP API if proxy mode is enabled
+      if (this.transport === 'proxy') {
         return await this.fetchViaHTTP(reference, owner, repo, options);
       }
 
-      // Fallback to GitHub API
+      // Use direct GitHub API (public or authenticated mode)
       return await this.fetchViaGitHub(reference, owner, repo, options);
     } catch (error) {
       console.error(`Failed to fetch full media for ${reference.path}:`, error);
@@ -672,8 +674,8 @@ export class MediaManager {
 export class ContentMediaHelper {
   private mediaManager: MediaManager;
 
-  constructor(config: GitCMSConfig) {
-    this.mediaManager = new MediaManager(config);
+  constructor(config: GitCMSConfig, transport: TransportMode) {
+    this.mediaManager = new MediaManager(config, transport);
   }
 
   /**

@@ -1,8 +1,29 @@
 export interface GitCMSConfig {
   repository: string;
   branch?: string;
+  /**
+   * GitHub personal access token for private repositories or authenticated access.
+   * Optional for public repositories.
+   */
   token?: string;
+  /**
+   * Custom API endpoint URL for proxied requests.
+   * When provided, all requests will go through this endpoint instead of GitHub API.
+   * Useful for server-side rendering or when you need additional caching/processing.
+   */
   baseUrl?: string;
+  /**
+   * Force a specific transport mode.
+   * - 'public': Direct GitHub API access without authentication (public repos only)
+   * - 'authenticated': GitHub API with token (private repos or rate limit benefits)
+   * - 'proxy': Use custom API endpoint specified in baseUrl
+   *
+   * If not specified, the transport mode will be auto-detected:
+   * - If baseUrl is provided -> 'proxy'
+   * - If token is provided -> 'authenticated'
+   * - Otherwise -> 'public'
+   */
+  transport?: TransportMode;
 }
 
 export interface ContentItem {
@@ -56,9 +77,19 @@ export interface QueryOptions {
   offset?: number;
 }
 
-export type TransportMode = 'github' | 'http';
+export type TransportMode = 'public' | 'authenticated' | 'proxy';
 
 export interface GitCMSError extends Error {
   code: string;
   details?: any;
+}
+
+/**
+ * GitHub API rate limit information
+ */
+export interface RateLimitInfo {
+  limit: number;
+  remaining: number;
+  reset: Date;
+  used: number;
 }

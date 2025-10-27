@@ -16,6 +16,7 @@ export class SchemaRef {
    */
   async get(debug: boolean = true): Promise<ContentItem[]> {
     if (this.config.baseUrl) {
+      // Proxy mode: use custom API endpoint
       const [owner, repo] = this.config.repository.split('/');
       const url = new URL(`${this.config.baseUrl}/api/content/${owner}/${repo}/${this.name}`);
       url.searchParams.set('branch', this.config.branch || 'main');
@@ -26,6 +27,8 @@ export class SchemaRef {
       const json = await res.json();
       return json.items as ContentItem[];
     }
+
+    // Direct GitHub API access (public or authenticated mode)
     try {
       const [owner, repo] = this.config.repository.split('/');
       const response = await this.octokit.rest.repos.getContent({
@@ -245,6 +248,7 @@ export class SchemaQuery {
 
   async get(): Promise<ContentItem[]> {
     if (this.config.baseUrl) {
+      // Proxy mode: use custom API endpoint
       const [owner, repo] = this.config.repository.split('/');
       const url = new URL(`${this.config.baseUrl}/api/content/${owner}/${repo}/${this.schemaName}`);
       url.searchParams.set('branch', this.config.branch || 'main');
@@ -273,7 +277,7 @@ export class SchemaQuery {
       return json.items as ContentItem[];
     }
 
-    // Fallback to direct GitHub API access
+    // Direct GitHub API fallback (public or authenticated mode)
     const schemaRef = new SchemaRef(this.schemaName, this.octokit, this.config);
     let items = await schemaRef.get(this.debugActive);
 

@@ -10,31 +10,57 @@ npm install @git-cms/client
 
 ## Quick Start
 
+### Public Repository (No Token Required)
+
+For public GitHub repositories, you can use GitCMS without any authentication:
+
 ```typescript
 import { GitCMS } from '@git-cms/client';
 
-// Initialize the client
+// Initialize for public repository
 const cms = new GitCMS({
   repository: 'username/my-blog',
-  token: 'your-github-token', // Optional for public repos
 });
 
-// Fetch all blog posts (using SQL-like FROM syntax)
+// Fetch all blog posts
 const posts = await cms.from('blog-posts').get();
-
-// Fetch published posts ordered by date
-const publishedPosts = await cms
-  .from('blog-posts')
-  .where('published', true)
-  .orderBy('publishedAt', 'desc')
-  .limit(10)
-  .get();
 
 // Fetch a single post
 const post = await cms.from('blog-posts').doc('my-first-post').get();
+```
 
-// Fetch a standalone document
-const aboutPage = await cms.doc('about').get();
+### Private Repository (Token Required)
+
+For private repositories or to get higher rate limits, provide a GitHub token:
+
+```typescript
+import { GitCMS } from '@git-cms/client';
+
+// Initialize with authentication
+const cms = new GitCMS({
+  repository: 'username/my-private-blog',
+  token: 'your-github-token', // GitHub Personal Access Token
+});
+
+// Same API as public mode
+const posts = await cms.from('blog-posts').get();
+```
+
+### Custom API Proxy (Advanced)
+
+If you need server-side rendering, custom caching, or additional processing:
+
+```typescript
+import { GitCMS } from '@git-cms/client';
+
+// Initialize with custom API endpoint
+const cms = new GitCMS({
+  repository: 'username/my-blog',
+  baseUrl: 'https://my-api.com', // Your custom API endpoint
+  token: 'optional-token', // Optional, for API authentication
+});
+
+const posts = await cms.from('blog-posts').get();
 ```
 
 ## Configuration
@@ -43,10 +69,304 @@ const aboutPage = await cms.doc('about').get();
 interface GitCMSConfig {
   repository: string; // GitHub repository in format 'owner/repo'
   branch?: string; // Git branch (default: 'main')
-  token?: string; // GitHub personal access token
-  baseUrl?: string; // Custom API base URL
+  token?: string; // GitHub personal access token (optional for public repos)
+  baseUrl?: string; // Custom API base URL for proxy mode
+  transport?: 'public' | 'authenticated' | 'proxy'; // Force specific transport mode
 }
 ```
+
+### Transport Modes
+
+GitCMS automatically selects the best transport mode based on your
+configuration:
+
+#### 1. **Public Mode** (Default for public repos)
+
+- **When**: No `token` or `baseUrl` provided
+- **Best for**: Public repositories, client-side applications
+- **Rate limits**: 60 requests/hour per IP
+- **Security**: No credentials exposed
+
+```typescript
+const cms = new GitCMS({
+  repository: 'username/public-blog',
+  // No token needed!
+});
+```
+
+#### 2. **Authenticated Mode** (For private repos or higher limits)
+
+- **When**: `token` provided, no `baseUrl`
+- **Best for**: Private repositories, higher rate limits
+- **Rate limits**: 5,000 requests/hour (authenticated)
+- **Security**: Keep token server-side only
+
+```typescript
+const cms = new GitCMS({
+  repository: 'username/private-blog',
+  token: process.env.GITHUB_TOKEN, // Server-side only!
+});
+```
+
+#### 3. **Proxy Mode** (For custom backends)
+
+- **When**: `baseUrl` provided
+- **Best for**: Server-side rendering, custom caching, additional processing
+- **Rate limits**: Depends on your proxy implementation
+- **Security**: Full control over authentication and caching
+
+```typescript
+const cms = new GitCMS({
+  repository: 'username/my-blog',
+  baseUrl: 'https://my-api.vercel.app',
+});
+```
+
+### Forcing a Specific Transport Mode
+
+You can explicitly specify the transport mode:
+
+```typescript
+// Force public mode even with a token present
+const cms = new GitCMS({
+  repository: 'username/public-blog',
+  token: 'ghp_xxx', // Present but won't be used
+  transport: 'public',
+});
+
+// Force authenticated mode
+const cms = new GitCMS({
+  repository: 'username/blog',
+  token: 'ghp_xxx',
+  transport: 'authenticated',
+});
+
+// Force proxy mode
+const cms = new GitCMS({
+  repository: 'username/blog',
+  baseUrl: 'https://api.example.com',
+  transport: 'proxy',
+});
+```
+
+### Checking Current Transport Mode
+
+```typescript
+const cms = new GitCMS({
+  repository: 'username/my-blog',
+});
+
+console.log(cms.getTransportMode()); // 'public', 'authenticated', or 'proxy'
+console.log(cms.isPublicMode()); // true if in public mode
+```
+
+### Rate Limit Information
+
+Monitor your GitHub API rate limits (public and authenticated modes only):
+
+```typescript
+const cms = new GitCMS({
+  repository: 'username/my-blog',
+  token: 'ghp_xxx',
+});
+
+const rateLimit = await cms.getRateLimit();
+if (rateLimit) {
+  console.log(`Remaining: ${rateLimit.remaining}/${rateLimit.limit}`);
+  console.log(`Resets at: ${rateLimit.reset}`);
+}
+```
+
+## Recommended Usage Patterns
+
+### Client-Side React/Vue/Next.js Application (Public Repository)
+
+**Best Practice**: Use public mode - no backend needed!
+
+```typescript
+// app/lib/cms.ts
+import { GitCMS } from '@git-cms/client';
+
+export const cms = new GitCMS({
+  repository: 'username/blog-content',
+  // No token - completely safe for client-side
+});
+
+// app/page.tsx (Next.js App Router)
+import { cms } from '@/lib/cms';
+
+export default async function BlogPage() {
+  const posts = await cms
+    .from('posts')
+    .where('metadata.status', '==', 'published')
+    .orderBy('metadata.publishedAt', 'desc')
+    .get();
+
+  return (
+    <div>
+      {posts.map(post => (
+        <article key={post.id}>
+          <h2>{post.title}</h2>
+          <p>{post.excerpt}</p>
+        </article>
+      ))}
+    </div>
+  );
+}
+```
+
+### Server-Side Application (Private Repository)
+
+**Best Practice**: Use authenticated mode with environment variables
+
+```typescript
+// lib/cms.ts (server-side only)
+import { GitCMS } from '@git-cms/client';
+
+if (!process.env.GITHUB_TOKEN) {
+  throw new Error('GITHUB_TOKEN is required for private repositories');
+}
+
+export const cms = new GitCMS({
+  repository: 'company/private-content',
+  token: process.env.GITHUB_TOKEN,
+});
+
+// NEVER expose this client to the browser!
+```
+
+### Next.js with Server Actions (Hybrid Approach)
+
+**Best Practice**: Keep token server-side, expose public API
+
+```typescript
+// app/actions/content.ts (Server Action)
+'use server';
+
+import { GitCMS } from '@git-cms/client';
+
+const cms = new GitCMS({
+  repository: 'username/blog',
+  token: process.env.GITHUB_TOKEN, // Server-side only
+});
+
+export async function getPosts() {
+  return await cms
+    .from('posts')
+    .where('metadata.status', '==', 'published')
+    .get();
+}
+
+// app/page.tsx (Client Component)
+import { getPosts } from './actions/content';
+
+export default async function Page() {
+  const posts = await getPosts();
+  return <PostList posts={posts} />;
+}
+```
+
+### High-Traffic Application with Caching
+
+**Best Practice**: Use proxy mode with your own API endpoint
+
+```typescript
+// Your API endpoint (e.g., /api/content/[...path])
+import { GitCMS } from '@git-cms/client';
+
+const cms = new GitCMS({
+  repository: 'username/blog',
+  token: process.env.GITHUB_TOKEN,
+});
+
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const schema = searchParams.get('schema');
+
+  // Add caching layer
+  const cacheKey = `content:${schema}`;
+  const cached = await redis.get(cacheKey);
+  if (cached) return Response.json(cached);
+
+  const items = await cms.from(schema).get();
+  await redis.set(cacheKey, items, { ex: 300 }); // 5min cache
+
+  return Response.json(items);
+}
+
+// Client-side usage
+const cms = new GitCMS({
+  repository: 'username/blog',
+  baseUrl: 'https://your-app.com',
+  transport: 'proxy',
+});
+```
+
+### Mobile App or Static Site Generator
+
+**Best Practice**: Fetch at build time, no runtime API calls
+
+```typescript
+// build-time script or static site generator
+import { GitCMS } from '@git-cms/client';
+
+const cms = new GitCMS({
+  repository: 'username/app-content',
+  // Public repo - no token needed
+});
+
+async function generateStaticData() {
+  const posts = await cms.from('posts').get();
+  const pages = await cms.from('pages').get();
+
+  // Write to static JSON files
+  await fs.writeFile('data/posts.json', JSON.stringify(posts));
+  await fs.writeFile('data/pages.json', JSON.stringify(pages));
+}
+
+generateStaticData();
+```
+
+## Security Best Practices
+
+### ⚠️ NEVER Expose Tokens Client-Side
+
+```typescript
+// ❌ BAD: Token in client-side code
+const cms = new GitCMS({
+  repository: 'username/blog',
+  token: 'ghp_xxxxxxxxxxxxx', // NEVER DO THIS!
+});
+
+// ✅ GOOD: Use public mode for client-side
+const cms = new GitCMS({
+  repository: 'username/blog',
+  // No token - safe for browsers
+});
+
+// ✅ GOOD: Token in server environment
+const cms = new GitCMS({
+  repository: 'username/blog',
+  token: process.env.GITHUB_TOKEN, // Server-only
+});
+```
+
+### Rate Limit Considerations
+
+**Public Mode**: 60 requests/hour per IP
+
+- Best for: Low-traffic sites, development
+- Consider: Static generation or caching for high traffic
+
+**Authenticated Mode**: 5,000 requests/hour
+
+- Best for: Server-side applications, high-traffic sites
+- Consider: Only use server-side, never expose token
+
+**Proxy Mode**: Custom limits
+
+- Best for: Enterprise applications, fine-grained control
+- Implement your own rate limiting and caching
 
 ## Querying Content
 
