@@ -74,13 +74,6 @@ export class SchemaRef {
   }
 
   /**
-   * Get a single document by ID
-   */
-  async doc(id: string): Promise<DocumentRef> {
-    return new DocumentRef(id, this.name, this.octokit, this.config);
-  }
-
-  /**
    * Query content with filters
    */
   where(field: string, operator: Operator, value: any): SchemaQuery {
@@ -323,56 +316,5 @@ export class SchemaQuery {
     }
 
     return items;
-  }
-}
-
-export class DocumentRef {
-  constructor(
-    private id: string,
-    private schemaName: string,
-    private octokit: Octokit,
-    private config: GitCMSConfig
-  ) {}
-
-  async get(): Promise<ContentItem | null> {
-    try {
-      const [owner, repo] = this.config.repository.split('/');
-
-      // Try JSON first, then Markdown
-      const extensions = ['json', 'md'];
-
-      for (const ext of extensions) {
-        try {
-          const response = await this.octokit.rest.repos.getContent({
-            owner,
-            repo,
-            path: `content/${this.schemaName}/${this.id}.${ext}`,
-            ref: this.config.branch,
-          });
-
-          if ('content' in response.data) {
-            const content = Buffer.from(response.data.content, 'base64').toString('utf-8');
-
-            if (ext === 'json') {
-              return JSON.parse(content);
-            } else {
-              // Parse markdown (simplified version)
-              return {
-                id: this.id,
-                content,
-              };
-            }
-          }
-        } catch (error) {
-          // Continue to next extension if file not found
-          continue;
-        }
-      }
-
-      return null;
-    } catch (error) {
-      console.error(`Error fetching document ${this.id}:`, error);
-      return null;
-    }
   }
 }

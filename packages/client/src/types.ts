@@ -31,22 +31,6 @@ export interface ContentItem {
   [key: string]: any;
 }
 
-/**
- * SchemaGroup represents all content items grouped by their schema type
- */
-export interface SchemaGroup {
-  name: string;
-  schema: ContentSchema;
-  items: ContentItem[];
-}
-
-export interface ContentSchema {
-  name: string;
-  displayName: string;
-  description?: string;
-  fields: SchemaField[];
-}
-
 export interface SchemaField {
   name: string;
   type:
