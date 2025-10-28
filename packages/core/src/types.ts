@@ -12,12 +12,6 @@ export interface ContentItem {
   [key: string]: any;
 }
 
-export interface Collection {
-  name: string;
-  schema: ContentSchema;
-  items: ContentItem[];
-}
-
 export interface ContentSchema {
   name: string;
   displayName: string;

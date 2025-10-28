@@ -133,7 +133,6 @@ This directory contains the GitCMS configuration for this repository.
 
 - \`config.json\`: Main configuration file
 - \`schemas/\`: Content type schemas${body.config.includeDefaultSchemas ? ` (${Object.keys(defaultSchemas).length} default schemas included)` : ''}
-- \`collections/\`: Collection definitions
 
 ## Content Structure
 
@@ -185,13 +184,6 @@ Generated on ${new Date().toLocaleDateString()} by GitCMS
     path: '.gitcms/schemas/.gitkeep',
     content:
       '# GitCMS Schemas Directory\n\nThis directory contains content type schema definitions.\n',
-  });
-
-  // Create collections directory
-  files.push({
-    path: '.gitcms/collections/.gitkeep',
-    content:
-      '# GitCMS Collections Directory\n\nThis directory contains content type collection definitions.\n',
   });
 
   // Create default schemas if requested

@@ -3,6 +3,10 @@ import type { GitCMSConfig, TransportMode, RateLimitInfo } from './types';
 import { SchemaRef } from './contents';
 import { MediaManager, ContentMediaHelper } from './media';
 
+interface CompleteGitCMSConfig extends GitCMSConfig {
+  forceEnableNonPublicModes?: boolean;
+}
+
 export class GitCMS {
   private octokit: Octokit;
   private config: GitCMSConfig;
@@ -10,7 +14,7 @@ export class GitCMS {
   private _mediaManager: MediaManager;
   private _contentMediaHelper: ContentMediaHelper;
 
-  constructor(config: GitCMSConfig) {
+  constructor(config: CompleteGitCMSConfig) {
     this.config = {
       branch: 'main',
       ...config,
@@ -18,6 +22,16 @@ export class GitCMS {
 
     // Auto-detect transport mode if not specified
     this.transport = this.detectTransportMode(config);
+
+    if (this.transport !== 'public' && !config.forceEnableNonPublicModes) {
+      console.warn();
+      throw new Error(`[GitCMS] CRITICAL: GitCMS has not been fully tested in non-public modes yet.
+To avoid unexpected issues and security flaws, it's disabled by default.
+In a short time, we will provide official support for authenticated and proxy modes.
+
+If you still want to proceed, please make sure you understand the implications,
+and add the 'config' option 'forceEnableNonPublicModes: true' in every GitCMS constructor.`);
+    }
 
     // Initialize Octokit with or without auth based on transport mode
     this.octokit = new Octokit({
