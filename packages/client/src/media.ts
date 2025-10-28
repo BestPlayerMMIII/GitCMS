@@ -387,11 +387,60 @@ export class MediaManager {
     repo: string,
     options: MediaFetchOptions
   ): Promise<FullMediaData> {
+    const branch = this.config.branch || 'main';
+
+    // PUBLIC MODE: Use raw URLs (no authentication needed for public repos)
+    if (this.transport === 'public') {
+      // Use raw.githubusercontent.com for all files (no authentication needed)
+      const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${reference.path}`;
+
+      // For LFS files in public mode, use media.githubusercontent.com
+      // These URLs work without authentication for public repos
+      const isLikelyLFS = reference.mediaType === 'video' || reference.mediaType === 'audio';
+      const publicUrl = isLikelyLFS
+        ? `https://media.githubusercontent.com/media/${owner}/${repo}/${branch}/${reference.path}`
+        : rawUrl;
+
+      const fullData: FullMediaData = {
+        reference,
+        url: publicUrl,
+        downloadUrl: publicUrl,
+      };
+
+      this.cache.set(reference.path, fullData);
+      return fullData;
+    }
+
+    console.log('Authenticated mode fetch, window:', typeof window);
+
+    // AUTHENTICATED MODE: Must use server-side approach
+    // CRITICAL: Authenticated mode should ONLY be used server-side
+    // If used client-side with private repos, this will fail with console warning
+
+    if (typeof window !== 'undefined') {
+      // Running in browser - this is a problem for private repos!
+      console.error(
+        '⚠️ SECURITY WARNING: GitCMS authenticated mode detected in browser!\n' +
+          'For PRIVATE repositories, you must use one of these approaches:\n' +
+          '1. PROXY MODE (Recommended): Create a server-side API endpoint\n' +
+          '2. SERVER-SIDE RENDERING: Use GitCMS only in server components\n' +
+          '3. PUBLIC REPO: Make your repository public and use public mode\n\n' +
+          'Using authenticated mode client-side with private repos will fail.\n' +
+          'See documentation: packages/client/docs/PRIVATE-REPO-GUIDE.md'
+      );
+
+      throw new Error(
+        'GitCMS authenticated mode cannot be used in browser with private repositories. ' +
+          'Use proxy mode instead. See docs/PRIVATE-REPO-GUIDE.md'
+      );
+    }
+
+    // Server-side: Safe to use GitHub API
     const response = await this.octokit.rest.repos.getContent({
       owner,
       repo,
       path: reference.path,
-      ref: this.config.branch,
+      ref: branch,
     });
 
     if (!('content' in response.data)) {
