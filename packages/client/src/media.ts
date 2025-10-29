@@ -398,7 +398,7 @@ export class MediaManager {
       // These URLs work without authentication for public repos
       const isLikelyLFS = reference.mediaType === 'video' || reference.mediaType === 'audio';
       const publicUrl = isLikelyLFS
-        ? `https://media.githubusercontent.com/media/${owner}/${repo}/${branch}/${reference.path}`
+        ? `https://github.com/${owner}/${repo}/raw/refs/heads/${branch}/${reference.path}`
         : rawUrl;
 
       const fullData: FullMediaData = {
