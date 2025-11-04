@@ -213,7 +213,7 @@ schema designer.
 **Field Types Supported**:
 
 - Basic: string, text, number, boolean, date, datetime
-- Advanced: array, object, media, reference, rich-text, select, color
+- Advanced: array, object, media, rich-text, select, color
 - Each with customizable validation rules
 
 ### 6. Automatic Index Maintenance
@@ -259,7 +259,7 @@ public repositories.
 - Reduced bandwidth for previews
 - Browser caching of thumbnails
 - Thumbnails versioned with originals
-- Works offline (no runtime generation needed)
+- No runtime generation needed
 
 **Benefits Over Runtime Generation**:
 
@@ -365,7 +365,7 @@ const cms = new GitCMS({
 converts these to proper media elements:
 
 ```typescript
-await cms.from('posts').doc('hello').get({
+await cms.from('posts').where('id', '==', 'hello').get({
   processMedia: true, // Converts gitcms-media tags
 });
 ```
@@ -392,7 +392,7 @@ And then:
 import { GitCMS } from '@git-cms/client';
 
 const cms = new GitCMS({
-  repository: 'myusername/myblog',
+  repository: 'myusername/myrepo',
 });
 
 const posts = await cms.from('blog-posts').get();
@@ -418,7 +418,10 @@ const posts = await cms
   .get();
 
 // Single document
-const post = await cms.from('blog-posts').doc('my-first-post').get();
+const post = await cms
+  .from('blog-posts')
+  .where('id', '==', 'my-first-post')
+  .get();
 ```
 
 ## GitCMS vs. Traditional CMS/Database Solutions
@@ -434,9 +437,7 @@ const post = await cms.from('blog-posts').doc('my-first-post').get();
 | **Backup**          | Automatic (Git)  | Manual/paid            |
 | **Learning Curve**  | Low              | Medium-High            |
 | **Scaling Cost**    | Free             | $$ (exponential)       |
-| **Offline Access**  | Yes (clone repo) | No                     |
 | **Query Speed**     | Good             | Excellent              |
-| **Real-time**       | No               | Yes                    |
 
 ### vs. WordPress/Contentful/Strapi
 
@@ -467,8 +468,7 @@ build or afford.
 **Developer Experience**: The client SDK feels like Firebase/Supabase, but
 without the vendor lock-in.
 
-**Version Control**: Every content change is a Git commit. Branch for drafts, PR
-for reviews, merge for publishing.
+**Version Control**: Every content change is a Git commit.
 
 ## Technical Challenges Overcome
 
@@ -564,46 +564,22 @@ For most projects, you'll never pay a cent.
 GitCMS is still evolving. Here's what's coming:
 
 - **npm Package Publication**: Publish `@git-cms/client` to npm
-- **Reference Fields**: Link content together (author → posts)
 - **Drag-and-Drop Field Ordering**: Customize schema field order visually
 - **Content Versioning UI**: Browse and restore previous versions
-- **Multi-User Collaboration**: Role-based permissions, approval workflows
-- **Webhook Support**: Trigger rebuilds on content changes
-- **GraphQL API**: Optional GraphQL endpoint for complex queries
-- **AI-Powered Features**: Content suggestions, auto-tagging, SEO optimization
 
 ## For Developers: Getting Started
 
-### Setup (5 minutes)
+### Setup
 
-1. **Clone the repository**
+1. **Go to GitCMS Admin**
+   - https://gitcms.bestplayer.dev/
 
-```bash
-git clone https://github.com/yourusername/gitcms.git
-cd gitcms
-npm install
-```
+2. **Connect your GitHub Account**
 
-2. **Create GitHub OAuth App**
-   - Go to GitHub Settings → Developer settings → OAuth Apps
-   - Create new OAuth app
-   - Callback URL: `http://localhost:3001/api/auth/callback/github`
-
-3. **Configure environment**
-
-```bash
-cd packages/admin
-cp .env.example .env.local
-# Add your GitHub OAuth credentials
-```
-
-4. **Start development**
-
-```bash
-npm run dev
-```
-
-Visit `http://localhost:3001` and sign in with GitHub!
+3. **Follow the Admin procedure**
+   - connect repository
+   - create your schemas
+   - create contents based on your schemas
 
 ### Use the Client SDK (Once Published)
 
@@ -623,12 +599,15 @@ const cms = new GitCMS({
 const posts = await cms.from('blog-posts').get();
 
 // Get single item
-const post = await cms.from('blog-posts').doc('hello-world').get();
+const post = await cms
+  .from('blog-posts')
+  .where('id', '==', 'hello-world')
+  .get();
 
 // Process embedded media
 const processedPost = await cms
   .from('blog-posts')
-  .doc('hello-world')
+  .where('id', '==', 'hello-world')
   .get({ processMedia: true });
 ```
 
@@ -636,8 +615,6 @@ const processedPost = await cms
 
 ### 1. **Simplicity Wins**
 
-Initially, I wanted to support multiple storage backends (GitHub, GitLab,
-Bitbucket). But that complexity didn't serve the core value proposition.
 Focusing on GitHub exclusively made everything simpler and better.
 
 ### 2. **Security Can Be Simple**
@@ -649,7 +626,7 @@ with caching.
 ### 3. **Git Is Underutilized**
 
 We treat Git as a developer tool, but it's an incredible database for content.
-Version control, branching, merging, collaboration—all built-in.
+Version control, branching, merging, collaboration... all built-in!
 
 ### 4. **Bandwidth Matters**
 
@@ -659,9 +636,8 @@ free tier."
 
 ### 5. **Developer Experience Is Everything**
 
-The client SDK needs to feel familiar. That's why we use SQL-like `from()`,
-Firebase-like `doc()`, and chainable queries. Developers should feel at home
-immediately.
+The client SDK needs to feel familiar. That's why we use SQL-like `from()`, and
+chainable queries. Developers should feel at home immediately.
 
 ## Conclusion
 
@@ -689,9 +665,8 @@ The revolution will be versioned. 🚀
 ---
 
 **Fun Fact**: This blog post was written and managed through the GitCMS admin
-panel running on my local machine, stored as a Markdown file in the GitHub
-repository, and will be accessible via the `@git-cms/client` SDK once published
-to npm!
+panel running on my localhost, stored as a JSON file in the GitHub repository,
+and will be accessible via the `@git-cms/client` SDK once published to npm!
 
 ---
 
@@ -705,17 +680,7 @@ to npm!
 - ✅ Rich text editor with custom media embedding
 - ✅ Direct client-to-GitHub architecture
 - ✅ Automatic index maintenance
-- ✅ Client SDK with three transport modes
+- ✅ Client SDK with public transport mode
+- 🚧 Client SDK with authenticated transport mode (coming soon)
 - 🚧 Publishing to npm (coming soon)
-- 🚧 Reference fields for relational data
-- 🚧 Advanced collaboration features
-
-### Get Involved
-
-GitCMS is open source and growing. Whether you want to contribute code, report
-bugs, suggest features, or just star the repo, all involvement is welcome!
-
-**Repository**:
-[github.com/BestPlayerMMIII/GitCMS](https://github.com/BestPlayerMMIII/GitCMS)
-
-Let's build the future of content management together. 🎉
+- 🚧 Improve Admin panel, catching some bugs and making experience even better
