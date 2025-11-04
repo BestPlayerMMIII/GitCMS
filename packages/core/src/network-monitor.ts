@@ -1,4 +1,4 @@
-import networkTestData from './ignore/network-test.json';
+import networkTestData from './data/network-test.json';
 const networkTest = networkTestData as { url: string; size: number }[];
 
 /**

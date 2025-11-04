@@ -32,7 +32,7 @@
   "files": [
     "dist",
     "README.md",
-    "EXAMPLES.md"
+    "LICENSE"
   ],
   "keywords": [
     "cms",
@@ -52,7 +52,7 @@
   "homepage": "https://github.com/BestPlayerMMIII/GitCMS#readme",
   "license": "MIT",
   "author": {
-    "name": "BestPlayerMMIII",
+    "name": "Manuel Maiuolo - BestPlayerMMIII",
     "url": "https://github.com/BestPlayerMMIII"
   },
   "publishConfig": {
