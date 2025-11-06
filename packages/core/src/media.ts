@@ -239,6 +239,44 @@ export class MediaPathManager {
     return `${basePath}/${uniqueFilename}`;
   }
 
+  /**
+   * Generate path with base and handle duplicates
+   * Always uses original name and checks for duplicates, adding incremental suffix if needed
+   */
+  static async generatePathWithBaseAndDuplicateCheck(
+    basePath: string,
+    filename: string,
+    folder: string | undefined,
+    githubClient: any
+  ): Promise<string> {
+    const cleanFilename = this.sanitizeFilename(filename);
+    const extension = MediaValidator.getFileExtension(filename);
+    const nameWithoutExt = cleanFilename.replace(extension, '');
+
+    // Try with original name first
+    let finalFilename = cleanFilename;
+    let path = folder
+      ? `${basePath}/${this.sanitizeFilename(folder)}/${finalFilename}`
+      : `${basePath}/${finalFilename}`;
+
+    // Check if file exists
+    const exists = await githubClient.fileExists(path);
+
+    if (exists) {
+      // File exists, add incremental suffix
+      let counter = 1;
+      do {
+        finalFilename = `${nameWithoutExt}-${counter}${extension}`;
+        path = folder
+          ? `${basePath}/${this.sanitizeFilename(folder)}/${finalFilename}`
+          : `${basePath}/${finalFilename}`;
+        counter++;
+      } while (await githubClient.fileExists(path));
+    }
+
+    return path;
+  }
+
   static generateThumbnailPath(originalPath: string, size: number): string {
     const extension = MediaValidator.getFileExtension(originalPath);
     const pathWithoutExt = originalPath.replace(extension, '');

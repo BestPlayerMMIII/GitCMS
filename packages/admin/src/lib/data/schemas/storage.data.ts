@@ -241,7 +241,8 @@ async function validateSchemaIdData(
       message: isValid ? 'Valid (current schema)' : 'Schema ID already exists',
     };
   } catch (error: any) {
-    if (error.code === 'NOT_FOUND') {
+    // Check for 404 - file not found means ID is available
+    if (error.code === 'NOT_FOUND' || error.details?.status === 404) {
       return {
         valid: true,
         exists: false,

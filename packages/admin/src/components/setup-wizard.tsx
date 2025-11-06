@@ -6,6 +6,7 @@ import { ArrowLeft, ArrowRight, CheckCircle, AlertCircle, Folder, Settings } fro
 import { useGitHubConfig, useGitHubConfigMutations } from '../lib/api-hooks';
 import { LoadingSpinner } from './ui/loading';
 import { DEFAULT_GITCMS_CONFIG } from '@git-cms/core';
+import { useRepository } from '@/contexts/repository-context';
 
 interface Repository {
   owner: string;
@@ -43,6 +44,7 @@ export function SetupWizard({ repository }: SetupWizardProps) {
   });
   const [step, setStep] = useState<'check' | 'configure' | 'complete'>('check');
   const router = useRouter();
+  const { setRepositoryInfo } = useRepository();
 
   // Use cached hooks for GitHub configuration
   const {
@@ -99,8 +101,14 @@ export function SetupWizard({ repository }: SetupWizardProps) {
   const handleComplete = () => {
     // Clean up the selection localStorage
     localStorage.removeItem('gitcms-selected-repo');
-    // Store the connected repository
-    localStorage.setItem('gitcms-connected-repo', JSON.stringify(repository));
+
+    // Use setRepositoryInfo to trigger cache clear and reload
+    setRepositoryInfo({
+      owner: repository.owner,
+      repo: repository.name,
+    });
+
+    // Navigate to home - the reload will happen automatically
     router.push('/');
   };
 

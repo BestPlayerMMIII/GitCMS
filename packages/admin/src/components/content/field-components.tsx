@@ -6,6 +6,7 @@ import React, {
   useMemo,
   useRef,
   useEffect,
+  useLayoutEffect,
   createContext,
   useContext,
 } from 'react';
@@ -20,19 +21,28 @@ interface SchemaRenderingContextValue {
   getCurrentStack: () => string[];
   pushSchema: (schemaId: string) => boolean;
   popSchema: (schemaId: string) => void;
+  isCircular: (schemaId: string) => boolean;
 }
 
 const SchemaRenderingContext = createContext<SchemaRenderingContextValue | null>(null);
 
 // Provider component to wrap the entire form
 export function SchemaRenderingProvider({ children }: { children: React.ReactNode }) {
+  // Track the schema rendering path (not counts, but actual path)
   const renderingStackRef = useRef<string[]>([]);
 
   const getCurrentStack = useCallback(() => {
-    return [...renderingStackRef.current]; // Return copy to prevent mutations
+    return [...renderingStackRef.current];
+  }, []);
+
+  const isCircular = useCallback((schemaId: string): boolean => {
+    // A circular dependency exists if we're trying to render a schema
+    // that's already in the current rendering path
+    return renderingStackRef.current.includes(schemaId);
   }, []);
 
   const pushSchema = useCallback((schemaId: string): boolean => {
+    // Check if this would create a circular dependency
     if (renderingStackRef.current.includes(schemaId)) {
       return false; // Would create circular dependency
     }
@@ -41,7 +51,11 @@ export function SchemaRenderingProvider({ children }: { children: React.ReactNod
   }, []);
 
   const popSchema = useCallback((schemaId: string) => {
-    renderingStackRef.current = renderingStackRef.current.filter(id => id !== schemaId);
+    // Remove the last occurrence of this schema from the stack
+    const lastIndex = renderingStackRef.current.lastIndexOf(schemaId);
+    if (lastIndex !== -1) {
+      renderingStackRef.current.splice(lastIndex, 1);
+    }
   }, []);
 
   // Static context value to prevent re-renders
@@ -50,8 +64,9 @@ export function SchemaRenderingProvider({ children }: { children: React.ReactNod
       getCurrentStack,
       pushSchema,
       popSchema,
+      isCircular,
     }),
-    [getCurrentStack, pushSchema, popSchema]
+    [getCurrentStack, pushSchema, popSchema, isCircular]
   );
 
   return (
@@ -70,6 +85,7 @@ function useSchemaRenderingContext() {
       getCurrentStack: () => [],
       pushSchema: () => true,
       popSchema: () => {},
+      isCircular: () => false,
     };
   }
   return context;
@@ -389,47 +405,34 @@ export function ObjectField({
   const objectValue = value || {};
 
   // Use context for circular dependency protection
-  const { getCurrentStack, pushSchema, popSchema } = useSchemaRenderingContext();
+  const { isCircular } = useSchemaRenderingContext();
 
-  // Memoize schema reference resolution to avoid repeated lookups
-  const { properties, circularDependencyError } = useMemo((): {
-    properties: Record<string, FieldDefinition>;
-    circularDependencyError?: string;
-  } => {
-    // If there's a schema reference, try to resolve it
+  // Check for circular dependency during render
+  const circularDependencyError = useMemo(() => {
     if (objectField.schemaRef && availableSchemas) {
-      // Check for circular dependency at runtime
-      const currentStack = getCurrentStack();
-      if (currentStack.includes(objectField.schemaRef)) {
-        const cyclePath = [...currentStack, objectField.schemaRef].join(' → ');
-        return {
-          properties: {},
-          circularDependencyError: `Circular dependency detected: ${cyclePath}`,
-        };
+      if (isCircular(objectField.schemaRef)) {
+        return `Circular dependency detected involving schema: ${objectField.schemaRef}`;
       }
+    }
+    return null;
+  }, [objectField.schemaRef, availableSchemas, isCircular]);
 
+  // Resolve schema properties
+  const properties = useMemo((): Record<string, FieldDefinition> => {
+    if (circularDependencyError) {
+      return {};
+    }
+
+    if (objectField.schemaRef && availableSchemas) {
       const referencedSchema = availableSchemas.find(schema => schema.id === objectField.schemaRef);
       if (referencedSchema) {
-        return { properties: referencedSchema.fields };
+        return referencedSchema.fields;
       }
     }
 
     // Fall back to inline properties
-    return { properties: objectField.properties || {} };
-  }, [objectField.schemaRef, objectField.properties, availableSchemas]);
-
-  // Update rendering stack when rendering schema reference
-  useEffect(() => {
-    if (objectField.schemaRef && !circularDependencyError) {
-      const canPush = pushSchema(objectField.schemaRef);
-      if (canPush) {
-        return () => {
-          popSchema(objectField.schemaRef);
-        };
-      }
-    }
-    // Note: pushSchema and popSchema are stable callbacks, don't include in deps
-  }, [objectField.schemaRef, circularDependencyError]);
+    return objectField.properties || {};
+  }, [objectField.schemaRef, objectField.properties, availableSchemas, circularDependencyError]);
 
   const updateProperty = (key: string, propValue: any) => {
     onChange({
@@ -445,6 +448,36 @@ export function ObjectField({
     // Look for nested error with the pattern: fieldPath.fieldKey
     const nestedErrorKey = `${fieldPath}.${fieldKey}`;
     return allErrors[nestedErrorKey];
+  };
+
+  // Wrapper component that tracks schema in the render stack
+  const ObjectFieldContent = ({ schemaId }: { schemaId?: string }) => {
+    const { pushSchema, popSchema } = useSchemaRenderingContext();
+
+    useLayoutEffect(() => {
+      if (schemaId) {
+        pushSchema(schemaId);
+        return () => popSchema(schemaId);
+      }
+    }, [schemaId, pushSchema, popSchema]);
+
+    return (
+      <>
+        {Object.entries(properties).map(([key, propField]) => (
+          <FieldRenderer
+            key={key}
+            field={propField as FieldDefinition}
+            value={objectValue[key]}
+            onChange={propValue => updateProperty(key, propValue)}
+            error={getNestedFieldError(key)}
+            disabled={disabled}
+            availableSchemas={availableSchemas}
+            allErrors={allErrors}
+            fieldPath={fieldPath ? `${fieldPath}.${key}` : key}
+          />
+        ))}
+      </>
+    );
   };
 
   return (
@@ -492,19 +525,7 @@ export function ObjectField({
               : 'No properties defined for this object.'}
           </p>
         ) : (
-          Object.entries(properties).map(([key, propField]) => (
-            <FieldRenderer
-              key={key}
-              field={propField as FieldDefinition}
-              value={objectValue[key]}
-              onChange={propValue => updateProperty(key, propValue)}
-              error={getNestedFieldError(key)}
-              disabled={disabled}
-              availableSchemas={availableSchemas}
-              allErrors={allErrors}
-              fieldPath={fieldPath ? `${fieldPath}.${key}` : key}
-            />
-          ))
+          <ObjectFieldContent schemaId={objectField.schemaRef} />
         )}
       </div>
       {error && <p className="text-sm text-red-500">{error}</p>}
