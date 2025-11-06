@@ -189,19 +189,23 @@ export class ClientGitHubApi {
    * Get file content from repository
    */
   async getFile(path: string): Promise<GitHubFileContent> {
-    const octokit = await this.getOctokit();
-    const { data } = await octokit.rest.repos.getContent({
-      owner: this.owner,
-      repo: this.repo,
-      path,
-      ref: this.branch,
-    });
+    try {
+      const octokit = await this.getOctokit();
+      const { data } = await octokit.rest.repos.getContent({
+        owner: this.owner,
+        repo: this.repo,
+        path,
+        ref: this.branch,
+      });
 
-    if (Array.isArray(data)) {
-      throw new Error('Path is a directory, not a file');
+      if (Array.isArray(data)) {
+        throw new Error('Path is a directory, not a file');
+      }
+
+      return data as GitHubFileContent;
+    } catch (error) {
+      throw this.handleError(error, `Failed to get file: ${path}`);
     }
-
-    return data as GitHubFileContent;
   }
 
   /**
@@ -595,6 +599,50 @@ export class ClientGitHubApi {
     });
 
     return data.commit;
+  }
+
+  // ============================================================================
+  // Error Handling
+  // ============================================================================
+
+  /**
+   * Handle GitHub API errors with proper error codes and messages
+   */
+  private handleError(error: any, message: string): Error {
+    const enhancedError: any = new Error(message);
+    enhancedError.code = 'GITHUB_API_ERROR';
+
+    if (error.status) {
+      switch (error.status) {
+        case 401:
+          enhancedError.code = 'UNAUTHORIZED';
+          enhancedError.message = 'GitHub authentication failed. Please check your access token.';
+          break;
+        case 403:
+          enhancedError.code = 'FORBIDDEN';
+          enhancedError.message =
+            'Access forbidden. You may not have permission to access this repository.';
+          break;
+        case 404:
+          enhancedError.code = 'NOT_FOUND';
+          enhancedError.message = 'Repository or file not found.';
+          break;
+        case 422:
+          enhancedError.code = 'VALIDATION_ERROR';
+          enhancedError.message = 'Invalid request. Please check your parameters.';
+          break;
+        default:
+          enhancedError.message = `GitHub API error: ${error.message}`;
+      }
+    }
+
+    enhancedError.details = {
+      originalError: error,
+      status: error.status,
+      response: error.response?.data,
+    };
+
+    return enhancedError;
   }
 }
 

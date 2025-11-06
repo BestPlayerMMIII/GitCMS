@@ -34,6 +34,7 @@ function ContentList() {
   const schemaId = searchParams.get('schemaId');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [schemaFilter, setSchemaFilter] = useState<string>('all');
 
   // Schema selection modal state
   const [showSchemaModal, setShowSchemaModal] = useState(false);
@@ -206,6 +207,33 @@ function ContentList() {
     }
   };
 
+  const handleQuickStatusChange = async (
+    item: ContentItem,
+    newStatus: 'draft' | 'published' | 'archived'
+  ) => {
+    if (!repositoryInfo) return;
+
+    try {
+      const updatedMetadata = {
+        ...item.metadata,
+        status: newStatus,
+        ...(newStatus === 'published' && { publishedAt: new Date().toISOString() }),
+      };
+
+      await saveContent(
+        item.schemaId,
+        item.data,
+        item.id,
+        updatedMetadata,
+        newStatus === 'published' // publish flag
+      );
+      // Content list will be automatically refreshed via cache invalidation
+    } catch (error) {
+      console.error('Failed to change status:', error);
+      alert(error instanceof Error ? error.message : 'Failed to change content status');
+    }
+  };
+
   const getEditUrl = (item: ContentItem) => {
     if (!repositoryInfo) return '/content';
     const params = new URLSearchParams({
@@ -226,8 +254,9 @@ function ContentList() {
       item.metadata.author?.toLowerCase().includes(searchQuery.toLowerCase());
 
     const matchesStatus = statusFilter === 'all' || item.metadata.status === statusFilter;
+    const matchesSchema = schemaFilter === 'all' || item.schemaId === schemaFilter;
 
-    return matchesSearch && matchesStatus;
+    return matchesSearch && matchesStatus && matchesSchema;
   });
 
   const getDisplayTitle = (item: ContentItem): string => {
@@ -363,6 +392,19 @@ function ContentList() {
 
           <div className="flex items-center space-x-4">
             <select
+              value={schemaFilter}
+              onChange={e => setSchemaFilter(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="all">All Schemas</option>
+              {schemasList.map(schema => (
+                <option key={schema.id} value={schema.id}>
+                  {schema.metadata?.name || schema.id}
+                </option>
+              ))}
+            </select>
+
+            <select
               value={statusFilter}
               onChange={e => setStatusFilter(e.target.value)}
               className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -376,6 +418,7 @@ function ContentList() {
             <button
               onClick={refreshContent}
               className="px-3 py-2 text-gray-500 hover:text-gray-700"
+              title="Refresh content list"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
@@ -477,18 +520,109 @@ function ContentList() {
                       >
                         Edit
                       </Link>
+
+                      {/* Quick status change buttons */}
+                      {item.metadata.status === 'draft' && (
+                        <button
+                          onClick={() => handleQuickStatusChange(item, 'published')}
+                          className="px-3 py-2 text-sm text-green-600 border border-green-200 rounded-md hover:bg-green-50"
+                          title="Publish"
+                        >
+                          <svg
+                            className="w-4 h-4"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M5 13l4 4L19 7"
+                            />
+                          </svg>
+                        </button>
+                      )}
+                      {item.metadata.status === 'published' && (
+                        <button
+                          onClick={() => handleQuickStatusChange(item, 'archived')}
+                          className="px-3 py-2 text-sm text-gray-600 border border-gray-200 rounded-md hover:bg-gray-50"
+                          title="Archive"
+                        >
+                          <svg
+                            className="w-4 h-4"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"
+                            />
+                          </svg>
+                        </button>
+                      )}
+                      {item.metadata.status === 'archived' && (
+                        <button
+                          onClick={() => handleQuickStatusChange(item, 'published')}
+                          className="px-3 py-2 text-sm text-green-600 border border-green-200 rounded-md hover:bg-green-50"
+                          title="Publish"
+                        >
+                          <svg
+                            className="w-4 h-4"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M5 13l4 4L19 7"
+                            />
+                          </svg>
+                        </button>
+                      )}
+
                       <button
                         onClick={() => handleDuplicate(item)}
-                        className="px-3 py-2 text-sm text-green-600 border border-green-200 rounded-md hover:bg-green-50"
+                        className="px-3 py-2 text-sm text-blue-600 border border-blue-200 rounded-md hover:bg-blue-50"
                         title="Duplicate content"
                       >
-                        Duplicate
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                          />
+                        </svg>
                       </button>
                       <button
                         onClick={() => handleDelete(item.id, item.schemaId)}
                         className="px-3 py-2 text-sm text-red-600 border border-red-200 rounded-md hover:bg-red-50"
+                        title="Delete"
                       >
-                        Delete
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                          />
+                        </svg>
                       </button>
                     </div>
                   </div>

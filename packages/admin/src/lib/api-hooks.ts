@@ -564,12 +564,17 @@ export function useGitHubConfig(
 export function useGitHubConfigMutations() {
   const initializeGitCMS = useCallback(
     async (config: { owner: string; repo: string; config: any }) => {
-      const response = await fetchData('/api/github/config', {
+      const params = new URLSearchParams({
+        owner: config.owner,
+        repo: config.repo,
+      });
+
+      const response = await fetchData(`/api/github/config?${params}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(config),
+        body: JSON.stringify({ config: config.config }),
       });
 
       if (!response.ok) {
@@ -714,24 +719,30 @@ export async function validateContentId(
   contentId: string,
   currentContentId?: string
 ): Promise<{ valid: boolean; exists: boolean; message: string }> {
-  const params = new URLSearchParams({
-    action: 'validate-id',
-    owner,
-    repo,
-    schemaId,
-    id: contentId,
-  });
+  try {
+    const params = new URLSearchParams({
+      action: 'validate-id',
+      owner,
+      repo,
+      schemaId,
+      id: contentId,
+    });
 
-  if (currentContentId) {
-    params.set('currentId', currentContentId);
+    if (currentContentId) {
+      params.set('currentId', currentContentId);
+    }
+
+    const response = await fetchData(`/api/content?${params}`);
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || errorData.message || 'Failed to validate content ID');
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('Content ID validation error:', error);
+    throw error instanceof Error ? error : new Error('Failed to validate content ID');
   }
-
-  const response = await fetchData(`/api/content?${params}`);
-  if (!response.ok) {
-    throw new Error('Failed to validate content ID');
-  }
-
-  return await response.json();
 }
 
 /**
@@ -743,23 +754,29 @@ export async function validateSchemaId(
   schemaId: string,
   currentSchemaId?: string
 ): Promise<{ valid: boolean; exists: boolean; message: string }> {
-  const params = new URLSearchParams({
-    action: 'validate-id',
-    owner,
-    repo,
-    id: schemaId,
-  });
+  try {
+    const params = new URLSearchParams({
+      action: 'validate-id',
+      owner,
+      repo,
+      id: schemaId,
+    });
 
-  if (currentSchemaId) {
-    params.set('currentId', currentSchemaId);
+    if (currentSchemaId) {
+      params.set('currentId', currentSchemaId);
+    }
+
+    const response = await fetchData(`/api/schemas/storage?${params}`);
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || errorData.message || 'Failed to validate schema ID');
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('Schema ID validation error:', error);
+    throw error instanceof Error ? error : new Error('Failed to validate schema ID');
   }
-
-  const response = await fetchData(`/api/schemas/storage?${params}`);
-  if (!response.ok) {
-    throw new Error('Failed to validate schema ID');
-  }
-
-  return await response.json();
 }
 
 /**

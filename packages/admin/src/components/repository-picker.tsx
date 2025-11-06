@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
-import { Search, GitBranch, Calendar, Lock, Unlock, Star, Eye } from 'lucide-react';
+import { Search, GitBranch, Calendar, Lock, Unlock, Star, Eye, Plus } from 'lucide-react';
 import { useGitHubRepositories } from '../lib/api-hooks';
 import { LoadingSpinner } from './ui/loading';
 
@@ -33,12 +33,19 @@ export function RepositoryPicker({
   const { data: session } = useSession();
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState<'all' | 'public' | 'private'>('all');
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newRepoName, setNewRepoName] = useState('');
+  const [newRepoDescription, setNewRepoDescription] = useState('');
+  const [newRepoPrivate, setNewRepoPrivate] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   // Use cached hook for repositories
   const {
     data: repositories = [],
     loading,
     error,
+    refresh: refreshRepositories,
   } = useGitHubRepositories({
     enabled: !!session?.accessToken,
   });
@@ -59,6 +66,70 @@ export function RepositoryPicker({
   const formatDate = (dateString?: string) => {
     if (!dateString) return 'Unknown';
     return new Date(dateString).toLocaleDateString();
+  };
+
+  const handleCreateRepository = async () => {
+    if (!newRepoName.trim()) {
+      setCreateError('Repository name is required');
+      return;
+    }
+
+    setCreating(true);
+    setCreateError(null);
+
+    try {
+      const response = await fetch('https://api.github.com/user/repos', {
+        method: 'POST',
+        headers: {
+          Authorization: `token ${session?.accessToken}`,
+          Accept: 'application/vnd.github.v3+json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: newRepoName,
+          description: newRepoDescription || undefined,
+          private: newRepoPrivate,
+          auto_init: true, // Initialize with README
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to create repository');
+      }
+
+      const newRepo = await response.json();
+
+      // Refresh the repository list
+      await refreshRepositories();
+
+      // Select the newly created repository
+      const repoToSelect: Repository = {
+        owner: newRepo.owner.login,
+        name: newRepo.name,
+        fullName: newRepo.full_name,
+        private: newRepo.private,
+        defaultBranch: newRepo.default_branch || 'main',
+        description: newRepo.description,
+        language: newRepo.language,
+        stargazers_count: newRepo.stargazers_count,
+        watchers_count: newRepo.watchers_count,
+        updated_at: newRepo.updated_at,
+      };
+
+      onSelectRepository(repoToSelect);
+
+      // Close modal and reset form
+      setShowCreateModal(false);
+      setNewRepoName('');
+      setNewRepoDescription('');
+      setNewRepoPrivate(false);
+    } catch (error: any) {
+      console.error('Failed to create repository:', error);
+      setCreateError(error.message || 'Failed to create repository');
+    } finally {
+      setCreating(false);
+    }
   };
 
   if (loading) {
@@ -97,8 +168,19 @@ export function RepositoryPicker({
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h2 className="text-2xl font-bold text-gray-900">Select Repository</h2>
-        <p className="text-gray-600 mt-1">Choose a GitHub repository to connect with GitCMS</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900">Select Repository</h2>
+            <p className="text-gray-600 mt-1">Choose a GitHub repository to connect with GitCMS</p>
+          </div>
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm font-medium"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Create New
+          </button>
+        </div>
       </div>
 
       {/* Search and Filters */}
@@ -210,6 +292,112 @@ export function RepositoryPicker({
           ))
         )}
       </div>
+
+      {/* Create Repository Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            {/* Background overlay */}
+            <div
+              className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
+              onClick={() => !creating && setShowCreateModal(false)}
+            />
+
+            {/* Modal panel */}
+            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                <div className="sm:flex sm:items-start">
+                  <div className="w-full">
+                    <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">
+                      Create New Repository
+                    </h3>
+
+                    {createError && (
+                      <div className="mb-4 bg-red-50 border border-red-200 rounded-md p-3">
+                        <p className="text-sm text-red-800">{createError}</p>
+                      </div>
+                    )}
+
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Repository Name *
+                        </label>
+                        <input
+                          type="text"
+                          value={newRepoName}
+                          onChange={e => setNewRepoName(e.target.value)}
+                          disabled={creating}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 disabled:bg-gray-100"
+                          placeholder="my-awesome-repo"
+                        />
+                        <p className="mt-1 text-xs text-gray-500">
+                          Use lowercase letters, numbers, and hyphens
+                        </p>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Description (optional)
+                        </label>
+                        <textarea
+                          value={newRepoDescription}
+                          onChange={e => setNewRepoDescription(e.target.value)}
+                          disabled={creating}
+                          rows={3}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 disabled:bg-gray-100"
+                          placeholder="A brief description of your repository"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="flex items-center">
+                          <input
+                            type="checkbox"
+                            checked={newRepoPrivate}
+                            onChange={e => setNewRepoPrivate(e.target.checked)}
+                            disabled={creating}
+                            className="rounded border-gray-300 text-green-600 shadow-sm focus:border-green-300 focus:ring focus:ring-green-200 focus:ring-opacity-50"
+                          />
+                          <span className="ml-2 text-sm text-gray-700">
+                            Make this repository private
+                          </span>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse gap-3">
+                <button
+                  type="button"
+                  onClick={handleCreateRepository}
+                  disabled={creating || !newRepoName.trim()}
+                  className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-green-600 text-base font-medium text-white hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {creating ? (
+                    <>
+                      <LoadingSpinner size="sm" color="white" />
+                      <span className="ml-2">Creating...</span>
+                    </>
+                  ) : (
+                    'Create Repository'
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowCreateModal(false)}
+                  disabled={creating}
+                  className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

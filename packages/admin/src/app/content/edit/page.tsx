@@ -263,6 +263,16 @@ function ContentEditor() {
 
   // Helper function to get the right action buttons based on current status
   const getActionButtons = () => {
+    // When creating new content (no contentId), only allow saving as draft
+    if (!contentId) {
+      return {
+        saveLabel: saving ? 'Saving...' : 'Save Draft',
+        submitLabel: undefined, // No publish button for new content
+        onSubmit: undefined,
+        showArchive: false,
+      };
+    }
+
     const currentStatus = content?.metadata?.status || 'draft';
 
     if (currentStatus === 'draft') {

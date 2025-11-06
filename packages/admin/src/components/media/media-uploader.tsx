@@ -38,6 +38,7 @@ interface LocalUploadFile extends File {
   id: string;
   preview?: string;
   lfsAnalysis?: LFSFileAnalysis;
+  customFilename?: string; // User can customize the filename
 }
 
 interface MediaUploaderProps {
@@ -164,6 +165,7 @@ export function MediaUploader({
           id: generateId(),
           preview,
           lfsAnalysis,
+          customFilename: file.name,
         });
 
         newFiles.push(localFile);
@@ -228,6 +230,7 @@ export function MediaUploader({
         formData.append('owner', owner);
         formData.append('repo', repo);
         if (folder) formData.append('folder', folder);
+        if (file.customFilename) formData.append('customFilename', file.customFilename);
 
         const response = await fetchData('/api/media?action=upload', {
           method: 'POST',
@@ -325,6 +328,13 @@ export function MediaUploader({
       }
       return prev.filter(f => f.id !== id);
     });
+  }, []);
+
+  // Update custom filename for a file
+  const updateFilename = useCallback((id: string, newFilename: string) => {
+    setPendingFiles(prev =>
+      prev.map(f => (f.id === id ? Object.assign(f, { customFilename: newFilename }) : f))
+    );
   }, []);
 
   // Clear all pending files
@@ -556,8 +566,14 @@ export function MediaUploader({
 
                 {/* File Info */}
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center space-x-2">
-                    <p className="text-sm font-medium text-gray-900 truncate">{file.name}</p>
+                  <div className="flex items-center space-x-2 mb-2">
+                    <input
+                      type="text"
+                      value={file.customFilename || file.name}
+                      onChange={e => updateFilename(file.id, e.target.value)}
+                      className="flex-1 text-sm font-medium text-gray-900 border border-gray-300 rounded px-2 py-1"
+                      placeholder="Filename"
+                    />
                     {file.lfsAnalysis?.shouldTrack && (
                       <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800">
                         LFS

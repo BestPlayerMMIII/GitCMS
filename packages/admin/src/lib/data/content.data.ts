@@ -421,7 +421,8 @@ async function createContentData(
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       author: author || finalMetadata.author,
-      status: finalMetadata.status || 'draft',
+      status: publish ? 'published' : finalMetadata.status || 'draft',
+      ...(publish && { publishedAt: new Date().toISOString() }),
     } as ContentItem['metadata'],
   };
 
@@ -433,8 +434,13 @@ async function createContentData(
     `Create ${schemaId} content: ${contentId}`
   );
 
-  // Update index
-  await IndexManager.addToIndex(github, contentPath, schemaId, `${contentId}.json`);
+  // Update index - with error handling to avoid blocking content creation
+  try {
+    await IndexManager.addToIndex(github, contentPath, schemaId, `${contentId}.json`);
+  } catch (indexError) {
+    console.error('Failed to update index after creating content:', indexError);
+    // Don't fail the content creation if index update fails
+  }
 
   return {
     success: true,
@@ -531,14 +537,19 @@ async function updateContentData(
       console.warn(`Could not delete old content file ${originalFilePath}:`, deleteError);
     }
 
-    // Update index to reflect rename
-    await IndexManager.renameInIndex(
-      github,
-      contentPath,
-      schemaId,
-      `${originalContentId}.json`,
-      `${contentId}.json`
-    );
+    // Update index to reflect rename - with error handling
+    try {
+      await IndexManager.renameInIndex(
+        github,
+        contentPath,
+        schemaId,
+        `${originalContentId}.json`,
+        `${contentId}.json`
+      );
+    } catch (indexError) {
+      console.error('Failed to update index after renaming content:', indexError);
+      // Don't fail the rename if index update fails
+    }
   } else {
     try {
       const currentFile = await github.getFile(newFilePath);
@@ -554,8 +565,13 @@ async function updateContentData(
         `Create ${schemaId} content: ${contentId}${publish ? ' (published)' : ''}`
       );
 
-      // Add to index if creating new file
-      await IndexManager.addToIndex(github, contentPath, schemaId, `${contentId}.json`);
+      // Add to index if creating new file - with error handling
+      try {
+        await IndexManager.addToIndex(github, contentPath, schemaId, `${contentId}.json`);
+      } catch (indexError) {
+        console.error('Failed to update index after creating content:', indexError);
+        // Don't fail the content creation if index update fails
+      }
     }
   }
 
@@ -579,8 +595,13 @@ async function deleteContentData(
   const file = await github.getFile(filePath);
   await github.deleteFile(filePath, `Delete content: ${contentId}`, file.sha);
 
-  // Update index
-  await IndexManager.removeFromIndex(github, contentPath, schemaId, `${contentId}.json`);
+  // Update index - with error handling to avoid blocking deletion
+  try {
+    await IndexManager.removeFromIndex(github, contentPath, schemaId, `${contentId}.json`);
+  } catch (indexError) {
+    console.error('Failed to update index after deleting content:', indexError);
+    // Don't fail the deletion if index update fails
+  }
 
   return {
     success: true,
@@ -608,7 +629,8 @@ async function validateContentIdData(
       message: isValid ? 'Valid (current content)' : 'Content ID already exists',
     };
   } catch (error: any) {
-    if (error.code === 'NOT_FOUND') {
+    // Check for 404 - file not found means ID is available
+    if (error.code === 'NOT_FOUND' || error.details?.status === 404) {
       return {
         valid: true,
         exists: false,

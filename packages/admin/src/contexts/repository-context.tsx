@@ -1,6 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { globalCache } from '@/lib/api-cache';
 
 interface RepositoryInfo {
   owner: string;
@@ -41,6 +42,31 @@ export function RepositoryProvider({ children }: RepositoryProviderProps) {
 
   // Update localStorage when repository info changes
   const setRepositoryInfo = (info: RepositoryInfo | null) => {
+    // Clear all API caches when switching repositories
+    if (
+      info &&
+      repositoryInfo &&
+      (info.owner !== repositoryInfo.owner || info.repo !== repositoryInfo.repo)
+    ) {
+      console.log('Switching repository - clearing all caches and reloading');
+      globalCache.clear();
+
+      // Update localStorage before reload
+      localStorage.setItem(
+        'gitcms-connected-repo',
+        JSON.stringify({
+          owner: info.owner,
+          name: info.repo,
+        })
+      );
+
+      // Force a hard reload to ensure all data is refreshed
+      setTimeout(() => {
+        window.location.reload();
+      }, 100);
+      return;
+    }
+
     setRepositoryInfoState(info);
     if (info) {
       localStorage.setItem(
@@ -52,6 +78,7 @@ export function RepositoryProvider({ children }: RepositoryProviderProps) {
       );
     } else {
       localStorage.removeItem('gitcms-connected-repo');
+      globalCache.clear();
     }
   };
 

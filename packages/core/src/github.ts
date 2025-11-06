@@ -631,8 +631,13 @@ export class GitHubApiClient {
     try {
       await this.getFile(path);
       return true;
-    } catch (error) {
-      return false;
+    } catch (error: any) {
+      // Only return false for NOT_FOUND errors, rethrow others
+      if (error.code === 'NOT_FOUND' || error.status === 404) {
+        return false;
+      }
+      // For other errors (auth, network, etc.), rethrow them
+      throw error;
     }
   }
 

@@ -297,7 +297,7 @@ async function handleGetRepositoryMedia(
 
 async function handleUploadMedia(data: any, accessToken: string) {
   try {
-    const { file, owner, repo, folder, tags, alt, description } = data;
+    const { file, owner, repo, folder, tags, alt, description, customFilename } = data;
 
     if (!file || !owner || !repo) {
       throw new Error('File, owner, and repo are required');
@@ -342,8 +342,16 @@ async function handleUploadMedia(data: any, accessToken: string) {
     // Get the configured media path
     const mediaBasePath = await getMediaPath(owner, repo, accessToken);
 
-    // Generate path with custom base path
-    const path = MediaPathManager.generatePathWithBase(mediaBasePath, file.name, folder);
+    // Determine the filename to use - always keep original name
+    const finalFilename = customFilename || file.name;
+
+    // Generate path with duplicate check (always keep original names, add suffix if duplicate)
+    const path = await MediaPathManager.generatePathWithBaseAndDuplicateCheck(
+      mediaBasePath,
+      finalFilename,
+      folder,
+      githubClient
+    );
 
     // Upload options
     const options: MediaUploadOptions = {
