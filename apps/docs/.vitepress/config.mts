@@ -138,13 +138,13 @@ export default withMermaid(
     },
 
     head: [
-      ['link', { rel: 'icon', type: 'image/svg+xml', href: '/GitCMS/logo.svg' }],
+      ['link', { rel: 'icon', type: 'image/svg+xml', href: '/logo.svg' }],
       ['meta', { name: 'theme-color', content: '#54af99' }],
       ['meta', { property: 'og:type', content: 'website' }],
       ['meta', { property: 'og:locale', content: 'en' }],
       ['meta', { property: 'og:title', content: 'GitCMS | Universal GitHub-Based CMS' }],
       ['meta', { property: 'og:site_name', content: 'GitCMS' }],
-      ['meta', { property: 'og:url', content: 'https://bestplayermmiii.github.io/GitCMS/' }],
+      ['meta', { property: 'og:url', content: 'https://gitcms-docs.bestplayer.dev/' }],
     ],
 
     ignoreDeadLinks: [
