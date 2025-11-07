@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <!-- Background circle -->
+  <circle cx="100" cy="100" r="90" fill="#646cff"/>
+  
+  <!-- Git icon -->
+  <path d="M100 40 L140 70 L140 130 L100 160 L60 130 L60 70 Z" 
+        fill="none" stroke="white" stroke-width="8" stroke-linejoin="round"/>
+  
+  <!-- CMS text -->
+  <text x="100" y="110" font-family="Arial, sans-serif" font-size="32" 
+        font-weight="bold" fill="white" text-anchor="middle">CMS</text>
+</svg>

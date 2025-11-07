@@ -1,0 +1,19 @@
+{
+  "name": "@gitcms/docs",
+  "version": "0.1.0",
+  "description": "GitCMS Documentation Website",
+  "type": "module",
+  "scripts": {
+    "dev": "vitepress dev",
+    "build": "vitepress build",
+    "preview": "vitepress preview",
+    "clean": "rimraf .vitepress/dist .vitepress/cache"
+  },
+  "devDependencies": {
+    "mermaid": "^11.12.1",
+    "rimraf": "^5.0.5",
+    "vitepress": "^1.0.0",
+    "vitepress-plugin-mermaid": "^2.0.17",
+    "vue": "^3.3.0"
+  }
+}
