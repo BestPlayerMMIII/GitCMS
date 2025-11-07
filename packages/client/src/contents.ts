@@ -147,6 +147,13 @@ export class SchemaRef {
   }
 
   /**
+   * Shortcut for querying content with specific ID
+   */
+  doc(id: string): SchemaQuery {
+    return this.where('id', '==', id);
+  }
+
+  /**
    * Order content results
    */
   orderBy(field: string, direction: 'asc' | 'desc' = 'asc'): SchemaQuery {
