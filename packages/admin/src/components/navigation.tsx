@@ -2,8 +2,19 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, Github, Settings, FileText, Image, Archive, LucideIcon } from 'lucide-react';
-import { ReactNode } from 'react';
+import {
+  Home,
+  Github,
+  Settings,
+  FileText,
+  Image,
+  Archive,
+  LucideIcon,
+  BookOpen,
+  Menu,
+  X,
+} from 'lucide-react';
+import { ReactNode, useState } from 'react';
 import { useNavigationHeader } from '@/contexts/navigation-context';
 
 export type NavigationItem = 'dashboard' | 'repositories' | 'schemas' | 'content' | 'media';
@@ -21,6 +32,7 @@ const navigation: NavigationEntry[] = [
   { id: 'content', name: 'Content', href: '/content', icon: FileText },
   { id: 'media', name: 'Media', href: '/media', icon: Image },
 ];
+const documentationUrl = 'https://gitcms-docs.bestplayer.dev';
 
 interface NavigationProps {
   repositoryInfo?: { owner: string; repo: string };
@@ -28,6 +40,7 @@ interface NavigationProps {
 
 export function Navigation({ repositoryInfo }: NavigationProps = {}) {
   const pathname = usePathname();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const { headers } = useNavigationHeader();
   const activeId = navigation.find(item =>
@@ -80,42 +93,84 @@ export function Navigation({ repositoryInfo }: NavigationProps = {}) {
                 </div>
               </div>
             )}
+
+            {/* Documentation Link */}
+            <div className="hidden sm:ml-6 sm:flex sm:items-center">
+              <a
+                href={documentationUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center px-3 py-2 text-sm font-medium text-gray-700 hover:text-blue-600 transition-colors"
+              >
+                <BookOpen className="h-4 w-4 mr-2" />
+                Docs
+              </a>
+            </div>
+
+            {/* Mobile menu button */}
+            <div className="flex items-center sm:hidden">
+              <button
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                className="inline-flex items-center justify-center p-2 rounded-md text-gray-700 hover:text-gray-900 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500"
+              >
+                <span className="sr-only">Open main menu</span>
+                {mobileMenuOpen ? (
+                  <X className="block h-6 w-6" aria-hidden="true" />
+                ) : (
+                  <Menu className="block h-6 w-6" aria-hidden="true" />
+                )}
+              </button>
+            </div>
           </div>
         </div>
 
         {/* Mobile menu */}
-        <div className="sm:hidden">
-          <div className="pt-2 pb-3 space-y-1">
-            {navigation.map(item => {
-              const isActive =
-                pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
+        {mobileMenuOpen && (
+          <div className="sm:hidden">
+            <div className="pt-2 pb-3 space-y-1">
+              {navigation.map(item => {
+                const isActive =
+                  pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
 
-              return (
-                <Link
-                  key={item.name}
-                  href={item.href}
-                  className={`block pl-3 pr-4 py-2 border-l-4 text-base font-medium transition-colors ${
-                    isActive
-                      ? 'bg-blue-50 border-blue-500 text-blue-700'
-                      : 'border-transparent text-gray-500 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-700'
-                  }`}
-                >
-                  <div className="flex items-center">
-                    <item.icon className="h-4 w-4 mr-3" />
-                    {item.name}
-                  </div>
-                </Link>
-              );
-            })}
-            {repositoryInfo && (
-              <div className="px-3 py-2 border-t border-gray-200">
-                <span className="text-sm text-gray-500">
-                  Repository: {repositoryInfo.owner}/{repositoryInfo.repo}
-                </span>
-              </div>
-            )}
+                return (
+                  <Link
+                    key={item.name}
+                    href={item.href}
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={`block pl-3 pr-4 py-2 border-l-4 text-base font-medium transition-colors ${
+                      isActive
+                        ? 'bg-blue-50 border-blue-500 text-blue-700'
+                        : 'border-transparent text-gray-500 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-700'
+                    }`}
+                  >
+                    <div className="flex items-center">
+                      <item.icon className="h-4 w-4 mr-3" />
+                      {item.name}
+                    </div>
+                  </Link>
+                );
+              })}
+              <a
+                href={documentationUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block pl-3 pr-4 py-2 border-l-4 border-transparent text-base font-medium text-gray-500 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-700"
+              >
+                <div className="flex items-center">
+                  <BookOpen className="h-4 w-4 mr-3" />
+                  Documentation
+                </div>
+              </a>
+              {repositoryInfo && (
+                <div className="px-3 py-2 border-t border-gray-200">
+                  <span className="text-sm text-gray-500">
+                    Repository: {repositoryInfo.owner}/{repositoryInfo.repo}
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+        )}
       </nav>
 
       {/* Additional Sub Header */}

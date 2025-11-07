@@ -17,6 +17,7 @@ import { useRepository } from '@/contexts/repository-context';
 import type { GitCMSSchema } from '@git-cms/core';
 import { useNavigationHeader } from '@/contexts/navigation-context';
 import Suspenser from '@/components/suspenser';
+import { NoRepoConnected } from '@/components/no-repo-connected';
 
 interface SchemaPageState {
   view: 'list' | 'edit' | 'create' | 'import';
@@ -264,6 +265,12 @@ function Schemas() {
     setHeader('schemas', createHeader());
     return () => setHeader('schemas', null);
   }, [setHeader, state]);
+
+  if (!repositoryInfo) {
+    return (
+      <NoRepoConnected title="Schemas" description="Connect a repository to manage your schemas." />
+    );
+  }
 
   return (
     <div className="container mx-auto py-8">
