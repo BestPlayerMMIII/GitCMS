@@ -7,8 +7,8 @@ export default withMermaid(
     title: 'GitCMS',
     description: 'Universal GitHub-Based Content Management System',
 
-    // GitHub Pages deployment configuration
-    base: '/GitCMS/',
+    // base path when deployed
+    base: '/',
 
     // Theme configuration
     themeConfig: {
