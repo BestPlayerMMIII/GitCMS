@@ -1,28 +1,24 @@
-# GitCMS - Universal GitHub-Based Content Management System
+# GitCMS
 
-**Version:** 0.1.0  
-**License:** MIT  
-**Status:** Production Ready
-
-> Transform your GitHub repository into a powerful, user-friendly content
-> management system.
+**Universal GitHub-Based Content Management System**
 
 [![npm version](https://img.shields.io/npm/v/@git-cms/client)](https://www.npmjs.com/package/@git-cms/client)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue)](https://www.typescriptlang.org/)
 
+> Transform your GitHub repository into a powerful content management system.
+
 ---
 
 ## 🌟 What is GitCMS?
 
-**GitCMS** is a universal, GitHub-based Content Management System that provides
-a beautiful web interface for managing content stored as files in GitHub
-repositories. It combines the reliability of Git version control with the
-usability of modern CMS interfaces.
+GitCMS is a universal content management system that uses GitHub as its backend.
+It provides a beautiful web interface for managing content while storing
+everything as files in your GitHub repository - **no database required**.
 
 ### Key Features
 
-- 🚀 **No Database Required** - All content stored as files in GitHub
+- 🚀 **No Database Required** - All content stored in GitHub
 - 🎨 **Universal Admin Panel** - One hosted interface for all users
 - 📝 **Visual Content Editor** - Rich text editing with TipTap
 - 🔐 **GitHub OAuth** - Secure authentication
@@ -35,21 +31,21 @@ usability of modern CMS interfaces.
 
 ## 🎯 Who Is This For?
 
-### Content Creators (Your Users)
+### Content Creators
 
 Use the **Admin Panel** to manage content visually without touching code.
 
 **Perfect for:**
 
-- Bloggers managing blog posts
+- Bloggers managing posts
 - Teams managing documentation
 - Developers managing app configuration
-- Anyone preferring visual interfaces over file editing
+- Anyone preferring visual interfaces
 
 **Get Started:** [Admin Panel Guide](./docs/ADMIN-PANEL-GUIDE.md) |
-[Live Admin Panel](https://gitcms-admin.bestplayer.dev)
+[Live Demo](https://gitcms-admin.bestplayer.dev)
 
-### Developers (Your Users)
+### Developers
 
 Use the **@git-cms/client SDK** to fetch content from GitHub in your projects.
 
@@ -59,49 +55,10 @@ Use the **@git-cms/client SDK** to fetch content from GitHub in your projects.
 - React/Vue applications
 - Mobile apps
 - Static site generators
-- Any project needing GitHub-based content
+- Any project needing content
 
 **Get Started:** [Client SDK Guide](./docs/CLIENT-SDK-GUIDE.md) |
 [NPM Package](https://www.npmjs.com/package/@git-cms/client)
-
----
-
-## 📦 Packages
-
-This monorepo contains three packages:
-
-### [@git-cms/client](./packages/client) [![npm](https://img.shields.io/npm/v/@git-cms/client)](https://www.npmjs.com/package/@git-cms/client)
-
-TypeScript SDK for developers to integrate GitCMS into their projects.
-
-```bash
-npm install @git-cms/client
-```
-
-```typescript
-import { GitCMS } from '@git-cms/client';
-
-const cms = new GitCMS({
-  repository: 'username/blog',
-});
-
-const posts = await cms.from('posts').get();
-```
-
-**[📖 Full Documentation](./docs/CLIENT-SDK-GUIDE.md)**
-
-### [@git-cms/core](./packages/core) [![npm](https://img.shields.io/npm/v/@git-cms/core)](https://www.npmjs.com/package/@git-cms/core)
-
-Core utilities and types used by both admin and client packages. Internal
-dependency.
-
-### [@git-cms/admin](./packages/admin)
-
-Universal admin panel for content management. Not published to NPM - deployed as
-a hosted service.
-
-**[🔗 Live Admin Panel](https://gitcms-admin.bestplayer.dev)** |
-**[📖 Admin Guide](./docs/ADMIN-PANEL-GUIDE.md)**
 
 ---
 
@@ -115,88 +72,80 @@ a hosted service.
 4. Define content schemas
 5. Start creating content!
 
-**[📖 Read the Admin Panel Guide](./docs/ADMIN-PANEL-GUIDE.md)**
+**[📖 Full Admin Guide →](./docs/ADMIN-PANEL-GUIDE.md)**
 
 ### For Developers
 
-1. **Install the SDK:**
+**Install the SDK:**
 
-   ```bash
-   npm install @git-cms/client
-   ```
+```bash
+npm install @git-cms/client
+```
 
-2. **Use in your project:**
+**Fetch content in your project:**
 
-   ```typescript
-   import { GitCMS } from '@git-cms/client';
+```typescript
+import { GitCMS } from '@git-cms/client';
 
-   const cms = new GitCMS({
-     repository: 'username/my-blog',
-   });
+const cms = new GitCMS({
+  repository: 'username/my-blog',
+});
 
-   // Fetch blog posts
-   const posts = await cms
-     .from('posts')
-     .where('metadata.status', '==', 'published')
-     .orderBy('metadata.publishedAt', 'desc')
-     .get();
+// Fetch blog posts
+const posts = await cms
+  .from('posts')
+  .where('metadata.status', '==', 'published')
+  .orderBy('metadata.publishedAt', 'desc')
+  .get();
 
-   // Fetch single post
-   const post = await cms.from('posts').where('id', '==', 'my-post').get();
-   ```
+// Display content
+posts.forEach(post => {
+  console.log(post.title, post.content);
+});
+```
 
-3. **Display content:**
-   ```typescript
-   posts.forEach(post => {
-     console.log(post.title, post.content);
-   });
-   ```
-
-**[📖 Read the Client SDK Guide](./docs/CLIENT-SDK-GUIDE.md)**
+**[📖 Full SDK Guide →](./docs/CLIENT-SDK-GUIDE.md)**
 
 ---
 
-## 📚 Documentation
+## 📦 Packages
 
-Comprehensive documentation is available in the [`docs/`](./docs) directory:
+### [@git-cms/client](./packages/client) [![npm](https://img.shields.io/npm/v/@git-cms/client)](https://www.npmjs.com/package/@git-cms/client)
 
-- **[Overview & Getting Started](./docs/README.md)** - Introduction to GitCMS
-- **[Architecture](./docs/ARCHITECTURE.md)** - System design and technical
-  details
-- **[Admin Panel Guide](./docs/ADMIN-PANEL-GUIDE.md)** - For content creators
-- **[Client SDK Guide](./docs/CLIENT-SDK-GUIDE.md)** - For developers
-- **[Deployment Guide](./docs/DEPLOYMENT-GUIDE.md)** - Deploy admin panel and
-  docs
-- **[Repository Privacy](./docs/REPOSITORY-PRIVACY-ANALYSIS.md)** - Public vs
-  private repo decision
+TypeScript SDK for developers to integrate GitCMS into their projects.
 
-**[🌐 Visit Documentation Website](https://gitcms-docs.bestplayer.dev)**
+```bash
+npm install @git-cms/client
+```
+
+**[📖 Documentation →](./docs/CLIENT-SDK-GUIDE.md)**
+
+### [@git-cms/core](./packages/core) [![npm](https://img.shields.io/npm/v/@git-cms/core)](https://www.npmjs.com/package/@git-cms/core)
+
+Core utilities and types. Internal dependency.
+
+### [@git-cms/admin](./packages/admin)
+
+Universal admin panel for content management. Hosted service, not published to
+NPM.
+
+**[🔗 Live Admin Panel →](https://gitcms-admin.bestplayer.dev)**
 
 ---
 
-## 🏗️ Architecture
+## 🏗️ How It Works
 
 ```
-┌─────────────────────────────────────────────┐
-│           GitCMS Ecosystem                  │
-├─────────────────────────────────────────────┤
-│                                             │
-│  Admin Panel (hosted)                       │
-│  ↓ commits via GitHub API                   │
-│  GitHub Repository (user's content)         │
-│  ↑ reads via GitHub API                     │
-│  @git-cms/client SDK (in user's app)        │
-│                                             │
-└─────────────────────────────────────────────┘
+Admin Panel (Web UI)
+        ↓ commits via GitHub API
+GitHub Repository (your content)
+        ↑ reads via GitHub API
+Client SDK (in your app)
 ```
 
-**Key Concepts:**
-
-1. **Admin Panel** - Universal web app hosted once for all users
-2. **User's GitHub Repo** - Content stored as JSON/Markdown files
-3. **Client SDK** - NPM package to fetch content in user's projects
-
-**[📖 Read Full Architecture Guide](./docs/ARCHITECTURE.md)**
+GitCMS uses GitHub as the storage backend. The admin panel writes content to
+your repository, and the client SDK reads it back. Everything is
+version-controlled and backed by GitHub's infrastructure.
 
 ---
 
@@ -229,110 +178,21 @@ const products = await cms
   .get();
 ```
 
----
+### Documentation Sites
 
-## 🛠️ Development
-
-This is a Turborepo monorepo with npm workspaces.
-
-### Prerequisites
-
-- Node.js 18+
-- npm 10+
-
-### Setup
-
-```bash
-# Clone repository
-git clone https://github.com/BestPlayerMMIII/GitCMS.git
-cd GitCMS
-
-# Install dependencies
-npm install
-
-# Build all packages
-npm run build
-
-# Run type checking
-npm run type-check
-
-# Run linting
-npm run lint
-```
-
-### Development Servers
-
-```bash
-# Run all dev servers (uses Turborepo)
-npm run dev
-
-# Or run individually:
-cd packages/admin && npm run dev   # Admin panel (port 3001)
-cd packages/client && npm run dev  # Client SDK (watch mode)
-cd packages/core && npm run dev    # Core package (watch mode)
-```
-
-### Project Structure
-
-```
-GitCMS/
-├── packages/
-│   ├── admin/          # Next.js admin panel
-│   ├── client/         # Client SDK (published)
-│   └── core/           # Core utilities (published)
-├── docs/               # Documentation
-├── docs-legacy/        # Historical documentation
-├── ignore/             # Private notes
-├── package.json        # Root package with workspaces
-├── turbo.json          # Turborepo configuration
-├── tsconfig.json       # Root TypeScript config
-└── README.md           # This file
+```typescript
+const docs = await cms.from('docs').where('version', '==', 'v1.0').get();
 ```
 
 ---
 
-## 🧪 Testing
+## 📚 Documentation
 
-```bash
-# Run all tests
-npm run test
+Comprehensive documentation is available in the [`docs/`](./docs) directory:
 
-# Test specific package
-cd packages/client && npm test
-```
-
----
-
-## 🚢 Deployment
-
-### Admin Panel
-
-Deploy to Vercel (recommended):
-
-1. Connect GitHub repository
-2. Set root directory to `packages/admin`
-3. Configure environment variables
-4. Deploy!
-
-**[📖 Full Deployment Guide](./docs/DEPLOYMENT-GUIDE.md)**
-
-### NPM Packages
-
-Packages are already published:
-
-- [@git-cms/client](https://www.npmjs.com/package/@git-cms/client) - v0.1.0
-- [@git-cms/core](https://www.npmjs.com/package/@git-cms/core) - v0.1.1
-
-To publish updates:
-
-```bash
-# Build packages
-npm run build
-
-# Publish (must be logged in to npm)
-cd packages/core && npm publish
-cd packages/client && npm publish
-```
+- **[Overview](./docs/README.md)** - Introduction to GitCMS
+- **[Admin Panel Guide](./docs/ADMIN-PANEL-GUIDE.md)** - For content creators
+- **[Client SDK Guide](./docs/CLIENT-SDK-GUIDE.md)** - For developers
 
 ---
 
@@ -346,14 +206,22 @@ Contributions are welcome! Please follow these steps:
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
 
-### Development Guidelines
+### Development Setup
 
-- Write TypeScript (no plain JS)
-- Follow existing code style
-- Add tests for new features
-- Update documentation
-- Ensure `npm run type-check` passes
-- Ensure `npm run lint` passes
+```bash
+# Clone repository
+git clone https://github.com/BestPlayerMMIII/GitCMS.git
+cd GitCMS
+
+# Install dependencies
+npm install
+
+# Build all packages
+npm run build
+
+# Run development servers
+npm run dev
+```
 
 ---
 
@@ -368,7 +236,6 @@ Copyright (c) 2025 GitCMS
 ## 🔗 Links
 
 - **Admin Panel:** https://gitcms-admin.bestplayer.dev
-- **Documentation:** https://gitcms-docs.bestplayer.dev
 - **NPM Package:**
   [@git-cms/client](https://www.npmjs.com/package/@git-cms/client)
 - **GitHub:**
@@ -377,51 +244,45 @@ Copyright (c) 2025 GitCMS
 
 ---
 
-## 🌟 Features Roadmap
+## 🌟 Features
 
-### ✅ Completed (v0.1.0)
+### ✅ Current Features
 
 - [x] GitHub OAuth authentication
 - [x] Repository connection
-- [x] Schema designer
+- [x] Visual schema designer
 - [x] Rich text editor (TipTap)
 - [x] Media upload and management
 - [x] TypeScript SDK
-- [x] Public and authenticated modes
+- [x] Public and private repo support
 - [x] Nested field access
 - [x] Progressive media loading
 
-### 🔄 In Progress
+### Work In Progress
 
-- [ ] Search functionality
+- [ ] Virtual Folders for Media management (like File Explorer!)
+
+### 🔄 Roadmap
+
+- [ ] Full-text search
 - [ ] Multi-user collaboration
 - [ ] Content versioning UI
 - [ ] Branch-based workflows
-
-### 📋 Planned (v0.2.0+)
-
 - [ ] GraphQL API
-- [ ] Caching layer with webhooks
+- [ ] Webhooks integration
 - [ ] Real-time collaboration
-- [ ] Content approval workflows
-- [ ] Analytics and insights
-- [ ] Custom domains for API
-- [ ] White-label solutions
 
 ---
 
-## 💬 Community & Support
+## 💬 Support
 
 - **Issues:** [GitHub Issues](https://github.com/BestPlayerMMIII/GitCMS/issues)
 - **Discussions:**
   [GitHub Discussions](https://github.com/BestPlayerMMIII/GitCMS/discussions)
-- **Email:** Contact via GitHub profile
 
 ---
 
-## 🙏 Acknowledgments
-
-Built with:
+## 🙏 Built With
 
 - [Next.js](https://nextjs.org/) - React framework
 - [TipTap](https://tiptap.dev/) - Rich text editor
@@ -430,31 +291,8 @@ Built with:
 - [TailwindCSS](https://tailwindcss.com/) - Styling
 - [Turborepo](https://turbo.build/) - Monorepo management
 
-Special thanks to the open-source community for inspiration and tools.
-
----
-
-## 📊 Project Stats
-
-- **Lines of Code:** ~15,000+
-- **Packages:** 3 (2 published, 1 private)
-- **Dependencies:** Carefully curated for minimal bundle size
-- **TypeScript:** 100% type coverage
-- **License:** MIT (completely open)
-
 ---
 
 **Made with ❤️ by [Manuel Maiuolo](https://github.com/BestPlayerMMIII)**
-
----
-
-## 🎯 Next Steps
-
-1. **Try the Admin Panel:**
-   [gitcms-admin.bestplayer.dev](https://gitcms-admin.bestplayer.dev)
-2. **Install the SDK:** `npm install @git-cms/client`
-3. **Read the Docs:** [docs/README.md](./docs/README.md)
-4. **Star on GitHub:** Help spread the word! ⭐
-5. **Share Feedback:** Open an issue or discussion
 
 **Welcome to GitCMS! 🚀**

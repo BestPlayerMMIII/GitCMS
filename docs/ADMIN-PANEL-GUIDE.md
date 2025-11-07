@@ -463,7 +463,6 @@ repository/
 ### Documentation
 
 - **Main Docs:** [docs/README.md](./README.md)
-- **Architecture:** [docs/ARCHITECTURE.md](./ARCHITECTURE.md)
 - **Client SDK:** [docs/CLIENT-SDK-GUIDE.md](./CLIENT-SDK-GUIDE.md)
 
 ### Support Channels
