@@ -242,7 +242,8 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
       CodeBlockLowlight.configure({
         lowlight,
         HTMLAttributes: {
-          class: 'bg-gray-100 rounded-lg p-4 font-mono text-sm border',
+          class:
+            'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg p-4 font-mono text-sm border border-gray-300 dark:border-gray-600',
         },
       }),
       Placeholder.configure({
@@ -251,7 +252,7 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
       Typography,
       Highlight.configure({
         HTMLAttributes: {
-          class: 'bg-yellow-200 px-1 rounded',
+          class: 'bg-yellow-200 dark:bg-yellow-900 dark:text-yellow-100 px-1 rounded',
         },
       }),
       TextAlign.configure({
@@ -707,8 +708,8 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
           }
 
           .ProseMirror code {
-            background-color: #f1f5f9;
-            border: 1px solid #e2e8f0;
+            background-color: #f3f4f6;
+            border: 1px solid #e5e7eb;
             padding: 0.125rem 0.375rem;
             border-radius: 0.375rem;
             font-family:
@@ -719,8 +720,9 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
           }
 
           .ProseMirror pre {
-            background-color: #1e293b;
-            color: #e2e8f0;
+            background-color: #f3f4f6;
+            color: #1f2937;
+            border: 1px solid #e5e7eb;
             border-radius: 0.75rem;
             padding: 1.5rem;
             margin: 1.5rem 0;
@@ -728,7 +730,7 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
             font-family:
               'SF Mono', 'Monaco', 'Consolas', 'Liberation Mono', 'Courier New', monospace;
             line-height: 1.5;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
           }
 
           .ProseMirror pre code {
@@ -738,6 +740,23 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
             padding: 0;
             font-size: 0.875rem;
             font-weight: normal;
+          }
+
+          /* Dark mode support for code blocks */
+          .dark .ProseMirror code {
+            background-color: #1f2937;
+            border-color: #374151;
+            color: #f87171;
+          }
+
+          .dark .ProseMirror pre {
+            background-color: #1f2937;
+            color: #e5e7eb;
+            border-color: #374151;
+          }
+
+          .dark .ProseMirror pre code {
+            color: inherit;
           }
 
           .ProseMirror hr {
