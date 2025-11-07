@@ -48,6 +48,7 @@ export default withMermaid(
               { text: 'Overview', link: '/admin/overview' },
               { text: 'Getting Started', link: '/admin/getting-started' },
               { text: 'Authentication', link: '/admin/authentication' },
+              { text: 'GitHub Token Guide', link: '/admin/github-token' },
               { text: 'Repository Setup', link: '/admin/repository-setup' },
             ],
           },

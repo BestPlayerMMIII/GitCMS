@@ -14,6 +14,14 @@ Permissions required:
 - Repositories (read/write)
 - Email and profile information
 
+::: tip Using the Client SDK?
+
+If you're using the GitCMS Client SDK (for programmatic access) with private
+repositories, you'll need a Personal Access Token. See our
+[GitHub Token Guide](/admin/github-token) for detailed instructions.
+
+:::
+
 ## 2. Connect a Repository
 
 1. From the dashboard, click "Connect Repository".
@@ -59,6 +67,8 @@ If you can't connect:
 
 ## What's Next?
 
-- [Schemas](/admin/schemas)
-- [Creating Content](/admin/creating-content)
-- [Media Management](/admin/media-management)
+- [GitHub Token Guide](/admin/github-token) — Learn how to create secure access
+  tokens
+- [Schemas](/admin/schemas) — Deep dive into schema configuration
+- [Creating Content](/admin/creating-content) — Content creation workflows
+- [Media Management](/admin/media-management) — Handle images, videos, and files

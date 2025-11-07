@@ -20,6 +20,20 @@ const cms = new GitCMS({
 });
 ```
 
+::: tip Private Repositories?
+
+If your repository is private, you'll need a GitHub Personal Access Token. See
+our [GitHub Token Guide](/admin/github-token) for step-by-step instructions.
+
+```typescript
+const cms = new GitCMS({
+  repository: 'username/my-blog',
+  token: process.env.GITHUB_TOKEN, // For private repos
+});
+```
+
+:::
+
 ### 3. Fetch Content
 
 ```typescript

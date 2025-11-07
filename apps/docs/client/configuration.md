@@ -26,12 +26,35 @@ const cms = new GitCMS({
 
 ### Private Repository
 
+For private repositories, you need a GitHub Personal Access Token:
+
 ```typescript
 const cms = new GitCMS({
   repository: 'username/private-blog',
   token: process.env.GITHUB_TOKEN, // Server-side only!
 });
 ```
+
+::: tip How to Get a GitHub Token 📚
+
+**Need a token?** Follow our [complete GitHub Token guide](/admin/github-token)
+for step-by-step instructions on creating a secure token with the right
+permissions.
+
+**Quick version:**
+
+1. GitHub Settings → Developer settings → Fine-grained tokens
+2. Generate new token with **Contents: Read and write**
+3. Store in environment variables
+
+:::
+
+::: warning Security Warning
+
+**Never expose tokens in client-side code!** Only use tokens in server-side
+code, API routes, or build-time scripts.
+
+:::
 
 ### Custom Branch
 
@@ -74,11 +97,11 @@ const cms = new GitCMS({
 
 ## Environment Variables
 
-Store sensitive data in environment variables:
+Store sensitive data like GitHub tokens in environment variables:
 
 ```bash
 # .env.local
-GITHUB_TOKEN=ghp_xxxxxxxxxxxxx
+GITHUB_TOKEN=github_pat_11AAAAAAA0AAAAAAAAAAAA_XXX
 GITHUB_REPO=username/my-blog
 ```
 
@@ -88,6 +111,17 @@ const cms = new GitCMS({
   token: process.env.GITHUB_TOKEN,
 });
 ```
+
+::: tip Token Setup Guide
+
+New to GitHub tokens? Check our [GitHub Token Guide](/admin/github-token) for:
+
+- Step-by-step token creation
+- Security best practices
+- Troubleshooting common issues
+- Platform-specific setup (Vercel, Netlify, etc.)
+
+:::
 
 ## Rate Limit Monitoring
 
