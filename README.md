@@ -194,6 +194,9 @@ Comprehensive documentation is available in the [`docs/`](./docs) directory:
 - **[Admin Panel Guide](./docs/ADMIN-PANEL-GUIDE.md)** - For content creators
 - **[Client SDK Guide](./docs/CLIENT-SDK-GUIDE.md)** - For developers
 
+**Full Documentation** available here:
+[GitCMS Docs](https://gitcms-docs.bestplayer.dev)
+
 ---
 
 ## 🤝 Contributing
@@ -235,11 +238,12 @@ Copyright (c) 2025 GitCMS
 
 ## 🔗 Links
 
-- **Admin Panel:** https://gitcms-admin.bestplayer.dev
-- **NPM Package:**
-  [@git-cms/client](https://www.npmjs.com/package/@git-cms/client)
 - **GitHub:**
   [BestPlayerMMIII/GitCMS](https://github.com/BestPlayerMMIII/GitCMS)
+- **NPM Package:**
+  [@git-cms/client](https://www.npmjs.com/package/@git-cms/client)
+- **Admin Panel**: [GitCMS Admin](https://gitcms-admin.bestplayer.dev)
+- **Full Documentation**: [GitCMS Docs](https://gitcms-docs.bestplayer.dev)
 - **Issues:** [GitHub Issues](https://github.com/BestPlayerMMIII/GitCMS/issues)
 
 ---

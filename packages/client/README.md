@@ -664,6 +664,8 @@ MIT License - see the [LICENSE](LICENSE) file for details.
 - **GitHub**:
   [BestPlayerMMIII/GitCMS](https://github.com/BestPlayerMMIII/GitCMS)
 - **NPM**: [@git-cms/client](https://www.npmjs.com/package/@git-cms/client)
+- **Full Documentation**: [GitCMS Docs](https://gitcms-docs.bestplayer.dev)
+- **Admin Panel**: [GitCMS Admin](https://gitcms-admin.bestplayer.dev)
 - **Issues**: [GitHub Issues](https://github.com/BestPlayerMMIII/GitCMS/issues)
 
 ## 🌟 What's New
