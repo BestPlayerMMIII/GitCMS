@@ -35,9 +35,12 @@ import {
   Minus,
   Type,
   Highlighter,
+  Zap,
 } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import { useMediaPicker } from '../media/media-picker-modal';
+import { GitCMSToolcall } from '@/lib/tiptap-toolcall-extension';
+import { ToolcallDialog, type ToolcallParameter } from './toolcall-dialog';
 import {
   type GitCMSMediaFile,
   fetchAuthenticatedThumbnail,
@@ -179,6 +182,12 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
 }) => {
   const [showLinkDialog, setShowLinkDialog] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
+  const [showToolcallDialog, setShowToolcallDialog] = useState(false);
+  const [editingToolcall, setEditingToolcall] = useState<{
+    pos: number;
+    id: string;
+    parameters: ToolcallParameter[];
+  } | null>(null);
   const { openPicker, MediaPicker } = useMediaPicker();
 
   /**
@@ -233,6 +242,7 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
         },
       }),
       GitCMSMedia, // Add our custom media extension
+      GitCMSToolcall, // Add our custom toolcall extension
       Table.configure({
         resizable: true,
       }),
@@ -265,6 +275,45 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
     onUpdate: ({ editor }) => {
       const html = editor.getHTML();
       onChange?.(html);
+    },
+    onCreate: ({ editor }) => {
+      // Add double-click handler for toolcalls
+      editor.view.dom.addEventListener('dblclick', event => {
+        const target = event.target as HTMLElement;
+        const toolcallWrapper = target.closest('.gitcms-toolcall-wrapper');
+
+        if (toolcallWrapper && editor) {
+          // Find the node position
+          const pos = editor.view.posAtDOM(toolcallWrapper, 0);
+          const node = editor.state.doc.nodeAt(pos);
+
+          if (node && node.type.name === 'gitcmsToolcall') {
+            // Parse parameters
+            let params: Record<string, string> = {};
+            try {
+              if (node.attrs['data-params']) {
+                params = JSON.parse(node.attrs['data-params']);
+              }
+            } catch (error) {
+              console.error('Failed to parse params:', error);
+            }
+
+            // Convert to ToolcallParameter array
+            const parameters: ToolcallParameter[] = Object.entries(params).map(([key, value]) => ({
+              key,
+              value,
+            }));
+
+            // Set editing state and open dialog
+            setEditingToolcall({
+              pos,
+              id: node.attrs.id,
+              parameters: parameters.length > 0 ? parameters : [{ key: '', value: '' }],
+            });
+            setShowToolcallDialog(true);
+          }
+        }
+      });
     },
   });
 
@@ -329,6 +378,66 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
       }
     },
     [editor, owner, repo, getThumbnailForMedia]
+  );
+
+  const handleToolcallInsert = useCallback(
+    (id: string, parameters: ToolcallParameter[]) => {
+      if (editor) {
+        // Build the parameters object
+        const params: Record<string, string> = {};
+        parameters.forEach(param => {
+          if (param.key.trim()) {
+            params[param.key.trim()] = param.value;
+          }
+        });
+
+        // Create the toolcall tag
+        let toolcallTag = `<gitcms-toolcall id="${id}"`;
+
+        // Add all parameters with _ prefix
+        Object.entries(params).forEach(([key, value]) => {
+          // Escape quotes in the value
+          const escapedValue = value.replace(/"/g, '&quot;');
+          toolcallTag += ` _${key}="${escapedValue}"`;
+        });
+
+        toolcallTag += '></gitcms-toolcall>';
+
+        // Insert into editor
+        editor.chain().focus().insertContent(toolcallTag).run();
+
+        // Clear editing state
+        setEditingToolcall(null);
+      }
+    },
+    [editor]
+  );
+
+  const handleToolcallUpdate = useCallback(
+    (id: string, parameters: ToolcallParameter[]) => {
+      if (editor && editingToolcall) {
+        // Build the parameters object
+        const params: Record<string, string> = {};
+        parameters.forEach(param => {
+          if (param.key.trim()) {
+            params[param.key.trim()] = param.value;
+          }
+        });
+
+        // Update the node at the stored position
+        const tr = editor.state.tr;
+        tr.setNodeMarkup(editingToolcall.pos, undefined, {
+          id,
+          'data-params': JSON.stringify(params),
+        });
+
+        editor.view.dispatch(tr);
+
+        // Clear editing state
+        setEditingToolcall(null);
+      }
+    },
+    [editor, editingToolcall]
   );
 
   if (!editor) {
@@ -485,6 +594,13 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
                 title="Code Block"
               >
                 <Code size={16} />
+              </ToolbarButton>
+              <ToolbarButton
+                onClick={() => setShowToolcallDialog(true)}
+                isActive={editor.isActive('gitcmsToolcall')}
+                title="Insert Tool Call"
+              >
+                <Zap size={16} />
               </ToolbarButton>
             </div>
 
@@ -916,6 +1032,142 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
             border-color: #3b82f6;
             box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
           }
+
+          /* GitCMS Toolcall Styles */
+          .gitcms-toolcall-wrapper {
+            position: relative;
+            display: block;
+            margin: 1.5rem 0;
+            user-select: none;
+            cursor: pointer;
+          }
+
+          .gitcms-toolcall-container {
+            border: 2px solid #8b5cf6;
+            border-radius: 0.75rem;
+            overflow: hidden;
+            background: linear-gradient(135deg, #f3e8ff 0%, #ede9fe 100%);
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 8px rgba(139, 92, 246, 0.1);
+            position: relative;
+          }
+
+          .gitcms-toolcall-container::after {
+            content: '✏️ Double-click to edit';
+            position: absolute;
+            top: 0.5rem;
+            right: 0.5rem;
+            font-size: 0.75rem;
+            color: #7c3aed;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.375rem;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+            pointer-events: none;
+            font-weight: 600;
+          }
+
+          .gitcms-toolcall-container:hover {
+            box-shadow: 0 4px 16px rgba(139, 92, 246, 0.3);
+            border-color: #7c3aed;
+            transform: translateY(-1px);
+          }
+
+          .gitcms-toolcall-container:hover::after {
+            opacity: 1;
+          }
+
+          .gitcms-toolcall-header {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.875rem 1rem;
+            background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+            border-bottom: 2px solid #7c3aed;
+          }
+
+          .gitcms-toolcall-icon {
+            font-size: 1.25rem;
+            line-height: 1;
+          }
+
+          .gitcms-toolcall-id {
+            flex: 1;
+            font-weight: 700;
+            font-size: 1rem;
+            color: white;
+            font-family:
+              'SF Mono', 'Monaco', 'Consolas', 'Liberation Mono', 'Courier New', monospace;
+            letter-spacing: 0.025em;
+          }
+
+          .gitcms-toolcall-badge {
+            font-size: 0.65rem;
+            background-color: rgba(255, 255, 255, 0.25);
+            color: white;
+            padding: 0.25rem 0.625rem;
+            border-radius: 9999px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            backdrop-filter: blur(4px);
+          }
+
+          .gitcms-toolcall-params {
+            padding: 1rem;
+          }
+
+          .gitcms-toolcall-params-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+          }
+
+          .gitcms-toolcall-param-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 0.75rem;
+            background-color: white;
+            border: 1px solid #ddd6fe;
+            border-radius: 0.5rem;
+            font-family:
+              'SF Mono', 'Monaco', 'Consolas', 'Liberation Mono', 'Courier New', monospace;
+            font-size: 0.875rem;
+          }
+
+          .gitcms-toolcall-param-key {
+            font-weight: 600;
+            color: #7c3aed;
+          }
+
+          .gitcms-toolcall-param-separator {
+            color: #a78bfa;
+            font-weight: 500;
+          }
+
+          .gitcms-toolcall-param-value {
+            color: #1f2937;
+            flex: 1;
+          }
+
+          .gitcms-toolcall-no-params {
+            text-align: center;
+            padding: 0.75rem;
+            color: #7c3aed;
+            font-size: 0.875rem;
+            font-style: italic;
+            opacity: 0.7;
+          }
+
+          /* Editor state styles for GitCMS toolcall */
+          .ProseMirror
+            .gitcms-toolcall-wrapper.ProseMirror-selectednode
+            .gitcms-toolcall-container {
+            border-color: #6d28d9;
+            box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.2);
+          }
         `}</style>
       </div>
 
@@ -931,6 +1183,20 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
           </div>
         </div>
       )}
+
+      {/* Toolcall Dialog */}
+      <ToolcallDialog
+        isOpen={showToolcallDialog}
+        onClose={() => {
+          setShowToolcallDialog(false);
+          setEditingToolcall(null);
+        }}
+        onInsert={handleToolcallInsert}
+        onUpdate={handleToolcallUpdate}
+        editMode={editingToolcall !== null}
+        initialId={editingToolcall?.id}
+        initialParameters={editingToolcall?.parameters}
+      />
 
       {/* Media Picker Modal */}
       <MediaPicker />
