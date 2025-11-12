@@ -7,7 +7,9 @@ import { Node, mergeAttributes } from '@tiptap/core';
 export const GitCMSToolcall = Node.create({
   name: 'gitcmsToolcall',
 
-  group: 'block',
+  group: 'inline',
+
+  inline: true,
 
   atom: true,
 
@@ -96,7 +98,7 @@ export const GitCMSToolcall = Node.create({
 
   addNodeView() {
     return ({ node }) => {
-      const wrapper = document.createElement('div');
+      const wrapper = document.createElement('span');
       wrapper.classList.add('gitcms-toolcall-wrapper');
 
       // Parse parameters
@@ -109,71 +111,37 @@ export const GitCMSToolcall = Node.create({
         console.error('Failed to parse toolcall params:', error);
       }
 
-      // Create the visual representation
-      const container = document.createElement('div');
+      // Create compact inline representation
+      const container = document.createElement('span');
       container.classList.add('gitcms-toolcall-container');
 
-      // Header with icon and ID
-      const header = document.createElement('div');
-      header.classList.add('gitcms-toolcall-header');
-
+      // Icon
       const icon = document.createElement('span');
       icon.classList.add('gitcms-toolcall-icon');
       icon.innerHTML = '⚡';
 
+      // ID
       const id = document.createElement('span');
       id.classList.add('gitcms-toolcall-id');
       id.textContent = node.attrs.id || 'UNKNOWN';
 
-      const badge = document.createElement('span');
-      badge.classList.add('gitcms-toolcall-badge');
-      badge.textContent = 'Tool Call';
-
-      header.appendChild(icon);
-      header.appendChild(id);
-      header.appendChild(badge);
-
-      // Parameters list
-      const paramsContainer = document.createElement('div');
-      paramsContainer.classList.add('gitcms-toolcall-params');
-
+      // Parameter count badge (if params exist)
       const paramCount = Object.keys(params).length;
       if (paramCount > 0) {
-        const paramsList = document.createElement('div');
-        paramsList.classList.add('gitcms-toolcall-params-list');
-
-        Object.entries(params).forEach(([key, value]) => {
-          const paramItem = document.createElement('div');
-          paramItem.classList.add('gitcms-toolcall-param-item');
-
-          const paramKey = document.createElement('span');
-          paramKey.classList.add('gitcms-toolcall-param-key');
-          paramKey.textContent = key;
-
-          const paramSeparator = document.createElement('span');
-          paramSeparator.classList.add('gitcms-toolcall-param-separator');
-          paramSeparator.textContent = '=';
-
-          const paramValue = document.createElement('span');
-          paramValue.classList.add('gitcms-toolcall-param-value');
-          paramValue.textContent = `"${value}"`;
-
-          paramItem.appendChild(paramKey);
-          paramItem.appendChild(paramSeparator);
-          paramItem.appendChild(paramValue);
-          paramsList.appendChild(paramItem);
-        });
-
-        paramsContainer.appendChild(paramsList);
+        const badge = document.createElement('span');
+        badge.classList.add('gitcms-toolcall-badge');
+        badge.textContent = `${paramCount}`;
+        badge.title = Object.entries(params)
+          .map(([k, v]) => `${k}="${v}"`)
+          .join(', ');
+        container.appendChild(icon);
+        container.appendChild(id);
+        container.appendChild(badge);
       } else {
-        const noParams = document.createElement('div');
-        noParams.classList.add('gitcms-toolcall-no-params');
-        noParams.textContent = 'No parameters';
-        paramsContainer.appendChild(noParams);
+        container.appendChild(icon);
+        container.appendChild(id);
       }
 
-      container.appendChild(header);
-      container.appendChild(paramsContainer);
       wrapper.appendChild(container);
 
       return {

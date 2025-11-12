@@ -1035,130 +1035,79 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
 
           /* GitCMS Toolcall Styles */
           .gitcms-toolcall-wrapper {
-            position: relative;
-            display: block;
-            margin: 1.5rem 0;
+            display: inline-block;
+            vertical-align: baseline;
             user-select: none;
             cursor: pointer;
+            margin: 0 0.125rem;
           }
 
           .gitcms-toolcall-container {
-            border: 2px solid #8b5cf6;
-            border-radius: 0.75rem;
-            overflow: hidden;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            padding: 0.125rem 0.5rem;
+            border: 1.5px solid #8b5cf6;
+            border-radius: 0.375rem;
             background: linear-gradient(135deg, #f3e8ff 0%, #ede9fe 100%);
             transition: all 0.2s ease;
-            box-shadow: 0 2px 8px rgba(139, 92, 246, 0.1);
+            box-shadow: 0 1px 3px rgba(139, 92, 246, 0.2);
+            font-size: 0.875rem;
+            line-height: 1.5;
+            white-space: nowrap;
             position: relative;
           }
 
-          .gitcms-toolcall-container::after {
-            content: '✏️ Double-click to edit';
-            position: absolute;
-            top: 0.5rem;
-            right: 0.5rem;
-            font-size: 0.75rem;
-            color: #7c3aed;
-            background: rgba(255, 255, 255, 0.9);
-            padding: 0.25rem 0.5rem;
-            border-radius: 0.375rem;
-            opacity: 0;
-            transition: opacity 0.2s ease;
-            pointer-events: none;
-            font-weight: 600;
-          }
-
           .gitcms-toolcall-container:hover {
-            box-shadow: 0 4px 16px rgba(139, 92, 246, 0.3);
+            box-shadow: 0 2px 8px rgba(139, 92, 246, 0.4);
             border-color: #7c3aed;
             transform: translateY(-1px);
           }
 
           .gitcms-toolcall-container:hover::after {
-            opacity: 1;
-          }
-
-          .gitcms-toolcall-header {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-            padding: 0.875rem 1rem;
-            background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
-            border-bottom: 2px solid #7c3aed;
+            content: '✏️ Double-click';
+            position: absolute;
+            bottom: calc(100% + 0.25rem);
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 0.6875rem;
+            color: white;
+            background: #7c3aed;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+            white-space: nowrap;
+            pointer-events: none;
+            font-weight: 600;
+            z-index: 10;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
           }
 
           .gitcms-toolcall-icon {
-            font-size: 1.25rem;
+            font-size: 0.875rem;
             line-height: 1;
+            display: inline-flex;
+            align-items: center;
           }
 
           .gitcms-toolcall-id {
-            flex: 1;
-            font-weight: 700;
-            font-size: 1rem;
-            color: white;
+            font-weight: 600;
+            font-size: 0.8125rem;
+            color: #7c3aed;
             font-family:
               'SF Mono', 'Monaco', 'Consolas', 'Liberation Mono', 'Courier New', monospace;
             letter-spacing: 0.025em;
           }
 
           .gitcms-toolcall-badge {
-            font-size: 0.65rem;
-            background-color: rgba(255, 255, 255, 0.25);
+            font-size: 0.625rem;
+            background: #7c3aed;
             color: white;
-            padding: 0.25rem 0.625rem;
+            padding: 0.125rem 0.375rem;
             border-radius: 9999px;
             font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            backdrop-filter: blur(4px);
-          }
-
-          .gitcms-toolcall-params {
-            padding: 1rem;
-          }
-
-          .gitcms-toolcall-params-list {
-            display: flex;
-            flex-direction: column;
-            gap: 0.5rem;
-          }
-
-          .gitcms-toolcall-param-item {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            padding: 0.5rem 0.75rem;
-            background-color: white;
-            border: 1px solid #ddd6fe;
-            border-radius: 0.5rem;
-            font-family:
-              'SF Mono', 'Monaco', 'Consolas', 'Liberation Mono', 'Courier New', monospace;
-            font-size: 0.875rem;
-          }
-
-          .gitcms-toolcall-param-key {
-            font-weight: 600;
-            color: #7c3aed;
-          }
-
-          .gitcms-toolcall-param-separator {
-            color: #a78bfa;
-            font-weight: 500;
-          }
-
-          .gitcms-toolcall-param-value {
-            color: #1f2937;
-            flex: 1;
-          }
-
-          .gitcms-toolcall-no-params {
+            line-height: 1;
+            min-width: 1.25rem;
             text-align: center;
-            padding: 0.75rem;
-            color: #7c3aed;
-            font-size: 0.875rem;
-            font-style: italic;
-            opacity: 0.7;
           }
 
           /* Editor state styles for GitCMS toolcall */
@@ -1166,7 +1115,7 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
             .gitcms-toolcall-wrapper.ProseMirror-selectednode
             .gitcms-toolcall-container {
             border-color: #6d28d9;
-            box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.2);
+            box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.3);
           }
         `}</style>
       </div>
