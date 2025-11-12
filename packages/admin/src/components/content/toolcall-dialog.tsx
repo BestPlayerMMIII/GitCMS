@@ -30,15 +30,12 @@ export const ToolcallDialog: React.FC<ToolcallDialogProps> = ({
   const [toolcallId, setToolcallId] = useState('');
   const [parameters, setParameters] = useState<ToolcallParameter[]>([{ key: '', value: '' }]);
 
-  // Update state when dialog opens in edit mode
+  // Update state when dialog opens with initial values
   useEffect(() => {
     if (isOpen) {
       if (editMode && initialId) {
         setToolcallId(initialId);
         setParameters(initialParameters.length > 0 ? initialParameters : [{ key: '', value: '' }]);
-      } else if (!editMode) {
-        setToolcallId('');
-        setParameters([{ key: '', value: '' }]);
       }
     }
   }, [isOpen, editMode, initialId, initialParameters]);
