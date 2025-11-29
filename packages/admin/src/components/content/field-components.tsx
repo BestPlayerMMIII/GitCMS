@@ -405,7 +405,7 @@ export function ObjectField({
   const objectValue = value || {};
 
   // Use context for circular dependency protection
-  const { isCircular } = useSchemaRenderingContext();
+  const { isCircular, pushSchema, popSchema } = useSchemaRenderingContext();
 
   // Check for circular dependency during render
   const circularDependencyError = useMemo(() => {
@@ -450,35 +450,13 @@ export function ObjectField({
     return allErrors[nestedErrorKey];
   };
 
-  // Wrapper component that tracks schema in the render stack
-  const ObjectFieldContent = ({ schemaId }: { schemaId?: string }) => {
-    const { pushSchema, popSchema } = useSchemaRenderingContext();
-
-    useLayoutEffect(() => {
-      if (schemaId) {
-        pushSchema(schemaId);
-        return () => popSchema(schemaId);
-      }
-    }, [schemaId, pushSchema, popSchema]);
-
-    return (
-      <>
-        {Object.entries(properties).map(([key, propField]) => (
-          <FieldRenderer
-            key={key}
-            field={propField as FieldDefinition}
-            value={objectValue[key]}
-            onChange={propValue => updateProperty(key, propValue)}
-            error={getNestedFieldError(key)}
-            disabled={disabled}
-            availableSchemas={availableSchemas}
-            allErrors={allErrors}
-            fieldPath={fieldPath ? `${fieldPath}.${key}` : key}
-          />
-        ))}
-      </>
-    );
-  };
+  // Track schema in the render stack
+  useLayoutEffect(() => {
+    if (objectField.schemaRef) {
+      pushSchema(objectField.schemaRef);
+      return () => popSchema(objectField.schemaRef);
+    }
+  }, [objectField.schemaRef, pushSchema, popSchema]);
 
   return (
     <div className="space-y-4">
@@ -525,7 +503,21 @@ export function ObjectField({
               : 'No properties defined for this object.'}
           </p>
         ) : (
-          <ObjectFieldContent schemaId={objectField.schemaRef} />
+          <>
+            {Object.entries(properties).map(([key, propField]) => (
+              <FieldRenderer
+                key={key}
+                field={propField as FieldDefinition}
+                value={objectValue[key]}
+                onChange={propValue => updateProperty(key, propValue)}
+                error={getNestedFieldError(key)}
+                disabled={disabled}
+                availableSchemas={availableSchemas}
+                allErrors={allErrors}
+                fieldPath={fieldPath ? `${fieldPath}.${key}` : key}
+              />
+            ))}
+          </>
         )}
       </div>
       {error && <p className="text-sm text-red-500">{error}</p>}

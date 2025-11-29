@@ -169,11 +169,11 @@ export function SchemaEditor({
       return 'Schema ID must contain only lowercase letters, numbers, and hyphens';
     }
 
-    // Check for ID conflicts with existing schemas (only when creating or changing ID)
-    const isNewSchema = !schema || schema.id !== newId;
-    if (isNewSchema && availableSchemas) {
+    // Check for ID conflicts with existing schemas
+    if (availableSchemas) {
       const existingSchema = availableSchemas.find(s => s.id === newId);
-      if (existingSchema) {
+      // If schema exists and it's not the one we are currently editing (if any)
+      if (existingSchema && (!schema || existingSchema.id !== schema.id)) {
         return `A schema with ID "${newId}" already exists. Please choose a different ID.`;
       }
     }
@@ -211,11 +211,11 @@ export function SchemaEditor({
     } else if (!/^[a-z0-9-]+$/.test(formData.id)) {
       newErrors.id = 'Schema ID must contain only lowercase letters, numbers, and hyphens';
     } else {
-      // Check for ID conflicts with existing schemas (only when creating or changing ID)
-      const isNewSchema = !schema || schema.id !== formData.id;
-      if (isNewSchema && availableSchemas) {
+      // Check for ID conflicts with existing schemas
+      if (availableSchemas) {
         const existingSchema = availableSchemas.find(s => s.id === formData.id);
-        if (existingSchema) {
+        // If schema exists and it's not the one we are currently editing (if any)
+        if (existingSchema && (!schema || existingSchema.id !== schema.id)) {
           newErrors.id = `A schema with ID "${formData.id}" already exists. Please choose a different ID.`;
         }
       }

@@ -354,7 +354,7 @@ async function routeSchemasStorage(
   params: Record<string, any>,
   body?: any
 ): Promise<any> {
-  const { action, owner, repo, schemaId, currentSchemaId, id } = params;
+  const { action, owner, repo, schemaId, currentSchemaId, currentId, id } = params;
 
   switch (method) {
     case 'GET':
@@ -362,7 +362,7 @@ async function routeSchemasStorage(
         action: action as 'list' | 'get' | 'check-setup' | 'validate-id',
         schemaId,
         id,
-        currentId: currentSchemaId,
+        currentId: currentId || currentSchemaId,
       });
 
     case 'POST':
