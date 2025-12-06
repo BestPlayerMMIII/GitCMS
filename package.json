@@ -41,6 +41,9 @@
   "engines": {
     "node": ">=18"
   },
+  "overrides": {
+    "esbuild": "^0.25.0"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/gitcms/gitcms.git"
