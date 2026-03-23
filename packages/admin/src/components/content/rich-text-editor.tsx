@@ -16,6 +16,7 @@ import TextAlign from '@tiptap/extension-text-align';
 import CharacterCount from '@tiptap/extension-character-count';
 import { Node, mergeAttributes } from '@tiptap/core';
 import { createLowlight } from 'lowlight';
+import katex from 'katex';
 import {
   Bold,
   Italic,
@@ -121,6 +122,77 @@ const GitCMSMedia = Node.create({
   },
 });
 
+// Custom TipTap extension for inline/block LaTeX math equations
+const GitCMSMath = Node.create({
+  name: 'gitcmsMath',
+
+  group: 'inline',
+
+  inline: true,
+
+  atom: true,
+
+  selectable: true,
+
+  addAttributes() {
+    return {
+      'data-latex': {
+        default: '',
+      },
+      'data-display-mode': {
+        default: false,
+      },
+    };
+  },
+
+  parseHTML() {
+    return [
+      {
+        tag: 'gitcms-math',
+      },
+    ];
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    return ['gitcms-math', mergeAttributes(HTMLAttributes)];
+  },
+
+  addNodeView() {
+    return ({ node }) => {
+      const wrapper = document.createElement('span');
+      const latex = String(node.attrs['data-latex'] || '');
+      const displayMode =
+        node.attrs['data-display-mode'] === true || node.attrs['data-display-mode'] === 'true';
+
+      wrapper.classList.add('gitcms-math-wrapper');
+      if (displayMode) {
+        wrapper.classList.add('gitcms-math-display');
+      }
+
+      let renderedMath = '';
+      try {
+        // Render as MathML so equations are visible even without loading KaTeX CSS globally.
+        renderedMath = katex.renderToString(latex, {
+          throwOnError: false,
+          displayMode,
+          output: 'mathml',
+        });
+      } catch {
+        renderedMath = `<code>${latex}</code>`;
+      }
+
+      wrapper.innerHTML = `
+        <span class="gitcms-math-label">LaTeX</span>
+        <span class="gitcms-math-content">${renderedMath}</span>
+      `;
+
+      return {
+        dom: wrapper,
+      };
+    };
+  },
+});
+
 interface RichTextEditorProps {
   value?: string;
   onChange?: (value: string) => void;
@@ -182,6 +254,10 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
 }) => {
   const [showLinkDialog, setShowLinkDialog] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
+  const [showMathDialog, setShowMathDialog] = useState(false);
+  const [mathLatex, setMathLatex] = useState('');
+  const [mathDisplayMode, setMathDisplayMode] = useState(false);
+  const [editingMath, setEditingMath] = useState<{ pos: number } | null>(null);
   const [showToolcallDialog, setShowToolcallDialog] = useState(false);
   const [editingToolcall, setEditingToolcall] = useState<{
     pos: number;
@@ -242,6 +318,7 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
         },
       }),
       GitCMSMedia, // Add our custom media extension
+      GitCMSMath, // Add custom LaTeX math extension
       GitCMSToolcall, // Add our custom toolcall extension
       Table.configure({
         resizable: true,
@@ -277,10 +354,26 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
       onChange?.(html);
     },
     onCreate: ({ editor }) => {
-      // Add double-click handler for toolcalls
+      // Add double-click handler for toolcalls and math equations
       editor.view.dom.addEventListener('dblclick', event => {
         const target = event.target as HTMLElement;
         const toolcallWrapper = target.closest('.gitcms-toolcall-wrapper');
+        const mathWrapper = target.closest('.gitcms-math-wrapper');
+
+        if (mathWrapper && editor) {
+          const pos = editor.view.posAtDOM(mathWrapper, 0);
+          const node = editor.state.doc.nodeAt(pos);
+
+          if (node && node.type.name === 'gitcmsMath') {
+            setEditingMath({ pos });
+            setMathLatex(String(node.attrs['data-latex'] || ''));
+            setMathDisplayMode(
+              node.attrs['data-display-mode'] === true || node.attrs['data-display-mode'] === 'true'
+            );
+            setShowMathDialog(true);
+            return;
+          }
+        }
 
         if (toolcallWrapper && editor) {
           // Find the node position
@@ -324,6 +417,37 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
       setLinkUrl('');
     }
   }, [editor, linkUrl]);
+
+  const saveMathEquation = useCallback(() => {
+    if (!editor || !mathLatex.trim()) {
+      return;
+    }
+
+    const attrs = {
+      'data-latex': mathLatex.trim(),
+      'data-display-mode': mathDisplayMode,
+    };
+
+    if (editingMath) {
+      const tr = editor.state.tr;
+      tr.setNodeMarkup(editingMath.pos, undefined, attrs);
+      editor.view.dispatch(tr);
+    } else {
+      editor
+        .chain()
+        .focus()
+        .insertContent({
+          type: 'gitcmsMath',
+          attrs,
+        })
+        .run();
+    }
+
+    setShowMathDialog(false);
+    setMathLatex('');
+    setMathDisplayMode(false);
+    setEditingMath(null);
+  }, [editor, editingMath, mathLatex, mathDisplayMode]);
 
   const addMedia = useCallback(() => {
     if (owner && repo) {
@@ -602,6 +726,18 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
               >
                 <Zap size={16} />
               </ToolbarButton>
+              <ToolbarButton
+                onClick={() => {
+                  setEditingMath(null);
+                  setMathLatex('');
+                  setMathDisplayMode(false);
+                  setShowMathDialog(true);
+                }}
+                isActive={editor.isActive('gitcmsMath')}
+                title="Insert LaTeX Equation"
+              >
+                <span className="text-xs font-semibold">TeX</span>
+              </ToolbarButton>
             </div>
 
             <ToolbarSeparator />
@@ -676,6 +812,59 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
             >
               Cancel
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Math Dialog */}
+      {showMathDialog && (
+        <div className="border-b border-gray-300 p-4 bg-indigo-50">
+          <div className="flex flex-col gap-3">
+            <div className="text-sm font-medium text-indigo-900">
+              {editingMath ? 'Edit LaTeX Equation' : 'Insert LaTeX Equation'}
+            </div>
+            <textarea
+              placeholder="Example: \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}"
+              value={mathLatex}
+              onChange={e => setMathLatex(e.target.value)}
+              rows={3}
+              className="w-full px-3 py-2 border border-indigo-200 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-mono text-sm"
+              autoFocus
+            />
+            <label className="inline-flex items-center gap-2 text-sm text-indigo-900">
+              <input
+                type="checkbox"
+                checked={mathDisplayMode}
+                onChange={e => setMathDisplayMode(e.target.checked)}
+                className="rounded border-indigo-300 text-indigo-600 focus:ring-indigo-500"
+              />
+              Display mode (block equation)
+            </label>
+            <div className="flex gap-3 items-center">
+              <button
+                type="button"
+                onClick={saveMathEquation}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors disabled:opacity-50"
+                disabled={!mathLatex.trim()}
+              >
+                {editingMath ? 'Update' : 'Insert'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowMathDialog(false);
+                  setMathLatex('');
+                  setMathDisplayMode(false);
+                  setEditingMath(null);
+                }}
+                className="px-4 py-2 border border-indigo-200 rounded-md hover:bg-indigo-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors"
+              >
+                Cancel
+              </button>
+              <div className="text-xs text-indigo-700">
+                Tip: double-click an existing equation to edit it
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -1116,6 +1305,53 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
             .gitcms-toolcall-container {
             border-color: #6d28d9;
             box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.3);
+          }
+
+          /* GitCMS Math Styles */
+          .gitcms-math-wrapper {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.375rem;
+            padding: 0.125rem 0.5rem;
+            border: 1px solid #c7d2fe;
+            border-radius: 0.375rem;
+            background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%);
+            cursor: pointer;
+            margin: 0 0.125rem;
+            vertical-align: middle;
+          }
+
+          .gitcms-math-wrapper:hover {
+            border-color: #818cf8;
+            box-shadow: 0 2px 8px rgba(99, 102, 241, 0.18);
+          }
+
+          .gitcms-math-display {
+            display: flex;
+            width: 100%;
+            justify-content: center;
+            margin: 0.75rem 0;
+            padding: 0.75rem;
+          }
+
+          .gitcms-math-label {
+            font-size: 0.6875rem;
+            font-weight: 700;
+            color: #4338ca;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+          }
+
+          .gitcms-math-content {
+            color: #312e81;
+            font-family:
+              'SF Mono', 'Monaco', 'Consolas', 'Liberation Mono', 'Courier New', monospace;
+            font-size: 0.875rem;
+          }
+
+          .ProseMirror .gitcms-math-wrapper.ProseMirror-selectednode {
+            border-color: #6366f1;
+            box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.25);
           }
         `}</style>
       </div>

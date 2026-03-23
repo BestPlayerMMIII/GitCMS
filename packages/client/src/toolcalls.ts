@@ -1,3 +1,5 @@
+import { resolveMath } from './math';
+
 /**
  * Represents a toolcall extracted from content
  */
@@ -30,6 +32,8 @@ export type ToolcallRenderers = Record<string, ToolcallRenderer>;
 export interface ResolveToolcallsOptions {
   /** Whether to process async renderers (default: true) */
   async?: boolean;
+  /** Whether to also resolve GitCMS LaTeX tags (default: true) */
+  resolveMath?: boolean;
   /** Fallback renderer for unknown toolcall IDs */
   fallback?: ToolcallRenderer;
   /** Whether to keep original tags if renderer is not found (default: false) */
@@ -103,7 +107,7 @@ export function resolveToolcalls(
   toolcalls: ToolcallRenderers,
   options: ResolveToolcallsOptions = {}
 ): string {
-  const { fallback, keepUnresolved = false } = options;
+  const { fallback, keepUnresolved = false, resolveMath: shouldResolveMath = true } = options;
 
   const references = extractToolcalls(content);
   let result = content;
@@ -143,6 +147,10 @@ export function resolveToolcalls(
     }
   }
 
+  if (shouldResolveMath) {
+    return resolveMath(result, { keepUnresolved });
+  }
+
   return result;
 }
 
@@ -173,7 +181,7 @@ export async function resolveToolcallsAsync(
   toolcalls: ToolcallRenderers,
   options: ResolveToolcallsOptions = {}
 ): Promise<string> {
-  const { fallback, keepUnresolved = false } = options;
+  const { fallback, keepUnresolved = false, resolveMath: shouldResolveMath = true } = options;
 
   const references = extractToolcalls(content);
   let result = content;
@@ -208,6 +216,10 @@ export async function resolveToolcallsAsync(
         result = result.replace(ref.originalTag, '');
       }
     }
+  }
+
+  if (shouldResolveMath) {
+    return resolveMath(result, { keepUnresolved });
   }
 
   return result;

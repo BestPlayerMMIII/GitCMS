@@ -302,6 +302,44 @@ const post = await cms.from('posts').doc('my-post-id').get();
 const config = await cms.doc('site-config').get();
 ```
 
+## ∑ LaTeX In Rich Text
+
+GitCMS rich text equations are stored as `<gitcms-math>` tags.
+
+The client SDK now includes automatic math resolution when you use
+`resolveToolcalls` or `resolveToolcallsAsync`.
+
+```typescript
+import { resolveToolcalls } from '@git-cms/client';
+
+const html = post.data.content || '';
+
+// Even with no toolcall renderers, this now resolves <gitcms-math> by default.
+const enhanced = resolveToolcalls(html, {});
+```
+
+If you only need math conversion (without toolcalls), use `resolveMath`:
+
+```typescript
+import { resolveMath } from '@git-cms/client';
+
+const enhanced = resolveMath(post.data.content || '');
+```
+
+### Optional: KaTeX visual style
+
+By default, GitCMS uses MathML output so equations are visible without CSS. If
+you want KaTeX HTML styling instead, use:
+
+```typescript
+import { resolveMath } from '@git-cms/client';
+import 'katex/dist/katex.min.css';
+
+const enhanced = resolveMath(post.data.content || '', {
+  output: 'htmlAndMathml',
+});
+```
+
 ## 🖼️ Media Management
 
 GitCMS provides a powerful media API for working with embedded media in your

@@ -21,7 +21,9 @@
   },
   "dependencies": {
     "@git-cms/core": "^0.1.0",
-    "@octokit/rest": "^20.0.2"
+    "@octokit/rest": "^20.0.2",
+    "deprecation": "^2.3.1",
+    "katex": "^0.16.25"
   },
   "devDependencies": {
     "@types/node": "^20.10.4",
