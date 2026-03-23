@@ -14,7 +14,7 @@ import {
   Menu,
   X,
 } from 'lucide-react';
-import { ReactNode, useState } from 'react';
+import { ReactNode, useEffect, useRef, useState } from 'react';
 import { useNavigationHeader } from '@/contexts/navigation-context';
 
 export type NavigationItem = 'dashboard' | 'repositories' | 'schemas' | 'content' | 'media';
@@ -41,6 +41,7 @@ interface NavigationProps {
 export function Navigation({ repositoryInfo }: NavigationProps = {}) {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const stickyRootRef = useRef<HTMLDivElement | null>(null);
 
   const { headers } = useNavigationHeader();
   const activeId = navigation.find(item =>
@@ -48,8 +49,40 @@ export function Navigation({ repositoryInfo }: NavigationProps = {}) {
   )?.id;
   const activeSubheader = activeId ? headers[activeId] : null;
 
+  useEffect(() => {
+    if (typeof document === 'undefined') {
+      return;
+    }
+
+    const updateStickyOffset = () => {
+      const stickyHeight = stickyRootRef.current?.getBoundingClientRect().height ?? 0;
+      document.documentElement.style.setProperty('--gitcms-sticky-offset', `${stickyHeight}px`);
+    };
+
+    updateStickyOffset();
+
+    const resizeObserver =
+      typeof ResizeObserver !== 'undefined'
+        ? new ResizeObserver(() => {
+            updateStickyOffset();
+          })
+        : null;
+
+    if (resizeObserver && stickyRootRef.current) {
+      resizeObserver.observe(stickyRootRef.current);
+    }
+
+    window.addEventListener('resize', updateStickyOffset);
+
+    return () => {
+      window.removeEventListener('resize', updateStickyOffset);
+      resizeObserver?.disconnect();
+      document.documentElement.style.removeProperty('--gitcms-sticky-offset');
+    };
+  }, []);
+
   return (
-    <div className="sticky top-0 z-50 bg-white shadow-sm">
+    <div ref={stickyRootRef} className="sticky top-0 z-50 bg-white shadow-sm">
       {/* Main Navigation */}
       <nav className="border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

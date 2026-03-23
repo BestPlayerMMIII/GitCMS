@@ -570,10 +570,13 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
 
   return (
     <div
-      className={`border border-gray-300 rounded-lg overflow-hidden bg-white shadow-sm ${className}`}
+      className={`border border-gray-300 rounded-lg overflow-visible bg-white shadow-sm ${className}`}
     >
       {!readOnly && (
-        <div className="border-b border-gray-200 px-4 py-3 bg-gray-50/80">
+        <div
+          className="sticky z-30 border-b border-gray-200 px-4 py-3 bg-gray-50/95 backdrop-blur supports-[backdrop-filter]:bg-gray-50/90"
+          style={{ top: 'var(--gitcms-sticky-offset, 0px)' }}
+        >
           <div className="flex flex-wrap gap-2">
             {/* Headings */}
             <div className="flex gap-1">
