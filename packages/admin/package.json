@@ -1,6 +1,6 @@
 {
   "name": "@git-cms/admin",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "GitCMS Admin Interface",
   "main": "index.js",
   "scripts": {
