@@ -96,18 +96,18 @@ For the admin panel, you'll need to create environment variables:
 **`packages/admin/.env.local`:**
 
 ```env
-NEXT_PUBLIC_GITHUB_CLIENT_ID=your_github_oauth_app_client_id
+GITHUB_CLIENT_ID=your_github_oauth_app_client_id
 GITHUB_CLIENT_SECRET=your_github_oauth_app_client_secret
 NEXTAUTH_SECRET=your_nextauth_secret
-NEXTAUTH_URL=http://localhost:3000
+NEXTAUTH_URL=http://localhost:3001
 ```
 
 To get GitHub OAuth credentials:
 
 1. Go to GitHub Settings → Developer settings → OAuth Apps
 2. Create a new OAuth App
-3. Use `http://localhost:3000` as the Homepage URL
-4. Use `http://localhost:3000/api/auth/callback/github` as the Authorization
+3. Use `http://localhost:3001` as the Homepage URL
+4. Use `http://localhost:3001/api/auth/callback/github` as the Authorization
    callback URL
 
 ## Project Structure
