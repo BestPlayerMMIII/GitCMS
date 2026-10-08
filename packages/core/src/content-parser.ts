@@ -1,5 +1,4 @@
 import * as YAML from 'yaml';
-import matter from 'gray-matter';
 
 export interface ParsedContent {
   data: Record<string, any>;
@@ -25,11 +24,28 @@ export interface ContentValidationResult {
  */
 export function parseMarkdown(content: string): ParsedContent {
   try {
-    const parsed = matter(content);
+    let data: Record<string, any> = {};
+    let parsedContent = content;
+
+    const trimmed = content.trimStart();
+    if (trimmed.startsWith('---')) {
+      const match = trimmed.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
+      if (match) {
+        const frontmatterStr = match[1];
+        parsedContent = match[2];
+        if (frontmatterStr.trim()) {
+          const parsed = YAML.parse(frontmatterStr);
+          if (parsed && typeof parsed === 'object') {
+            data = parsed;
+          }
+        }
+      }
+    }
+
     return {
-      data: parsed.data || {},
-      content: parsed.content || '',
-      isEmpty: !parsed.content.trim() && Object.keys(parsed.data).length === 0,
+      data,
+      content: parsedContent,
+      isEmpty: !parsedContent.trim() && Object.keys(data).length === 0,
       originalContent: content,
     };
   } catch (error) {
