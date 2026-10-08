@@ -196,7 +196,8 @@ export class ClientGitHubApi {
         repo: this.repo,
         path,
         ref: this.branch,
-      });
+        _t: Date.now(),
+      } as any);
 
       if (Array.isArray(data)) {
         throw new Error('Path is a directory, not a file');
@@ -218,7 +219,8 @@ export class ClientGitHubApi {
       repo: this.repo,
       path,
       ref: this.branch,
-    });
+      _t: Date.now(),
+    } as any);
 
     if (!Array.isArray(data)) {
       throw new Error('Path is a file, not a directory');

@@ -416,7 +416,7 @@ export function SchemaForm({
   }, [schema.fields, initialData, getDefaultValue]);
 
   return (
-    <SchemaRenderingProvider>
+    <SchemaRenderingProvider initialSchemaId={schema?.id}>
       <div className="space-y-6">
         <div className="bg-white border border-gray-200 rounded-lg shadow-sm">
           <div className="px-6 py-4 border-b border-gray-200">

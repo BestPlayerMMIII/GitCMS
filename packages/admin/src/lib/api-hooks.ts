@@ -158,9 +158,9 @@ export function useContentList(
   owner: string | null,
   repo: string | null,
   schemaId?: string,
-  options: { enabled?: boolean } = {}
+  options: { enabled?: boolean; refreshOnMount?: boolean } = {}
 ): UseApiDataResult<ContentItem[]> {
-  const { enabled = true } = options;
+  const { enabled = true, refreshOnMount = true } = options;
 
   return useApiData({
     key: owner && repo ? createCacheKey.contentList(owner, repo, schemaId) : 'disabled',
@@ -168,6 +168,7 @@ export function useContentList(
     ttl: DEFAULT_TTL.CONTENT_LIST,
     repoScope: owner && repo ? `${owner}/${repo}` : undefined,
     enabled: enabled && Boolean(owner && repo),
+    refreshOnMount,
     staleWhileRevalidate: true,
   });
 }
@@ -178,9 +179,9 @@ export function useContentItem(
   repo: string | null,
   schemaId: string | null,
   contentId: string | null,
-  options: { enabled?: boolean } = {}
+  options: { enabled?: boolean; refreshOnMount?: boolean } = {}
 ): UseApiDataResult<ContentItem> {
-  const { enabled = true } = options;
+  const { enabled = true, refreshOnMount = true } = options;
 
   return useApiData({
     key:
@@ -217,6 +218,7 @@ export function useContentItem(
     ttl: DEFAULT_TTL.CONTENT_ITEM,
     repoScope: owner && repo ? `${owner}/${repo}` : undefined,
     enabled: enabled && Boolean(owner && repo && schemaId && contentId),
+    refreshOnMount,
     staleWhileRevalidate: true,
   });
 }
@@ -468,13 +470,18 @@ export function useContentMutations(owner: string | null, repo: string | null) {
 
       const result = await response.json();
 
-      // Invalidate related caches
-      cacheInvalidation.invalidateRepoContent(owner, repo);
-      cacheInvalidation.invalidateRepoContent(owner, repo, schemaId);
-
-      if (contentId) {
-        cacheInvalidation.invalidateContentItem(owner, repo, schemaId, contentId);
+      // Update cached content immediately for instant real-time responsiveness
+      if (result.content) {
+        cacheInvalidation.updateCachedContent(
+          owner,
+          repo,
+          result.content,
+          originalContentId
+        );
       }
+
+      // Invalidate list cache so lists are refreshed, but keep the fresh item in content cache
+      cacheInvalidation.invalidateRepoContent(owner, repo, schemaId);
 
       return result;
     },
@@ -503,9 +510,11 @@ export function useContentMutations(owner: string | null, repo: string | null) {
         throw new Error(errorData.error || `Failed to delete content: ${response.statusText}`);
       }
 
+      // Immediately remove from cached lists
+      cacheInvalidation.removeCachedContent(owner, repo, schemaId, contentId);
+
       // Invalidate related caches
       cacheInvalidation.invalidateContentItem(owner, repo, schemaId, contentId);
-      cacheInvalidation.invalidateRepoContent(owner, repo);
       cacheInvalidation.invalidateRepoContent(owner, repo, schemaId);
 
       return response.json();

@@ -64,6 +64,135 @@ function slugify(text: string): string {
     .replace(/^-+|-+$/g, '');
 }
 
+// ============================================================================
+// LOCAL STORAGE MASKING FOR RECENT EDITS / DELETES
+// GitHub API / CDN has a propagation delay (up to 60s) where GET returns old data
+// even after a successful commit. We cache recently modified items locally for 2 minutes
+// so user sees immediate updates across refreshes and page transitions.
+// ============================================================================
+
+const RECENT_SAVES_STORAGE_KEY = 'gitcms_recent_content_saves';
+const RECENT_DELETES_STORAGE_KEY = 'gitcms_recent_content_deletes';
+const RECENT_MUTATION_TTL = 120 * 1000; // 2 minutes
+
+interface StoredRecentSave {
+  key: string; // `${owner}/${repo}/${schemaId}/${contentId}`
+  owner: string;
+  repo: string;
+  schemaId: string;
+  contentId: string;
+  item: ContentItem;
+  savedAt: number;
+}
+
+interface StoredRecentDelete {
+  key: string;
+  owner: string;
+  repo: string;
+  schemaId: string;
+  contentId: string;
+  deletedAt: number;
+}
+
+function getStoredRecentSaves(): Record<string, StoredRecentSave> {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = sessionStorage.getItem(RECENT_SAVES_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    const now = Date.now();
+    const valid: Record<string, StoredRecentSave> = {};
+    for (const [k, v] of Object.entries(parsed as Record<string, StoredRecentSave>)) {
+      if (now - v.savedAt < RECENT_MUTATION_TTL) {
+        valid[k] = v;
+      }
+    }
+    return valid;
+  } catch {
+    return {};
+  }
+}
+
+function saveStoredRecentSaves(saves: Record<string, StoredRecentSave>) {
+  if (typeof window === 'undefined') return;
+  try {
+    sessionStorage.setItem(RECENT_SAVES_STORAGE_KEY, JSON.stringify(saves));
+  } catch {}
+}
+
+function getStoredRecentDeletes(): Record<string, StoredRecentDelete> {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = sessionStorage.getItem(RECENT_DELETES_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    const now = Date.now();
+    const valid: Record<string, StoredRecentDelete> = {};
+    for (const [k, v] of Object.entries(parsed as Record<string, StoredRecentDelete>)) {
+      if (now - v.deletedAt < RECENT_MUTATION_TTL) {
+        valid[k] = v;
+      }
+    }
+    return valid;
+  } catch {
+    return {};
+  }
+}
+
+function saveStoredRecentDeletes(deletes: Record<string, StoredRecentDelete>) {
+  if (typeof window === 'undefined') return;
+  try {
+    sessionStorage.setItem(RECENT_DELETES_STORAGE_KEY, JSON.stringify(deletes));
+  } catch {}
+}
+
+function recordRecentSave(owner: string, repo: string, item: ContentItem) {
+  const saves = getStoredRecentSaves();
+  const deletes = getStoredRecentDeletes();
+  const key = `${owner}/${repo}/${item.schemaId}/${item.id}`;
+  saves[key] = {
+    key,
+    owner,
+    repo,
+    schemaId: item.schemaId,
+    contentId: item.id,
+    item,
+    savedAt: Date.now(),
+  };
+  delete deletes[key];
+  saveStoredRecentSaves(saves);
+  saveStoredRecentDeletes(deletes);
+}
+
+function recordRecentDelete(owner: string, repo: string, schemaId: string, contentId: string) {
+  const saves = getStoredRecentSaves();
+  const deletes = getStoredRecentDeletes();
+  const key = `${owner}/${repo}/${schemaId}/${contentId}`;
+  delete saves[key];
+  deletes[key] = {
+    key,
+    owner,
+    repo,
+    schemaId,
+    contentId,
+    deletedAt: Date.now(),
+  };
+  saveStoredRecentSaves(saves);
+  saveStoredRecentDeletes(deletes);
+}
+
+function getRecentSave(owner: string, repo: string, schemaId: string, contentId: string): ContentItem | null {
+  const saves = getStoredRecentSaves();
+  const key = `${owner}/${repo}/${schemaId}/${contentId}`;
+  return saves[key]?.item || null;
+}
+
+function isRecentDelete(owner: string, repo: string, schemaId: string, contentId: string): boolean {
+  const deletes = getStoredRecentDeletes();
+  const key = `${owner}/${repo}/${schemaId}/${contentId}`;
+  return !!deletes[key];
+}
+
 async function getSchema(
   github: GitHubApiClient,
   schemaId: string,
@@ -308,15 +437,36 @@ async function listContentData(
     }
   }
 
+  // Merge any recent local saves for this repo/schema so freshly saved edits are immediately visible
+  const recentSaves = getStoredRecentSaves();
+  for (const save of Object.values(recentSaves)) {
+    if (save.owner === owner && save.repo === repo) {
+      if (!schemaId || save.schemaId === schemaId) {
+        const existingIdx = contentItems.findIndex(i => i.id === save.contentId && i.schemaId === save.schemaId);
+        if (existingIdx !== -1) {
+          // If local save is newer or equal, replace it
+          contentItems[existingIdx] = save.item;
+        } else {
+          contentItems.unshift(save.item);
+        }
+      }
+    }
+  }
+
+  // Filter out any recently deleted items
+  const filteredItems = contentItems.filter(
+    item => !isRecentDelete(owner, repo, item.schemaId, item.id)
+  );
+
   // Sort by updated date (newest first)
-  contentItems.sort(
+  filteredItems.sort(
     (a, b) => new Date(b.metadata.updatedAt).getTime() - new Date(a.metadata.updatedAt).getTime()
   );
 
   return {
     success: true,
-    items: contentItems,
-    total: contentItems.length,
+    items: filteredItems,
+    total: filteredItems.length,
   };
 }
 
@@ -328,15 +478,18 @@ async function getContentData(
   repo: string,
   accessToken: string
 ): Promise<{ success: boolean; content: ContentItem }> {
+  // Check if recently deleted
+  if (isRecentDelete(owner, repo, schemaId, contentId)) {
+    throw new Error(`Content item ${contentId} not found`);
+  }
+
   const contentPath = await getContentPath(github, owner, repo, accessToken);
   const filePath = `${contentPath}/${schemaId}/${contentId}.json`;
 
-  const content = await github.getFileContent(filePath);
-  const contentData = JSON.parse(content);
-
-  return {
-    success: true,
-    content: {
+  try {
+    const content = await github.getFileContent(filePath);
+    const contentData = JSON.parse(content);
+    let item: ContentItem = {
       id: contentData.id || contentId,
       schemaId: contentData.schemaId || schemaId,
       data: contentData.data || {},
@@ -344,8 +497,33 @@ async function getContentData(
         ...contentData.metadata,
         publishedAt: contentData.metadata?.publishedAt,
       },
-    },
-  };
+    };
+
+    // If there is a recent save that is newer, prefer the recent save
+    const recent = getRecentSave(owner, repo, schemaId, contentId);
+    if (recent) {
+      const gitHubTime = new Date(item.metadata.updatedAt || 0).getTime();
+      const recentTime = new Date(recent.metadata.updatedAt || 0).getTime();
+      if (recentTime >= gitHubTime) {
+        item = recent;
+      }
+    }
+
+    return {
+      success: true,
+      content: item,
+    };
+  } catch (err) {
+    // If GitHub API 404s or fails, check if we have a recent local save
+    const recent = getRecentSave(owner, repo, schemaId, contentId);
+    if (recent) {
+      return {
+        success: true,
+        content: recent,
+      };
+    }
+    throw err;
+  }
 }
 
 async function createContentData(
@@ -441,6 +619,9 @@ async function createContentData(
     console.error('Failed to update index after creating content:', indexError);
     // Don't fail the content creation if index update fails
   }
+
+  // Mask in session cache so immediate queries reflect the newly created item
+  recordRecentSave(owner, repo, contentItem);
 
   return {
     success: true,
@@ -575,6 +756,12 @@ async function updateContentData(
     }
   }
 
+  // Mask in session cache so immediate queries reflect the updated item
+  if (isRenamingContent && originalContentId) {
+    recordRecentDelete(owner, repo, schemaId, originalContentId);
+  }
+  recordRecentSave(owner, repo, contentItem);
+
   return {
     success: true,
     content: contentItem,
@@ -602,6 +789,9 @@ async function deleteContentData(
     console.error('Failed to update index after deleting content:', indexError);
     // Don't fail the deletion if index update fails
   }
+
+  // Mask in session cache so immediate queries hide the deleted item
+  recordRecentDelete(owner, repo, schemaId, contentId);
 
   return {
     success: true,

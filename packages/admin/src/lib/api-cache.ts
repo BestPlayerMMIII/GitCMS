@@ -45,8 +45,8 @@ export interface UseApiDataResult<T> {
 export const DEFAULT_TTL = {
   REGISTRY_SCHEMAS: 10 * 60 * 1000, // 10 minutes
   REPO_SCHEMAS: 5 * 60 * 1000, // 5 minutes
-  CONTENT_LIST: 2 * 60 * 1000, // 2 minutes
-  CONTENT_ITEM: 1 * 60 * 1000, // 1 minute
+  CONTENT_LIST: 30 * 1000, // 30 seconds
+  CONTENT_ITEM: 30 * 1000, // 30 seconds
   REPO_SETUP: 15 * 60 * 1000, // 15 minutes
 } as const;
 
@@ -263,7 +263,17 @@ export function useApiData<T>(options: UseApiDataOptions<T>): UseApiDataResult<T
           setState(prev => ({ ...prev, loading: true, error: null }));
         }
       } else {
-        setState(prev => ({ ...prev, loading: true, error: null }));
+        if (staleWhileRevalidate && cached?.data) {
+          setState(prev => ({
+            ...prev,
+            data: cached.data,
+            loading: true,
+            error: null,
+            isStale: true,
+          }));
+        } else {
+          setState(prev => ({ ...prev, loading: true, error: null }));
+        }
       }
 
       // Create and store the fetch promise
@@ -380,12 +390,101 @@ export const cacheInvalidation = {
 
   // Invalidate all content caches for a repository
   invalidateRepoContent: (owner: string, repo: string, schemaId?: string) => {
+    // Invalidate list caches so they refetch on next access
+    globalCache.delete(createCacheKey.contentList(owner, repo));
     if (schemaId) {
       globalCache.delete(createCacheKey.contentList(owner, repo, schemaId));
-      globalCache.invalidateByPattern(`repo:${owner}/${repo}:content:${schemaId}:`);
-    } else {
-      globalCache.invalidateByPattern(`repo:${owner}/${repo}:content`);
     }
+  },
+
+  // Directly update or insert a content item in the cache for instant real-time updates
+  updateCachedContent: (
+    owner: string,
+    repo: string,
+    item: any,
+    originalContentId?: string
+  ) => {
+    const now = Date.now();
+    const schemaId = item.schemaId;
+    const contentId = item.id;
+
+    // 1. Update individual content item cache
+    if (schemaId && contentId) {
+      globalCache.set(createCacheKey.contentItem(owner, repo, schemaId, contentId), {
+        data: item,
+        timestamp: now,
+        key: createCacheKey.contentItem(owner, repo, schemaId, contentId),
+        repoScope: `${owner}/${repo}`,
+        ttl: DEFAULT_TTL.CONTENT_ITEM,
+      });
+
+      if (originalContentId && originalContentId !== contentId) {
+        globalCache.delete(createCacheKey.contentItem(owner, repo, schemaId, originalContentId));
+      }
+    }
+
+    // Helper to update a content list
+    const updateList = (listKey: string) => {
+      const entry = globalCache.get<any[]>(listKey);
+      if (entry && Array.isArray(entry.data)) {
+        const idToMatch = originalContentId || contentId;
+        const existingIndex = entry.data.findIndex(c => c.id === idToMatch);
+        let updatedList: any[];
+
+        if (existingIndex !== -1) {
+          updatedList = [...entry.data];
+          updatedList[existingIndex] = item;
+        } else {
+          updatedList = [item, ...entry.data];
+        }
+
+        // Sort by updatedAt descending
+        updatedList.sort(
+          (a, b) =>
+            new Date(b.metadata?.updatedAt || 0).getTime() -
+            new Date(a.metadata?.updatedAt || 0).getTime()
+        );
+
+        globalCache.set(listKey, {
+          ...entry,
+          data: updatedList,
+          timestamp: now,
+        });
+      }
+    };
+
+    // 2. Update all-content list cache
+    updateList(createCacheKey.contentList(owner, repo));
+
+    // 3. Update schema-specific content list cache
+    if (schemaId) {
+      updateList(createCacheKey.contentList(owner, repo, schemaId));
+    }
+  },
+
+  // Directly remove a deleted content item from cached lists
+  removeCachedContent: (
+    owner: string,
+    repo: string,
+    schemaId: string,
+    contentId: string
+  ) => {
+    globalCache.delete(createCacheKey.contentItem(owner, repo, schemaId, contentId));
+
+    const removeFromList = (listKey: string) => {
+      const entry = globalCache.get<any[]>(listKey);
+      if (entry && Array.isArray(entry.data)) {
+        const updatedList = entry.data.filter(c => c.id !== contentId);
+        globalCache.set(listKey, {
+          ...entry,
+          data: updatedList,
+          timestamp: Date.now(),
+        });
+      }
+    };
+
+    removeFromList(createCacheKey.contentList(owner, repo));
+    removeFromList(createCacheKey.contentList(owner, repo, schemaId));
   },
 
   // Invalidate specific content item

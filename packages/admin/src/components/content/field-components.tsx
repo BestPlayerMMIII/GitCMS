@@ -4,9 +4,7 @@ import React, {
   useState,
   useCallback,
   useMemo,
-  useRef,
   useEffect,
-  useLayoutEffect,
   createContext,
   useContext,
 } from 'react';
@@ -16,61 +14,33 @@ import { File as FileIcon } from 'lucide-react';
 import { type FieldDefinition, type FieldOption, type GitCMSSchema } from '@git-cms/core';
 import RichTextEditor from './rich-text-editor';
 
-// Context for tracking schema rendering stack to prevent circular dependencies
-interface SchemaRenderingContextValue {
-  getCurrentStack: () => string[];
-  pushSchema: (schemaId: string) => boolean;
-  popSchema: (schemaId: string) => void;
-  isCircular: (schemaId: string) => boolean;
-}
+// Context for tracking ancestor schemas during rendering to detect circular dependencies
+const SchemaRenderingContext = createContext<string[]>([]);
 
-const SchemaRenderingContext = createContext<SchemaRenderingContextValue | null>(null);
+// Provider component to wrap the entire form or a nested object field branch
+export function SchemaRenderingProvider({
+  children,
+  initialSchemaId,
+  ancestors: overrideAncestors,
+}: {
+  children: React.ReactNode;
+  initialSchemaId?: string;
+  ancestors?: string[];
+}) {
+  const parentAncestors = useContext(SchemaRenderingContext);
 
-// Provider component to wrap the entire form
-export function SchemaRenderingProvider({ children }: { children: React.ReactNode }) {
-  // Track the schema rendering path (not counts, but actual path)
-  const renderingStackRef = useRef<string[]>([]);
-
-  const getCurrentStack = useCallback(() => {
-    return [...renderingStackRef.current];
-  }, []);
-
-  const isCircular = useCallback((schemaId: string): boolean => {
-    // A circular dependency exists if we're trying to render a schema
-    // that's already in the current rendering path
-    return renderingStackRef.current.includes(schemaId);
-  }, []);
-
-  const pushSchema = useCallback((schemaId: string): boolean => {
-    // Check if this would create a circular dependency
-    if (renderingStackRef.current.includes(schemaId)) {
-      return false; // Would create circular dependency
+  const ancestors = useMemo(() => {
+    if (overrideAncestors) return overrideAncestors;
+    if (initialSchemaId) {
+      return parentAncestors.includes(initialSchemaId)
+        ? parentAncestors
+        : [...parentAncestors, initialSchemaId];
     }
-    renderingStackRef.current.push(schemaId);
-    return true;
-  }, []);
-
-  const popSchema = useCallback((schemaId: string) => {
-    // Remove the last occurrence of this schema from the stack
-    const lastIndex = renderingStackRef.current.lastIndexOf(schemaId);
-    if (lastIndex !== -1) {
-      renderingStackRef.current.splice(lastIndex, 1);
-    }
-  }, []);
-
-  // Static context value to prevent re-renders
-  const contextValue = useMemo(
-    () => ({
-      getCurrentStack,
-      pushSchema,
-      popSchema,
-      isCircular,
-    }),
-    [getCurrentStack, pushSchema, popSchema, isCircular]
-  );
+    return parentAncestors;
+  }, [overrideAncestors, initialSchemaId, parentAncestors]);
 
   return (
-    <SchemaRenderingContext.Provider value={contextValue}>
+    <SchemaRenderingContext.Provider value={ancestors}>
       {children}
     </SchemaRenderingContext.Provider>
   );
@@ -78,17 +48,12 @@ export function SchemaRenderingProvider({ children }: { children: React.ReactNod
 
 // Hook to access schema rendering context
 function useSchemaRenderingContext() {
-  const context = useContext(SchemaRenderingContext);
-  if (!context) {
-    // If no context provided, return a safe default that allows rendering
-    return {
-      getCurrentStack: () => [],
-      pushSchema: () => true,
-      popSchema: () => {},
-      isCircular: () => false,
-    };
-  }
-  return context;
+  const ancestors = useContext(SchemaRenderingContext);
+  return {
+    getCurrentStack: () => [...ancestors],
+    isCircular: (schemaId: string) => ancestors.includes(schemaId),
+    ancestors,
+  };
 }
 
 // Base props for all field components
@@ -405,9 +370,9 @@ export function ObjectField({
   const objectValue = value || {};
 
   // Use context for circular dependency protection
-  const { isCircular, pushSchema, popSchema } = useSchemaRenderingContext();
+  const { isCircular, ancestors } = useSchemaRenderingContext();
 
-  // Check for circular dependency during render
+  // Check for circular dependency during render: only if this schema is an ancestor of itself
   const circularDependencyError = useMemo(() => {
     if (objectField.schemaRef && availableSchemas) {
       if (isCircular(objectField.schemaRef)) {
@@ -416,6 +381,14 @@ export function ObjectField({
     }
     return null;
   }, [objectField.schemaRef, availableSchemas, isCircular]);
+
+  // Compute ancestors for children fields
+  const nextAncestors = useMemo(() => {
+    if (!objectField.schemaRef) return ancestors;
+    return ancestors.includes(objectField.schemaRef)
+      ? ancestors
+      : [...ancestors, objectField.schemaRef];
+  }, [ancestors, objectField.schemaRef]);
 
   // Resolve schema properties
   const properties = useMemo((): Record<string, FieldDefinition> => {
@@ -449,14 +422,6 @@ export function ObjectField({
     const nestedErrorKey = `${fieldPath}.${fieldKey}`;
     return allErrors[nestedErrorKey];
   };
-
-  // Track schema in the render stack
-  useLayoutEffect(() => {
-    if (objectField.schemaRef) {
-      pushSchema(objectField.schemaRef);
-      return () => popSchema(objectField.schemaRef);
-    }
-  }, [objectField.schemaRef, pushSchema, popSchema]);
 
   return (
     <div className="space-y-4">
@@ -503,7 +468,7 @@ export function ObjectField({
               : 'No properties defined for this object.'}
           </p>
         ) : (
-          <>
+          <SchemaRenderingProvider ancestors={nextAncestors}>
             {Object.entries(properties).map(([key, propField]) => (
               <FieldRenderer
                 key={key}
@@ -517,7 +482,7 @@ export function ObjectField({
                 fieldPath={fieldPath ? `${fieldPath}.${key}` : key}
               />
             ))}
-          </>
+          </SchemaRenderingProvider>
         )}
       </div>
       {error && <p className="text-sm text-red-500">{error}</p>}
